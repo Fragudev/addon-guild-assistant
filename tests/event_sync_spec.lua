@@ -12,7 +12,7 @@ local function load_modules()
     "Sync/SyncRules",
     "Sync/EventSync",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

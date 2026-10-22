@@ -1,8 +1,8 @@
 local function load_service()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Core/Locale.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/ProfileService.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Locale.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/ProfileService.lua"))("GuildAssistant", ns)
   return ns.ProfileService, ns.Constants
 end
 
@@ -12,7 +12,7 @@ local function fake_platform(overrides)
       return 1000
     end,
     GetIdentityKey = function()
-      return "Nrager-ClassicBetaPvP"
+      return "Guildmate-ClassicBetaPvP"
     end,
     GetGUID = function()
       return "Player-1-ABC"
@@ -60,7 +60,7 @@ describe("ProfileService.Refresh", function()
   it("stores observed values with their provenance", function()
     local profile = {}
     ProfileService.Refresh(fake_platform(), profile)
-    assert.are.equal("Nrager-ClassicBetaPvP", profile.identityKey)
+    assert.are.equal("Guildmate-ClassicBetaPvP", profile.identityKey)
     assert.are.equal("WARRIOR", profile.class)
     assert.are.equal(60, profile.level)
     assert.are.equal(200, profile.ilvl)

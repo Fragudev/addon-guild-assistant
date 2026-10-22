@@ -1,7 +1,7 @@
 local function load_model()
   local ns = {}
   for _, path in ipairs({ "Core/Constants", "Core/Validate", "Domain/LayerModel" }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns.LayerModel
 end

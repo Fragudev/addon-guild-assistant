@@ -18,7 +18,8 @@ permissions:
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
-  CF_PROJECT_ID: "1757381"
+  # Empty until the new Guild Assistant CurseForge project exists; the upload step refuses to run.
+  CF_PROJECT_ID: ""
 
 jobs:
   ci:
@@ -61,8 +62,8 @@ jobs:
           if [[ "${TAG}" == *-* ]]; then
             prerelease="--prerelease"
           fi
-          gh release create "${TAG}" "NrageAssistant-${TAG}.zip" \
-            --title "Nrage Assistant ${TAG}" \
+          gh release create "${TAG}" "GuildAssistant-${TAG}.zip" \
+            --title "Guild Assistant ${TAG}" \
             --notes-file "release-notes/${TAG}.md" $prerelease
 
       # The CurseForge game version is derived from the TOC Interface (16001 -> 1.60.1) and
@@ -73,13 +74,17 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_GAME_VERSION_ID: ${{ vars.CF_GAME_VERSION_ID }}
         run: |
+          if [[ -z "${CF_PROJECT_ID}" ]]; then
+            echo "::error::CF_PROJECT_ID is not set"
+            exit 1
+          fi
           if [[ -z "${CF_API_TOKEN}" ]]; then
             echo "::error::Missing CF_API_TOKEN repository secret."
             exit 1
           fi
           versions="$(curl -fsS -H "X-Api-Token: ${CF_API_TOKEN}" https://wow.curseforge.com/api/game/versions)"
           if [[ -z "${CF_GAME_VERSION_ID}" ]]; then
-            interface="$(sed -n 's/^## Interface://p' NrageAssistant/NrageAssistant.toc | grep -o '[0-9]\+' | head -n 1)"
+            interface="$(sed -n 's/^## Interface://p' GuildAssistant/GuildAssistant.toc | grep -o '[0-9]\+' | head -n 1)"
             game_version="$((interface / 10000)).$((interface / 100 % 100)).$((interface % 100))"
             CF_GAME_VERSION_ID="$(jq -r --arg name "${game_version}" \
               '[.[] | select(.name == $name) | .id] | if length == 1 then .[0] else empty end' <<<"${versions}")"
@@ -100,7 +105,7 @@ jobs:
           fi
           changelog="$(cat "release-notes/${TAG}.md")"
           metadata="$(jq -n \
-            --arg name "Nrage Assistant ${TAG}" \
+            --arg name "Guild Assistant ${TAG}" \
             --arg log "${changelog}" \
             --arg type "${release_type}" \
             --argjson versions "[${CF_GAME_VERSION_ID}]" \
@@ -109,5 +114,5 @@ jobs:
           # --form-string because -F cuts the value at the first ';' in the changelog.
           curl -sS --fail-with-body -H "X-Api-Token: ${CF_API_TOKEN}" \
             --form-string "metadata=${metadata}" \
-            -F "file=@NrageAssistant-${TAG}.zip" \
+            -F "file=@GuildAssistant-${TAG}.zip" \
             "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file"

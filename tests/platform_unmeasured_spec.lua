@@ -2,7 +2,7 @@
 -- behind pcall and an availability check, so a missing or restricted API degrades to "not available".
 local function load_platform()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Platform.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Platform.lua"))("GuildAssistant", ns)
   return ns.Platform
 end
 

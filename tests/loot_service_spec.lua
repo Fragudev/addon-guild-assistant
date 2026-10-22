@@ -9,7 +9,7 @@ local function load_modules()
     "Domain/LootModel",
     "Domain/LootService",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

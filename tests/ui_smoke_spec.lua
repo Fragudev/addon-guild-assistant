@@ -74,7 +74,7 @@ local function load_window(locale)
     if path == "UI/ViewModel" then
       ns.Kit = FakeKit.new(ns.Kit)
     end
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     if path == "Locales/esES" and locale then
       ns.Locale.Use(locale)
     end
@@ -2453,7 +2453,7 @@ describe("Window smoke test: secondary windows", function()
   end)
 
   local function load_file(path)
-    assert(loadfile("NrageAssistant/" .. path))("NrageAssistant", env.ns)
+    assert(loadfile("GuildAssistant/" .. path))("GuildAssistant", env.ns)
   end
 
   local function with_session()
@@ -2489,10 +2489,10 @@ describe("Window smoke test: secondary windows", function()
       end
       env.ns.Transfer = {
         Export = function()
-          return "NRAGE1:abc"
+          return "GUILDA1:abc"
         end,
         Import = function(_, text)
-          if text == "NRAGE1:abc" then
+          if text == "GUILDA1:abc" then
             return { events = 1 }
           end
           return nil, "bad_header"
@@ -2508,10 +2508,10 @@ describe("Window smoke test: secondary windows", function()
       stub_transfer()
       env.ns.UI.ShowTransfer("export")
       local modal = env.ns.Kit.fake.modal
-      assert.are.equal("Nrage export", modal.opts.title)
+      assert.are.equal("Guild Assistant export", modal.opts.title)
       assert.is_truthy(FakeKit.text(modal.stack):find("Press Ctrl+C to copy", 1, true))
       local area = FakeKit.find(modal.stack, "TextArea")
-      assert.are.equal("NRAGE1:abc", area.opts.text)
+      assert.are.equal("GUILDA1:abc", area.opts.text)
       assert.is_true(area.opts.readOnly)
     end)
 
@@ -2528,7 +2528,7 @@ describe("Window smoke test: secondary windows", function()
       assert.is_truthy(env.banner().opts.text:find("import failed", 1, true))
 
       env.ns.UI.ShowTransfer("import")
-      FakeKit.find(env.ns.Kit.fake.modal.stack, "TextArea").text = "NRAGE1:abc"
+      FakeKit.find(env.ns.Kit.fake.modal.stack, "TextArea").text = "GUILDA1:abc"
       FakeKit.press(FakeKit.find(env.ns.Kit.fake.modal.stack, "Button", "Import"))
       assert.are.equal("success", env.banner().opts.kind)
     end)

@@ -42,7 +42,7 @@ jobs:
         run: luarocks install luacheck && luarocks install busted && luarocks install luacov
 
       - name: Lint
-        run: luacheck NrageAssistant tests
+        run: luacheck GuildAssistant tests
 
       - name: Test
         run: busted --coverage
@@ -70,7 +70,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: 2.5.2
-          args: --check NrageAssistant tests
+          args: --check GuildAssistant tests
 
   package:
     runs-on: ubuntu-latest

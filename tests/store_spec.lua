@@ -1,7 +1,7 @@
 local function load_store()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Core/Store.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Store.lua"))("GuildAssistant", ns)
   return ns.Store, ns.Constants
 end
 
@@ -63,13 +63,13 @@ describe("Store.GetChar", function()
 
   it("creates profile and readiness once per identity key", function()
     local db = Store.Load(nil)
-    local char = Store.GetChar(db, "Nrager-ClassicBetaPvP")
+    local char = Store.GetChar(db, "Guildmate-ClassicBetaPvP")
     char.profile.level = 60
     assert.is_table(char.readiness)
     assert.is_nil(char.consent)
     assert.is_table(char.publish)
     assert.is_table(char.pvp)
-    assert.are.equal(60, Store.GetChar(db, "Nrager-ClassicBetaPvP").profile.level)
+    assert.are.equal(60, Store.GetChar(db, "Guildmate-ClassicBetaPvP").profile.level)
   end)
 end)
 

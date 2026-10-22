@@ -1,8 +1,8 @@
 -- Real vendored libraries and real domain; nothing is faked here.
 local function load_modules()
-  dofile("NrageAssistant/Libs/LibStub/LibStub.lua")
-  dofile("NrageAssistant/Libs/LibDeflate/LibDeflate.lua")
-  dofile("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
+  dofile("GuildAssistant/Libs/LibStub/LibStub.lua")
+  dofile("GuildAssistant/Libs/LibDeflate/LibDeflate.lua")
+  dofile("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
 
   local ns = {}
   for _, path in ipairs({
@@ -29,7 +29,7 @@ local function load_modules()
     "Sync/RecipeSync",
     "Sync/Transfer",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end
@@ -99,7 +99,7 @@ describe("Transfer export and import", function()
   it("moves a full event, with attendance, assignments and deletions, to another store", function()
     local source, event, dead = populated()
     local text = assert(Transfer.Export(libs, source.events, source.tombstones))
-    assert.are.equal("NRAGE1:", text:sub(1, 7))
+    assert.are.equal("GUILDA1:", text:sub(1, 8))
 
     local target = store()
     -- The deletion of an event this store never saw is only the guild master's to remember.
@@ -180,7 +180,7 @@ end)
 describe("Transfer permissions and hostile input", function()
   local function encode(value)
     local serialized = libs.serialize:Serialize(value)
-    return "NRAGE1:" .. libs.deflate:EncodeForPrint(libs.deflate:CompressDeflate(serialized))
+    return "GUILDA1:" .. libs.deflate:EncodeForPrint(libs.deflate:CompressDeflate(serialized))
   end
 
   it("refuses members and unknown roles before reading anything", function()
@@ -196,7 +196,7 @@ describe("Transfer permissions and hostile input", function()
   end)
 
   it("rejects text that is not an export", function()
-    for input, expected in pairs({ ["hello"] = "bad_header", ["NRAGE2:abc"] = "bad_header" }) do
+    for input, expected in pairs({ ["hello"] = "bad_header", ["GUILDA2:abc"] = "bad_header" }) do
       local summary, reason = import_into(store(), input, "rl")
       assert.is_nil(summary)
       assert.are.equal(expected, reason)
@@ -206,7 +206,7 @@ describe("Transfer permissions and hostile input", function()
 
   it("rejects a valid header followed by garbage without raising", function()
     for _, tail in ipairs({ "", "!!!!", ("A"):rep(200), "\0\1\2" }) do
-      local summary, reason = import_into(store(), "NRAGE1:" .. tail, "rl")
+      local summary, reason = import_into(store(), "GUILDA1:" .. tail, "rl")
       assert.is_nil(summary)
       assert.is_string(reason)
     end
@@ -219,7 +219,7 @@ describe("Transfer permissions and hostile input", function()
   end)
 
   it("rejects oversized text, oversized expansion and too many items", function()
-    local huge = "NRAGE1:" .. ("A"):rep(Constants.IMPORT_MAX_ENCODED_BYTES)
+    local huge = "GUILDA1:" .. ("A"):rep(Constants.IMPORT_MAX_ENCODED_BYTES)
     assert.are.equal("too_large", select(2, import_into(store(), huge, "rl")))
 
     local blob = encode({ items = {}, padding = ("x"):rep(Constants.IMPORT_MAX_DECOMPRESSED_BYTES + 1) })

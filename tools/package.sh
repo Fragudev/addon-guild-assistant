@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Builds the distributable addon zip and verifies that it loads as shipped.
-# Usage: tools/package.sh <version>   (writes NrageAssistant-<version>.zip)
+# Usage: tools/package.sh <version>   (writes GuildAssistant-<version>.zip)
 set -euo pipefail
 
 version="${1:?usage: tools/package.sh <version>}"
-addon="NrageAssistant"
+addon="GuildAssistant"
 zipfile="${addon}-${version}.zip"
 build="$(mktemp -d)"
 trap 'rm -rf "$build"' EXIT
@@ -38,7 +38,7 @@ grep -o 'file="[^"]*"' "$build/$addon/embeds.xml" | sed 's/^file="//; s/"$//' |
     check_file "${file//\\//}" "embeds.xml"
   done
 
-icon="$(sed -n 's/^## IconTexture: Interface\\AddOns\\NrageAssistant\\//p' "$toc" | tr -d '\r')"
+icon="$(sed -n 's/^## IconTexture: Interface\\AddOns\\GuildAssistant\\//p' "$toc" | tr -d '\r')"
 [[ -n "$icon" ]] && check_file "${icon//\\//}.tga" "IconTexture"
 
 rm -f "$zipfile"

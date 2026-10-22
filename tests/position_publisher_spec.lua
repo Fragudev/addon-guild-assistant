@@ -6,7 +6,7 @@ local function load_publisher()
     "Domain/PositionModel",
     "Domain/PositionPublisher",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

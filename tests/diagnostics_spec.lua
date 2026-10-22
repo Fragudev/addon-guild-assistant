@@ -1,6 +1,6 @@
 local function load_diagnostics()
   local ns = {}
-  assert(loadfile("NrageAssistant/Domain/Diagnostics.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/Diagnostics.lua"))("GuildAssistant", ns)
   return ns.Diagnostics
 end
 
@@ -94,7 +94,7 @@ local function full_addon()
     },
     Platform = {
       GetIdentityKey = function()
-        return "Nrager-ClassicBetaPvP"
+        return "Guildmate-ClassicBetaPvP"
       end,
     },
     guildRoster = {
@@ -196,7 +196,7 @@ describe("Diagnostics behaviour checks", function()
   end
 
   it("accepts the roster's name without a realm, with spaces, and Name-Realm", function()
-    for _, key in ipairs({ "Yonemon Gg", "Nrager", "Nrager-Realm", "Yonemon Gg-Realm" }) do
+    for _, key in ipairs({ "Yonemon Gg", "Guildmate", "Guildmate-Realm", "Yonemon Gg-Realm" }) do
       local results = run(function(addon)
         addon.Platform.GetIdentityKey = function()
           return key
@@ -207,7 +207,7 @@ describe("Diagnostics behaviour checks", function()
   end)
 
   it("warns about an identity key built from missing values", function()
-    for _, key in ipairs({ "nil-nil", "Nrager-nil", "nil", "", "   ", 42 }) do
+    for _, key in ipairs({ "nil-nil", "Guildmate-nil", "nil", "", "   ", 42 }) do
       local results = run(function(addon)
         addon.Platform.GetIdentityKey = function()
           return key

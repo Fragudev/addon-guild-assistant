@@ -1,9 +1,9 @@
 -- PvP season records on the wire: who may author each type, conflicts, the claim queue, closing a season, the ledger
 -- catch-up (digest, paging, relayed authors) and the guarantee that two clients end up with the same standings.
 local function load_addon()
-  dofile("NrageAssistant/Libs/LibStub/LibStub.lua")
-  dofile("NrageAssistant/Libs/LibDeflate/LibDeflate.lua")
-  dofile("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
+  dofile("GuildAssistant/Libs/LibStub/LibStub.lua")
+  dofile("GuildAssistant/Libs/LibDeflate/LibDeflate.lua")
+  dofile("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
 
   local ns = {}
   for _, path in ipairs({
@@ -17,7 +17,7 @@ local function load_addon()
     "Sync/SyncRules",
     "Sync/PvPSeasonSync",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

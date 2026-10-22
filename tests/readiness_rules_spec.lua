@@ -14,7 +14,7 @@ local function load_modules()
     "Sync/RosterSync",
     "Sync/RecipeSync",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

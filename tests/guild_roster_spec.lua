@@ -1,7 +1,7 @@
 local function load_roster()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/GuildRoster.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/GuildRoster.lua"))("GuildAssistant", ns)
   return ns.GuildRoster
 end
 

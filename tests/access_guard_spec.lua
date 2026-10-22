@@ -1,6 +1,6 @@
 local function load_guard()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/AccessGuard.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/AccessGuard.lua"))("GuildAssistant", ns)
   return ns.AccessGuard
 end
 

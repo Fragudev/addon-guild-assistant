@@ -1,9 +1,9 @@
 -- Exercises the whole receive/send pipeline with the real codec, protocol, inbox and queue.
 -- Only the client (AceComm, timers, platform) is faked.
 local function load_addon()
-  dofile("NrageAssistant/Libs/LibStub/LibStub.lua")
-  dofile("NrageAssistant/Libs/LibDeflate/LibDeflate.lua")
-  dofile("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
+  dofile("GuildAssistant/Libs/LibStub/LibStub.lua")
+  dofile("GuildAssistant/Libs/LibDeflate/LibDeflate.lua")
+  dofile("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
 
   local ns = {}
   for _, path in ipairs({
@@ -37,7 +37,7 @@ local function load_addon()
     "Sync/Transfer",
     "Sync/Comm",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

@@ -2,7 +2,7 @@
 local function load(paths)
   local ns = {}
   for _, path in ipairs(paths) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

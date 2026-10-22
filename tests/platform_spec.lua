@@ -2,7 +2,7 @@
 -- (the stubs give it the standard library's time and date, like the real client).
 local function load_platform()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Platform.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Platform.lua"))("GuildAssistant", ns)
   return ns.Platform
 end
 

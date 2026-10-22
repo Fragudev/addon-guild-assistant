@@ -32,7 +32,7 @@ local function load_view_model(locale)
     "Commands/RaidCommands",
     "Commands/LootCommands",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     if path == "Locales/esES" and locale then
       ns.Locale.Use(locale)
     end
@@ -62,7 +62,7 @@ describe("ViewModel.Home", function()
       }),
       "\n"
     )
-    assert.is_truthy(text:find("Nrage Assistant 0.1.0", 1, true))
+    assert.is_truthy(text:find("Guild Assistant 0.1.0", 1, true))
     assert.is_truthy(text:find("Your readiness: 1/3 met, 2 unknown", 1, true))
     assert.is_truthy(text:find("  sync paused: encounter in progress", 1, true))
   end)
@@ -174,7 +174,7 @@ describe("ViewModel misc", function()
 
   it("documents the three commands that are left in the help", function()
     local text = table.concat(ViewModel.HelpLines(), "\n")
-    for _, command in ipairs({ "/nrage  ", "/nrage help", "/nrage debug" }) do
+    for _, command in ipairs({ "/ga  ", "/ga help", "/ga debug" }) do
       assert.is_truthy(text:find(command, 1, true), command)
     end
     assert.are.equal(3, #ViewModel.HelpLines())
@@ -204,7 +204,7 @@ describe("ViewModel.Raid", function()
     assert.is_truthy(ViewModel.Raid({}, format)[1]:find("No events yet", 1, true))
   end)
 
-  it("numbers events like /nrage event and shows status and date", function()
+  it("numbers events like /ga event and shows status and date", function()
     local lines = ViewModel.Raid({
       later = event({ eventId = "later", title = "Later", startAt = 9000 }),
       sooner = event({ eventId = "sooner", title = "Sooner", startAt = 1000, status = "planned" }),
@@ -357,7 +357,7 @@ describe("ViewModel raid tab helpers", function()
     end
     local ns = {}
     for _, path in ipairs({ "Core/Constants", "Core/Validate", "Domain/EventModel" }) do
-      assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+      assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     end
     assert.are.same(ns.EventModel.EVENT_STATUSES, set(ViewModel.EVENT_STATUSES))
     assert.are.same(ns.EventModel.ATTENDANCE_STATES, set(ViewModel.ATTENDANCE_STATES))
@@ -453,7 +453,7 @@ describe("ViewModel loot tab helpers", function()
   it("offers every need the model accepts, and only those", function()
     local ns = {}
     for _, path in ipairs({ "Core/Constants", "Core/Validate", "Domain/LootModel" }) do
-      assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+      assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     end
     local offered = {}
     for _, need in ipairs(ViewModel.LOOT_NEEDS) do
@@ -555,7 +555,7 @@ describe("ViewModel readiness tab helpers", function()
   it("offers exactly the statuses SetManual accepts", function()
     local ns = {}
     for _, path in ipairs({ "Core/Constants", "Core/Locale", "Core/Validate", "Domain/ReadinessService" }) do
-      assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+      assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     end
     local platform = {
       ServerTime = function()
@@ -667,7 +667,7 @@ describe("ViewModel.SelfTestFailures", function()
     assert.are.equal("Self test: 2 check(s) failed", lines[1])
     assert.are.equal("  [missing] C_Club.GetGuildClubId - not available on this client", lines[2])
     assert.is_truthy(lines[3]:find("||cffff0000x", 1, true))
-    assert.are.equal("Type /nrage debug selftest for the full result.", lines[4])
+    assert.are.equal("Type /ga debug selftest for the full result.", lines[4])
   end)
 end)
 
@@ -1422,7 +1422,7 @@ describe("ViewModel help", function()
   it("does not list a command that no longer exists", function()
     local text = table.concat(ViewModel.HelpLines(), "\n")
     for _, gone in ipairs({ "blacklist", "event", "loot", "report", "minimap", "sync", "publish" }) do
-      assert.is_nil(text:find("/nrage " .. gone, 1, true), gone)
+      assert.is_nil(text:find("/ga " .. gone, 1, true), gone)
     end
   end)
 end)
@@ -1694,7 +1694,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
       "UI/ViewModelRaid",
       "UI/ViewModelGuild",
     }) do
-      assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", loaded)
+      assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", loaded)
     end
     local vm, ns = loaded.ViewModel, loaded
     local tabs = vm.TABS

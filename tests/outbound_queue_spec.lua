@@ -1,7 +1,7 @@
 local function load_queue()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Sync/OutboundQueue.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Sync/OutboundQueue.lua"))("GuildAssistant", ns)
   return ns.OutboundQueue
 end
 

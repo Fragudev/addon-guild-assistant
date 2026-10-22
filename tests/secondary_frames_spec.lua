@@ -35,7 +35,7 @@ local function load_addon()
     "UI/ViewModelRaid",
     "Commands/LootCommands",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end
@@ -112,9 +112,9 @@ describe("Secondary windows on the real kit", function()
       Report = function() end,
       Redraw = function() end,
     }
-    assert(loadfile("NrageAssistant/UI/Tabs/Loot.lua"))("NrageAssistant", ns)
-    assert(loadfile("NrageAssistant/UI/LootPopup.lua"))("NrageAssistant", ns)
-    assert(loadfile("NrageAssistant/UI/VotingFrame.lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/UI/Tabs/Loot.lua"))("GuildAssistant", ns)
+    assert(loadfile("GuildAssistant/UI/LootPopup.lua"))("GuildAssistant", ns)
+    assert(loadfile("GuildAssistant/UI/VotingFrame.lua"))("GuildAssistant", ns)
   end)
 
   after_each(function()
@@ -127,9 +127,9 @@ describe("Secondary windows on the real kit", function()
     ns.db.global.events.e1.loot.s1 = session("s1", "Sword")
     ns.db.global.events.e1.loot.s1.candidates = {}
     ns.LootPopup.Refresh()
-    assert.is_true(_G.NrageAssistantLootPopup.shown)
+    assert.is_true(_G.GuildAssistantLootPopup.shown)
     ns.LootPopup.Pass("s1")
-    assert.is_false(_G.NrageAssistantLootPopup.shown)
+    assert.is_false(_G.GuildAssistantLootPopup.shown)
   end)
 
   it("redraws the popup with the time left as the countdown ticks", function()
@@ -142,24 +142,24 @@ describe("Secondary windows on the real kit", function()
     for index = 1, waiting do
       timers[index].fn()
     end
-    assert.is_true(_G.NrageAssistantLootPopup.shown)
+    assert.is_true(_G.GuildAssistantLootPopup.shown)
   end)
 
   it("opens the voting window for a new session and shows the candidates", function()
     ns.VotingFrame.Start()
     ns.db.global.events.e1.loot.s1 = session("s1", "Sword")
     ns.VotingFrame.Refresh()
-    assert.is_true(_G.NrageAssistantVotingFrame.shown)
+    assert.is_true(_G.GuildAssistantVotingFrame.shown)
     ns.db.global.events.e1.loot.s2 = session("s2", "Shield")
     ns.VotingFrame.Refresh()
-    assert.is_true(_G.NrageAssistantVotingFrame.shown)
+    assert.is_true(_G.GuildAssistantVotingFrame.shown)
   end)
 
   it("opens by hand from the Loot tab and closes when the council right is lost", function()
     ns.db.global.events.e1.loot.s1 = session("s1", "Sword")
     ns.VotingFrame.Start()
     ns.VotingFrame.Show()
-    assert.is_true(_G.NrageAssistantVotingFrame.shown)
+    assert.is_true(_G.GuildAssistantVotingFrame.shown)
     ns.comm = nil
     ns.VotingFrame.Refresh()
     ns.comm = {}

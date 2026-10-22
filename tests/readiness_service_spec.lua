@@ -1,8 +1,8 @@
 local function load_service()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Core/Locale.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/ReadinessService.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Locale.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/ReadinessService.lua"))("GuildAssistant", ns)
   return ns.ReadinessService, ns.Constants
 end
 

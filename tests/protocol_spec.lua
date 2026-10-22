@@ -1,14 +1,14 @@
 local function load_protocol()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Core/Validate.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/PermissionService.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/EventModel.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/BlacklistService.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/ReadinessRules.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/LootModel.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Domain/PvPSeasonModel.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Sync/Protocol.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Validate.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/PermissionService.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/EventModel.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/BlacklistService.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/ReadinessRules.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/LootModel.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/PvPSeasonModel.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Sync/Protocol.lua"))("GuildAssistant", ns)
   return ns.Protocol, ns.Constants
 end
 
@@ -231,7 +231,7 @@ end)
 
 describe("Protocol.Validate ATTENDANCE_UPSERT", function()
   local function payload(overrides)
-    local p = { eventId = "ev-1", characterKey = "Nrager-Realm", state = "present", rev = 1, updatedAt = 10 }
+    local p = { eventId = "ev-1", characterKey = "Guildmate-Realm", state = "present", rev = 1, updatedAt = 10 }
     for k, v in pairs(overrides or {}) do
       p[k] = v
     end
@@ -268,7 +268,7 @@ describe("Protocol.Validate ASSIGN_UPSERT", function()
       rev = 1,
       updatedAt = 10,
       encounter = "Ragnaros",
-      characterKey = "Nrager-Realm",
+      characterKey = "Guildmate-Realm",
       group = 2,
       task = "Main tank",
       note = "watch out",

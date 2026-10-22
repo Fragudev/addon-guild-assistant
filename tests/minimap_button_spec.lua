@@ -1,8 +1,8 @@
 local function load_button()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Core/Locale.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/UI/MinimapButton.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Locale.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/UI/MinimapButton.lua"))("GuildAssistant", ns)
   return ns.MinimapButton, ns.Constants
 end
 

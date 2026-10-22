@@ -1,7 +1,7 @@
 -- Translation: how a language is chosen, and that the Spanish catalog matches what the code asks for.
 local function load_locale()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Locale.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Locale.lua"))("GuildAssistant", ns)
   return ns
 end
 
@@ -60,11 +60,11 @@ end)
 -- The files the TOC loads, and every text they ask for with L("...").
 local function source_files()
   local files = {}
-  local toc = assert(io.open("NrageAssistant/NrageAssistant.toc", "r"))
+  local toc = assert(io.open("GuildAssistant/GuildAssistant.toc", "r"))
   for line in toc:lines() do
     local path = line:match("^%s*([^#%s][^%s]*%.lua)%s*$")
     if path and not path:find("^Locales") and path ~= "Core\\Locale.lua" then
-      files[#files + 1] = "NrageAssistant/" .. path:gsub("\\", "/")
+      files[#files + 1] = "GuildAssistant/" .. path:gsub("\\", "/")
     end
   end
   toc:close()
@@ -101,8 +101,8 @@ describe("The Spanish catalog", function()
   local catalog
 
   setup(function()
-    assert(loadfile("NrageAssistant/Core/Locale.lua"))("NrageAssistant", ns)
-    assert(loadfile("NrageAssistant/Locales/esES.lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/Core/Locale.lua"))("GuildAssistant", ns)
+    assert(loadfile("GuildAssistant/Locales/esES.lua"))("GuildAssistant", ns)
     catalog = ns.Locale.Catalogs().es
   end)
 
