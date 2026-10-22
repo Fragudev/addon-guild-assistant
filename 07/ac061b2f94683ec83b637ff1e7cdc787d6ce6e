@@ -1,0 +1,75 @@
+GuildAssistant/Commands/Slash.lua
+  s_6762a89caa723f::t_061f64db7e7a82 13,19-30
+GuildAssistant/Core/AccessGuard.lua
+  s_6762a89caa723f::t_6cacf146d40c97 3,6-9,13-18,20-56,59-68,71-74,77-81
+GuildAssistant/Core/Constants.lua
+  s_6762a89caa723f::t_da9c460b08f10c 5,46
+GuildAssistant/Core/GuildIdentity.lua
+  s_6762a89caa723f::t_cbcff6db3b8054 1-41
+GuildAssistant/Core/Init.lua
+  s_6762a89caa723f::t_64434dfcbae0a7 24-28,32-33,35-36,38,793-795,829-839,841,843-865,867-868,870-871,888-890
+GuildAssistant/Core/Store.lua
+  s_6762a89caa723f::t_59d83eba8e2d0e 3-9,26-40,116,125-133,159-163,167-206
+GuildAssistant/Domain/Diagnostics.lua
+  s_6762a89caa723f::t_318a75e432bd6a 164,168,171,272,280-287,289-290
+GuildAssistant/Domain/LayerModel.lua
+  s_6762a89caa723f::t_d7cbb3fc17a554 59-60
+GuildAssistant/Domain/PositionModel.lua
+  s_6762a89caa723f::t_014ac1bb50b99b 14-15
+GuildAssistant/Domain/Settings.lua
+  s_6762a89caa723f::t_08f34848b924d5 3,13-14
+GuildAssistant/GuildAssistant.toc
+  s_6762a89caa723f::t_0315640c727055 18
+GuildAssistant/Locales/esES.lua
+  s_6762a89caa723f::t_049b0cfc91f07d 346-347,408-409,439
+GuildAssistant/UI/Main.lua
+  s_6762a89caa723f::t_9aa04a3cc122ca 67-68,455-463,467
+GuildAssistant/UI/MinimapButton.lua
+  s_6762a89caa723f::t_b080aa6927a19f 5,33-34
+GuildAssistant/UI/VotingFrame.lua
+  s_6762a89caa723f::t_09b5099e37d9cb 348,351
+docs/API_NOTES.md
+  s_6762a89caa723f::t_928288cfb4f9a3 12-15,28-29,42,46,55-56,71,86,108-109,116,134,219,229-231,238,257
+docs/PROTOCOL.md
+  s_6762a89caa723f::t_e7dee85c15597a 3-4,20-21,184-185,364,430
+tests/access_guard_spec.lua
+  s_6762a89caa723f::t_c1bede533d37df 3,10-13,18-33,39-48,51-52,56,61-62,64-81,83-86,88-108,111-203
+tests/comm_spec.lua
+  s_6762a89caa723f::t_1e7885814d79df 667-681
+tests/constants_spec.lua
+  s_6762a89caa723f::t_5951c7e4c641e7 13-14
+tests/diagnostics_spec.lua
+  s_6762a89caa723f::t_db625972b864a1 111,251,313
+tests/guild_identity_spec.lua
+  s_6762a89caa723f::t_5e7d03ef1500df 1-63
+tests/layer_model_spec.lua
+  s_6762a89caa723f::t_d87ddc114bfc1e 88,90,92,94
+tests/minimap_button_spec.lua
+  s_6762a89caa723f::t_f0ff52092f31cb 87,101,105,110,113,116,121,128
+tests/platform_unmeasured_spec.lua
+  s_6762a89caa723f::t_da47ff349a98f6 31,43
+tests/position_model_spec.lua
+  s_6762a89caa723f::t_7ff7ac50c079c7 14,16,20,26,29,31,36,38
+tests/settings_spec.lua
+  s_6762a89caa723f::t_852baaab29a896 18,24,35,38,43,46
+tests/store_spec.lua
+  s_6762a89caa723f::t_e657465dd5292a 1,8-18,20-21,368-486
+tests/ui_smoke_spec.lua
+  s_6762a89caa723f::t_e05b82d58bda58 2331,2335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "07ac061b2f94683ec83b637ff1e7cdc787d6ce6e",
+  "prompts": {},
+  "sessions": {
+    "s_6762a89caa723f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9863eff-9575-46c4-b096-2b4299b92bd1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
