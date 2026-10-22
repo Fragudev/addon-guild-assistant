@@ -1,0 +1,233 @@
+.github/workflows/ci.yml
+  s_6762a89caa723f::t_789013c2cda3c2 45,73
+.github/workflows/release.yml
+  s_6762a89caa723f::t_710813480ff757 21-22,65-66,77-80,87,108,117
+.luacheckrc
+  s_6762a89caa723f::t_21713e639964b7 4,9-11,108
+.luacov
+  s_6762a89caa723f::t_3650876f4f8485 2-3
+.styluaignore
+  s_6762a89caa723f::t_3b9a15fe8a3bf1 1
+GuildAssistant/Commands/PvPSeasonCommands.lua
+  s_6762a89caa723f::t_de122486f7b069 3,77-82,270
+GuildAssistant/Commands/Slash.lua
+  s_6762a89caa723f::t_45db536957b903 5,132,139-141,153
+GuildAssistant/Core/Constants.lua
+  s_6762a89caa723f::t_85b3dceeb6a3d6 4,8,132,320,326
+GuildAssistant/Core/Init.lua
+  s_6762a89caa723f::t_0c0959b482c601 5,28,30,35,41,449,822
+GuildAssistant/Core/LayerProbe.lua
+  s_6762a89caa723f::t_5d514f1dd59786 6,9,130,205
+GuildAssistant/Core/Locale.lua
+  s_6762a89caa723f::t_d519af18bf6725 9
+GuildAssistant/Core/LockdownProbe.lua
+  s_6762a89caa723f::t_b181d0172a6aab 5,8,146
+GuildAssistant/Core/PvPProbe.lua
+  s_6762a89caa723f::t_9ffbf004e1d683 10,13,337
+GuildAssistant/Domain/Diagnostics.lua
+  s_6762a89caa723f::t_d1da0ddf1acf84 3,262
+GuildAssistant/GuildAssistant.toc
+  s_6762a89caa723f::t_94cec9ed62eab2 2-3,6-7
+GuildAssistant/Locales/esES.lua
+  s_6762a89caa723f::t_92161246811378 4,192,239-241,320,324-326,345,402,438,754,773-778
+GuildAssistant/Sync/Comm.lua
+  s_6762a89caa723f::t_a0c8c4ae63180a 186
+GuildAssistant/Sync/PositionSync.lua
+  s_6762a89caa723f::t_381c09e69ce8c0 4
+GuildAssistant/Sync/Transfer.lua
+  s_6762a89caa723f::t_2c72e5f44bb19b 4,12
+GuildAssistant/UI/Kit/Icons.lua
+  s_6762a89caa723f::t_51dc9e1f8b12bc 11
+GuildAssistant/UI/Kit/Shell.lua
+  s_6762a89caa723f::t_bcee4f87162185 233,259
+GuildAssistant/UI/Kit/Theme.lua
+  s_6762a89caa723f::t_0e821c01d43c00 176,206,228
+GuildAssistant/UI/LayerPopup.lua
+  s_6762a89caa723f::t_68b56a5c505da8 125,191,206
+GuildAssistant/UI/LootPopup.lua
+  s_6762a89caa723f::t_a9cc9a85b82805 219,258,273
+GuildAssistant/UI/Main.lua
+  s_6762a89caa723f::t_87700db37834b2 457-458,537,541,570
+GuildAssistant/UI/MinimapButton.lua
+  s_6762a89caa723f::t_fda768db15a47e 81,140
+GuildAssistant/UI/ViewModel.lua
+  s_6762a89caa723f::t_5c72e1af7b9884 77,768,1293-1295
+GuildAssistant/UI/VotingFrame.lua
+  s_6762a89caa723f::t_bfef40b4388dba 349-350
+tests/access_guard_spec.lua
+  s_6762a89caa723f::t_e2d6280cc42110 3
+tests/auto_sync_spec.lua
+  s_6762a89caa723f::t_a00f6269393229 13
+tests/blacklist_commands_spec.lua
+  s_6762a89caa723f::t_558f56f7f9dc06 19
+tests/blacklist_service_spec.lua
+  s_6762a89caa723f::t_e8380f3aa53d35 13
+tests/blacklist_sync_spec.lua
+  s_6762a89caa723f::t_770b5934ad347a 16
+tests/blacklist_watcher_spec.lua
+  s_6762a89caa723f::t_5c1440ba28c182 17
+tests/codec_spec.lua
+  s_6762a89caa723f::t_fcaa2a9594a3a5 5-7,10-11,166,171
+tests/comm_spec.lua
+  s_6762a89caa723f::t_28c1b45b106ab9 4-6,40
+tests/constants_spec.lua
+  s_6762a89caa723f::t_fab02fdd8358d6 6,10,19,51,53,63,69,73,75-76,101,106,115
+tests/diagnostics_spec.lua
+  s_6762a89caa723f::t_9bb1812f3250c6 3,97,199,210
+tests/domain_spanish_spec.lua
+  s_6762a89caa723f::t_ad2b1b1fb0ae63 20
+tests/embeds_spec.lua
+  s_6762a89caa723f::t_5ccb4128ad3e8c 10,19,22,32-33,38-41
+tests/event_service_spec.lua
+  s_6762a89caa723f::t_556e0f9b21f931 12
+tests/event_sync_spec.lua
+  s_6762a89caa723f::t_e4ba1383f1bda2 15
+tests/guild_roster_spec.lua
+  s_6762a89caa723f::t_c0a7b151c5060e 3-4
+tests/inbox_spec.lua
+  s_6762a89caa723f::t_e3e39d57445f31 3-4,12
+tests/kit_helpers_spec.lua
+  s_6762a89caa723f::t_8a52cb56499993 13,109,230,243
+tests/kit_widgets_spec.lua
+  s_6762a89caa723f::t_5d4c9ab2685e9e 22,477,480,884-885,905,928
+tests/layer_directory_spec.lua
+  s_6762a89caa723f::t_f41979e57a94d4 4
+tests/layer_model_spec.lua
+  s_6762a89caa723f::t_024e6a90a12160 4
+tests/layer_popup_spec.lua
+  s_6762a89caa723f::t_9c61a85ab262d7 12
+tests/layer_publisher_spec.lua
+  s_6762a89caa723f::t_b47aa46a3283a2 4
+tests/layer_swap_spec.lua
+  s_6762a89caa723f::t_7dd8b8341aa574 4
+tests/layer_sync_spec.lua
+  s_6762a89caa723f::t_c122bf5cbad298 14
+tests/layer_tracker_spec.lua
+  s_6762a89caa723f::t_42e69fc13feb9d 4
+tests/locale_spec.lua
+  s_6762a89caa723f::t_225961927eb0d1 4,63,67,104-105
+tests/lockdown_guard_spec.lua
+  s_6762a89caa723f::t_4a5ae15e04e9fb 3
+tests/loot_commands_spec.lua
+  s_6762a89caa723f::t_988bf6253ca5a5 18
+tests/loot_popup_spec.lua
+  s_6762a89caa723f::t_8dcbf47c1777e1 3-4
+tests/loot_service_spec.lua
+  s_6762a89caa723f::t_0478a8797a9495 12
+tests/loot_sync_spec.lua
+  s_6762a89caa723f::t_4e1f66fda34a3a 17
+tests/map_pins_spec.lua
+  s_6762a89caa723f::t_e5990a4f3c0920 12
+tests/minimap_button_spec.lua
+  s_6762a89caa723f::t_cac6ab9e5e0cd8 3-5
+tests/outbound_queue_spec.lua
+  s_6762a89caa723f::t_d8926749679af9 3-4
+tests/permission_service_spec.lua
+  s_6762a89caa723f::t_f1350a2ab5c89b 3-5
+tests/platform_spec.lua
+  s_6762a89caa723f::t_84acfaba4ca173 5
+tests/platform_unmeasured_spec.lua
+  s_6762a89caa723f::t_9f5ecfd74b19d6 5
+tests/position_directory_spec.lua
+  s_6762a89caa723f::t_6c9c86e3be1ff4 4
+tests/position_model_spec.lua
+  s_6762a89caa723f::t_bc2ed1d6e5cb74 4
+tests/position_pins_spec.lua
+  s_6762a89caa723f::t_ebb3f5f890b952 10
+tests/position_publisher_spec.lua
+  s_6762a89caa723f::t_c0566edd08a17a 9
+tests/position_sync_spec.lua
+  s_6762a89caa723f::t_685974b45785ea 13
+tests/profile_service_spec.lua
+  s_6762a89caa723f::t_ff39342d4f8d6b 3-5,15,63
+tests/protocol_spec.lua
+  s_6762a89caa723f::t_98602762860358 3-11,234,271
+tests/publish_service_spec.lua
+  s_6762a89caa723f::t_3fb5c9c76ebef3 11
+tests/pvp_feed_spec.lua
+  s_6762a89caa723f::t_7706c02e24f372 4
+tests/pvp_mission_service_spec.lua
+  s_6762a89caa723f::t_6c695d054975a1 19
+tests/pvp_mission_tracker_spec.lua
+  s_6762a89caa723f::t_939a14ff016c89 11
+tests/pvp_probe_log_spec.lua
+  s_6762a89caa723f::t_87c3147ba927b2 3
+tests/pvp_publisher_spec.lua
+  s_6762a89caa723f::t_5a0026bb30bef7 11
+tests/pvp_season_commands_spec.lua
+  s_6762a89caa723f::t_48dfcd06bd14a2 1,17,82-83
+tests/pvp_season_model_spec.lua
+  s_6762a89caa723f::t_52a61bf2af0a64 5
+tests/pvp_season_service_spec.lua
+  s_6762a89caa723f::t_f148e1eea41203 16
+tests/pvp_season_sync_spec.lua
+  s_6762a89caa723f::t_bd9124e15a0232 4-6,20
+tests/pvp_service_spec.lua
+  s_6762a89caa723f::t_91b764e71e5c11 3-4
+tests/pvp_sync_spec.lua
+  s_6762a89caa723f::t_6b9051eb6aebe8 15
+tests/pvp_tracker_spec.lua
+  s_6762a89caa723f::t_e199e41ba5da92 4
+tests/pvp_unit_cache_spec.lua
+  s_6762a89caa723f::t_3a2aea6bc0b773 4
+tests/raid_commands_spec.lua
+  s_6762a89caa723f::t_b14c660346374c 16
+tests/readiness_rules_spec.lua
+  s_6762a89caa723f::t_ab8e45488ec850 17
+tests/readiness_service_spec.lua
+  s_6762a89caa723f::t_24111e0c090f1c 3-5
+tests/recipe_spec.lua
+  s_6762a89caa723f::t_c316b06d0b042f 3,15
+tests/report_spec.lua
+  s_6762a89caa723f::t_d0b1933266f395 16
+tests/roster_service_spec.lua
+  s_6762a89caa723f::t_ab4d4e6e4a4967 14
+tests/roster_sync_spec.lua
+  s_6762a89caa723f::t_bf27b139396b33 4-6,41
+tests/secondary_frames_spec.lua
+  s_6762a89caa723f::t_217936482f3a9a 38,115-117,130,132,145,152,155,162
+tests/settings_spec.lua
+  s_6762a89caa723f::t_9cdf71be06aa46 5
+tests/store_spec.lua
+  s_6762a89caa723f::t_a38adb7d580acc 3-4,66,72
+tests/support/addon.lua
+  s_6762a89caa723f::t_30176614f8e6e2 4,8-9
+tests/support/fake_frames.lua
+  s_6762a89caa723f::t_8a19c537d1584e 188
+tests/template_commands_spec.lua
+  s_6762a89caa723f::t_af8dc210894c11 17
+tests/template_service_spec.lua
+  s_6762a89caa723f::t_f4a634cbbc9f1e 14
+tests/transfer_spec.lua
+  s_6762a89caa723f::t_5dddc2cd0ed566 3-5,32,102,183,199,209,222
+tests/ui_smoke_spec.lua
+  s_6762a89caa723f::t_24b29e732fdb55 77,2456,2492,2495,2511,2514,2531
+tests/view_model_layers_spec.lua
+  s_6762a89caa723f::t_61d139a1843fc9 17
+tests/view_model_pvp_spec.lua
+  s_6762a89caa723f::t_bb0e714dfb0df9 33
+tests/view_model_spec.lua
+  s_6762a89caa723f::t_3346dab2816bba 35,65,177,207,360,456,558,670,1425,1697
+tests/voting_frame_spec.lua
+  s_6762a89caa723f::t_edf56c2654119e 3-4
+tools/make_icons.py
+  s_6762a89caa723f::t_8df6d01fed6e55 7,192
+tools/package.sh
+  s_6762a89caa723f::t_c0269ed2b98804 3,7,41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc844945dfe3d658fd3da01c309b801b32028838",
+  "prompts": {},
+  "sessions": {
+    "s_6762a89caa723f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9863eff-9575-46c4-b096-2b4299b92bd1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
