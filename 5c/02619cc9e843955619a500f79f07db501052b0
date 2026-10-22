@@ -1,0 +1,39 @@
+GuildAssistant/Domain/Diagnostics.lua
+  s_6762a89caa723f::t_c78556835f76ac 47
+GuildAssistant/Libs/LibSerialize/LibSerialize.lua
+  s_6762a89caa723f::t_cee51143cbe539 571,573
+GuildAssistant/Libs/README.md
+  s_6762a89caa723f::t_478f5880f9ea56 18,20
+GuildAssistant/Sync/Codec.lua
+  s_6762a89caa723f::t_b90ae014575afa 17
+GuildAssistant/UI/Main.lua
+  s_6762a89caa723f::t_27f166e373c23f 530
+tests/codec_spec.lua
+  s_6762a89caa723f::t_eb046280afb4c3 14,94,103,172
+tests/comm_spec.lua
+  s_6762a89caa723f::t_8f289d9324e061 93
+tests/diagnostics_spec.lua
+  s_6762a89caa723f::t_b0a5c36e7c37b5 42,182,186-187
+tests/pvp_season_sync_spec.lua
+  s_6762a89caa723f::t_f8e0892eb0b534 28
+tests/roster_sync_spec.lua
+  s_6762a89caa723f::t_3c9dd1ee968d7e 449
+tests/transfer_spec.lua
+  s_6762a89caa723f::t_f280cba11d57cf 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c02619cc9e843955619a500f79f07db501052b0",
+  "prompts": {},
+  "sessions": {
+    "s_6762a89caa723f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9863eff-9575-46c4-b096-2b4299b92bd1",
+        "model": "unknown"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
