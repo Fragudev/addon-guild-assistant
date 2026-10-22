@@ -49,7 +49,7 @@ from other clients are compared without a `-<this realm>` suffix. `/ga debug ros
 
 ## Layers (assumed, not measured yet)
 
-The whole layer feature (`docs/LAYER_SWAP_PLAN.md`) was built on the assumptions below **without measuring them on
+The whole layer feature was built on the assumptions below **without measuring them on
 Forever** (decided 2026-10-20). Every client call is guarded, so a wrong assumption turns the feature off quietly
 (nil or false means unavailable) instead of raising. **All of this must be verified in game before release**, with
 two clients: `/ga debug layer start`, target and mouse over NPCs, group up, then `/ga debug layer log` and
@@ -74,7 +74,7 @@ and the feature should be removed; if question 5 or 6 fails, the popup buttons w
 
 ## Guild map (not measured yet)
 
-The guild map (`docs/GUILD_MAP_PLAN.md`) uses the APIs below, none of them measured on Forever. Each is guarded in
+The guild map uses the APIs below, none of them measured on Forever. Each is guarded in
 `Core/Platform.lua`, so a wrong assumption leaves the feature quietly unavailable (no position is sent, no pin is
 drawn). **All of this must be verified in game before release.** Record the result and remove the marker.
 
@@ -128,7 +128,7 @@ blows are available.
 
 ## PvP seasons (to be measured)
 
-The PvP missions (`docs/PVP_MISSIONS_PLAN.md`, sections 2 and 5) read the client in five places that nobody has
+The PvP missions read the client in five places that nobody has
 measured on Forever yet. Each reader in `Core/Platform.lua` is guarded (a missing API, an error or a secret value gives
 nil) and a mission criterion whose source does not work is shown as "Not available on this client" instead of
 blocking anything. Run `/ga debug pvp start` on a PvP realm, play, then `/ga debug pvp log` and copy the
@@ -166,7 +166,7 @@ removed. Every call is guarded, so a missing API or a secret value leaves a name
 
 ## Redesign APIs (phase P0, to be measured in the game)
 
-The UI redesign (`docs/REDESIGN_PLAN.md`) depends on a few client APIs nobody has measured on Forever yet. Each one is
+The UI redesign depends on a few client APIs nobody has measured on Forever yet. Each one is
 wrapped in `Core/Platform.lua` behind `pcall` and an availability check, and the feature that needs it ships
 **disabled or hidden** when the check says it is missing. Record the result of every row, then update the table and
 remove the "not measured yet" marker.

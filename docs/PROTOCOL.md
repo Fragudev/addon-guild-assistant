@@ -313,7 +313,7 @@ minor 5, plan 3.4.1 and 3.4.2).
 
 ## PvP seasons
 
-A season system for PvP (protocol minor 7, `docs/PVP_MISSIONS_PLAN.md`): admins define missions that award points,
+A season system for PvP (protocol minor 7): admins define missions that award points,
 members claim them, an admin or a PvP officer approves each claim, the points make a season ranking, and the top 10
 get a prize at the end. Points live in an **append-only ledger of grants**; the ranking is derived from it on every
 client, so nothing but the grants has to be trusted.
