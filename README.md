@@ -10,11 +10,13 @@
 </p>
 
 <p align="center">
+  <a href="https://www.curseforge.com/wow/addons/guild-assistant"><b>Get it on CurseForge</b></a> ·
   <a href="https://github.com/Fragudev/addon-guild-assistant/releases"><b>Download from Releases</b></a> ·
   <a href="docs/USER_GUIDE.md"><b>User guide</b></a>
 </p>
 
 <p align="center">
+  <a href="https://www.curseforge.com/wow/addons/guild-assistant"><img alt="CurseForge: Guild Assistant" src="https://img.shields.io/badge/CurseForge-Guild_Assistant-f16436?style=flat-square&logo=curseforge&logoColor=white&labelColor=1c1a17"></a>
   <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-e6ba66?style=flat-square&labelColor=1c1a17"></a>
   <img alt="World of Warcraft: Forever, client 1.60.1" src="https://img.shields.io/badge/WoW-Forever_1.60.1-94c9ff?style=flat-square&labelColor=1c1a17">
   <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-fabf4d?style=flat-square&labelColor=1c1a17">
@@ -42,7 +44,9 @@
 
 ## Quick start
 
-1. **Download** `GuildAssistant-<version>.zip` from the newest release on the
+1. **Install it with the CurseForge app** (search for
+   [Guild Assistant](https://www.curseforge.com/wow/addons/guild-assistant)), then skip to step 3.
+   **Or download** `GuildAssistant-<version>.zip` from the newest release on the
    [Releases page](https://github.com/Fragudev/addon-guild-assistant/releases), under *Assets* (not "Source code").
 2. **Unzip it into the game's AddOns folder**:
    ```text
