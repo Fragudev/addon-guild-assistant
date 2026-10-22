@@ -1,0 +1,993 @@
+local function load_protocol()
+  local ns = {}
+  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Core/Validate.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Domain/PermissionService.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Domain/EventModel.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Domain/BlacklistService.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Domain/ReadinessRules.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Domain/LootModel.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Domain/PvPSeasonModel.lua"))("NrageAssistant", ns)
+  assert(loadfile("NrageAssistant/Sync/Protocol.lua"))("NrageAssistant", ns)
+  return ns.Protocol, ns.Constants
+end
+
+local Protocol, Constants = load_protocol()
+
+local function profile(overrides)
+  local p = {
+    rev = 3,
+    class = "WARRIOR",
+    level = 60,
+    ilvl = 200,
+    professions = { { name = "Mining", skill = 300, max = 300 } },
+    fields = { role = "tank" },
+  }
+  for k, v in pairs(overrides or {}) do
+    p[k] = v
+  end
+  return p
+end
+
+local function message(payload, overrides)
+  local m = Protocol.Build("PROFILE", payload or profile(), "abc-123")
+  for k, v in pairs(overrides or {}) do
+    m[k] = v
+  end
+  return m
+end
+
+describe("Protocol.Build", function()
+  it("stamps the current protocol version", function()
+    local m = Protocol.Build("HELLO", { version = "0.1.0" }, "id-1")
+    assert.are.equal(Constants.PROTOCOL_MAJOR, m.v)
+    assert.are.equal(Constants.PROTOCOL_MINOR, m.m)
+    assert.are.equal("HELLO", m.t)
+  end)
+end)
+
+describe("Protocol.Validate envelope", function()
+  it("accepts a well-formed HELLO", function()
+    local clean = Protocol.Validate(Protocol.Build("HELLO", { version = "0.1.0" }, "id-1"))
+    assert.are.equal("HELLO", clean.t)
+    assert.are.equal("0.1.0", clean.p.version)
+  end)
+
+  it("rejects non-tables", function()
+    for _, value in ipairs({ "text", 5, true }) do
+      local clean, reason = Protocol.Validate(value)
+      assert.is_nil(clean)
+      assert.are.equal("not_table", reason)
+    end
+  end)
+
+  it("rejects a bad version and explains an incompatible major", function()
+    local _, reason = Protocol.Validate(message(nil, { v = "1" }))
+    assert.are.equal("bad_version", reason)
+    _, reason = Protocol.Validate(message(nil, { v = Constants.PROTOCOL_MAJOR + 1 }))
+    assert.are.equal("incompatible_version", reason)
+  end)
+
+  it("accepts a newer minor version", function()
+    assert.is_truthy(Protocol.Validate(message(nil, { m = Constants.PROTOCOL_MINOR + 5 })))
+  end)
+
+  it("rejects unknown types", function()
+    local _, reason = Protocol.Validate(message(nil, { t = "LOOT_TRADE" }))
+    assert.are.equal("unknown_type", reason)
+    _, reason = Protocol.Validate(message(nil, { t = {} }))
+    assert.are.equal("unknown_type", reason)
+  end)
+
+  it("rejects bad ids", function()
+    for _, id in ipairs({ "", ("x"):rep(41), "has space", "pipe|id", "colon:id", 7 }) do
+      local _, reason = Protocol.Validate(message(nil, { id = id }))
+      assert.are.equal("bad_id", reason)
+    end
+  end)
+
+  it("rejects a missing payload", function()
+    local _, reason = Protocol.Validate(message(nil, { p = "nope" }))
+    assert.are.equal("bad_payload", reason)
+  end)
+end)
+
+describe("Protocol.Validate HELLO", function()
+  it("rejects a missing or hostile version string", function()
+    for _, version in ipairs({ "", ("v"):rep(33), "|cffff0000red", "line\nbreak", 1 }) do
+      local _, reason = Protocol.Validate(Protocol.Build("HELLO", { version = version }, "id-1"))
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate PROFILE", function()
+  it("keeps every valid field", function()
+    local clean = Protocol.Validate(message())
+    assert.are.equal(3, clean.p.rev)
+    assert.are.equal("WARRIOR", clean.p.class)
+    assert.are.equal(60, clean.p.level)
+    assert.are.equal(200, clean.p.ilvl)
+    assert.are.same({ { name = "Mining", skill = 300, max = 300 } }, clean.p.professions)
+    assert.are.same({ role = "tank" }, clean.p.fields)
+  end)
+
+  it("accepts a minimal profile", function()
+    local clean = Protocol.Validate(message({ rev = 0, class = "MAGE", level = 1 }))
+    assert.is_truthy(clean)
+    assert.is_nil(clean.p.ilvl)
+    assert.is_nil(clean.p.professions)
+    assert.is_nil(clean.p.fields)
+  end)
+
+  it("drops unknown fields, including nested ones", function()
+    local payload = profile({ guid = "Player-1", secret = "x" })
+    payload.fields.evil = "y"
+    payload.professions[1].extra = "z"
+    local clean = Protocol.Validate(message(payload))
+    assert.is_nil(clean.p.guid)
+    assert.is_nil(clean.p.secret)
+    assert.is_nil(clean.p.fields.evil)
+    assert.is_nil(clean.p.professions[1].extra)
+  end)
+
+  it("rejects values outside their domain", function()
+    local bad = {
+      { rev = -1 },
+      { rev = 1.5 },
+      { rev = "3" },
+      { class = "warrior" },
+      { class = "" },
+      { class = "WAR|RIOR" },
+      { level = 0 },
+      { level = 1000 },
+      { level = "60" },
+      { ilvl = -1 },
+      { ilvl = 2001 },
+      { professions = "mining" },
+      { professions = { { name = "", skill = 1 } } },
+      { professions = { { name = "Mining", skill = 1001 } } },
+      { professions = { { name = "Mining", skill = 1, max = -1 } } },
+      { fields = "role" },
+      { fields = { role = "|cffff0000red" } },
+      { fields = { notes = ("n"):rep(Constants.MAX_FIELD_LENGTH + 1) } },
+    }
+    for _, overrides in ipairs(bad) do
+      local clean, reason = Protocol.Validate(message(profile(overrides)))
+      assert.is_nil(clean)
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+
+  it("rejects too many professions", function()
+    local list = {}
+    for i = 1, 9 do
+      list[i] = { name = "P" .. i, skill = 1 }
+    end
+    local _, reason = Protocol.Validate(message(profile({ professions = list })))
+    assert.are.equal("bad_payload", reason)
+  end)
+end)
+
+local function raid_message(messageType, payload)
+  return Protocol.Build(messageType, payload, "id-raid")
+end
+
+local function event_payload(overrides)
+  local p = { eventId = "ev-1", rev = 2, updatedAt = 1000, title = "Molten Core", instance = "MC", startAt = 5000 }
+  for k, v in pairs(overrides or {}) do
+    p[k] = v
+  end
+  return p
+end
+
+describe("Protocol.Validate EVENT_UPSERT", function()
+  it("keeps the valid fields and drops unknown ones", function()
+    local clean = Protocol.Validate(raid_message("EVENT_UPSERT", event_payload({ status = "open", junk = "x" })))
+    assert.are.same({
+      eventId = "ev-1",
+      rev = 2,
+      updatedAt = 1000,
+      title = "Molten Core",
+      instance = "MC",
+      startAt = 5000,
+      status = "open",
+    }, clean.p)
+  end)
+
+  it("accepts an event with only the required fields", function()
+    local clean = Protocol.Validate(raid_message("EVENT_UPSERT", {
+      eventId = "ev-1",
+      rev = 1,
+      updatedAt = 0,
+      title = "Raid",
+    }))
+    assert.is_truthy(clean)
+  end)
+
+  it("rejects invalid ids, revisions, timestamps and fields", function()
+    local bad = {
+      { eventId = "has space" },
+      { eventId = 7 },
+      { eventId = "a|b" },
+      { rev = 0 },
+      { rev = 1.5 },
+      { rev = "2" },
+      { updatedAt = -1 },
+      { updatedAt = 5000000000 },
+      { title = "" },
+      { title = "|cffff0000Red" },
+      { title = ("t"):rep(61) },
+      { status = "boom" },
+      { startAt = -5 },
+    }
+    for _, overrides in ipairs(bad) do
+      local clean, reason = Protocol.Validate(raid_message("EVENT_UPSERT", event_payload(overrides)))
+      assert.is_nil(clean)
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate ATTENDANCE_UPSERT", function()
+  local function payload(overrides)
+    local p = { eventId = "ev-1", characterKey = "Nrager-Realm", state = "present", rev = 1, updatedAt = 10 }
+    for k, v in pairs(overrides or {}) do
+      p[k] = v
+    end
+    return p
+  end
+
+  it("accepts a valid record and never carries the recorder", function()
+    local clean = Protocol.Validate(raid_message("ATTENDANCE_UPSERT", payload({ recordedBy = "Fake-Realm" })))
+    assert.are.equal("present", clean.p.state)
+    assert.is_nil(clean.p.recordedBy)
+  end)
+
+  it("rejects an unknown state, a bad key and missing revision data", function()
+    for _, overrides in ipairs({
+      { state = "disconnected" },
+      { state = 5 },
+      { characterKey = "" },
+      { characterKey = "A|B" },
+      { rev = 0 },
+      { updatedAt = "now" },
+      { eventId = "no way" },
+    }) do
+      local _, reason = Protocol.Validate(raid_message("ATTENDANCE_UPSERT", payload(overrides)))
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate ASSIGN_UPSERT", function()
+  local function payload(overrides)
+    local p = {
+      eventId = "ev-1",
+      assignmentId = "as-1",
+      rev = 1,
+      updatedAt = 10,
+      encounter = "Ragnaros",
+      characterKey = "Nrager-Realm",
+      group = 2,
+      task = "Main tank",
+      note = "watch out",
+    }
+    for k, v in pairs(overrides or {}) do
+      p[k] = v
+    end
+    return p
+  end
+
+  it("keeps every valid field", function()
+    local clean = Protocol.Validate(raid_message("ASSIGN_UPSERT", payload()))
+    assert.are.same(payload(), clean.p)
+  end)
+
+  it("rejects values outside their domain", function()
+    for _, overrides in ipairs({
+      { assignmentId = "bad id" },
+      { encounter = "" },
+      { characterKey = "|x" },
+      { group = 9 },
+      { group = 0 },
+      { task = ("t"):rep(61) },
+      { note = ("n"):rep(101) },
+      { rev = 0 },
+    }) do
+      local _, reason = Protocol.Validate(raid_message("ASSIGN_UPSERT", payload(overrides)))
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate DELETE", function()
+  it("accepts deleting an event", function()
+    local clean = Protocol.Validate(raid_message("DELETE", { kind = "event", eventId = "ev-1", rev = 3 }))
+    assert.are.same({ kind = "event", eventId = "ev-1", rev = 3 }, clean.p)
+  end)
+
+  it("requires an assignment id when deleting an assignment", function()
+    local ok = Protocol.Validate(raid_message("DELETE", {
+      kind = "assignment",
+      eventId = "ev-1",
+      assignmentId = "as-1",
+      rev = 2,
+    }))
+    assert.are.equal("as-1", ok.p.assignmentId)
+
+    local _, reason = Protocol.Validate(raid_message("DELETE", { kind = "assignment", eventId = "ev-1", rev = 2 }))
+    assert.are.equal("bad_payload", reason)
+  end)
+
+  it("rejects unknown kinds and bad ids or revisions", function()
+    for _, payload in ipairs({
+      { kind = "guild", eventId = "ev-1", rev = 1 },
+      { kind = "event", eventId = "no way", rev = 1 },
+      { kind = "event", eventId = "ev-1", rev = 0 },
+      { kind = 5, eventId = "ev-1", rev = 1 },
+    }) do
+      local _, reason = Protocol.Validate(raid_message("DELETE", payload))
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate SYNC_REQ and SYNC_DATA", function()
+  it("accepts an empty request and drops anything it carries", function()
+    local clean = Protocol.Validate(raid_message("SYNC_REQ", { junk = "x" }))
+    assert.are.same({}, clean.p)
+  end)
+
+  it("keeps the items of a snapshot without judging them", function()
+    local items = { { t = "EVENT_UPSERT", p = {} }, "whatever" }
+    local clean = Protocol.Validate(raid_message("SYNC_DATA", { items = items, junk = 1 }))
+    assert.are.same({ items = items }, clean.p)
+  end)
+
+  it("rejects a snapshot without a list or with too many items", function()
+    assert.are.equal("bad_payload", select(2, Protocol.Validate(raid_message("SYNC_DATA", { items = "no" }))))
+    assert.are.equal("bad_payload", select(2, Protocol.Validate(raid_message("SYNC_DATA", {}))))
+    local items = {}
+    for i = 1, Constants.IMPORT_MAX_ITEMS + 1 do
+      items[i] = { t = "DELETE", p = {} }
+    end
+    assert.are.equal("bad_payload", select(2, Protocol.Validate(raid_message("SYNC_DATA", { items = items }))))
+  end)
+end)
+
+describe("Protocol.Validate loot messages", function()
+  local function base(overrides)
+    local p = { eventId = "ev-1", sessionId = "s-1", rev = 2, updatedAt = 100 }
+    for k, v in pairs(overrides or {}) do
+      p[k] = v
+    end
+    return p
+  end
+
+  local function invalid(messageType, payload)
+    local clean, reason = Protocol.Validate(raid_message(messageType, payload))
+    assert.is_nil(clean)
+    assert.are.equal("bad_payload", reason)
+  end
+
+  it("accepts a LOOT_SESSION and drops unknown fields", function()
+    local clean = Protocol.Validate(raid_message(
+      "LOOT_SESSION",
+      base({
+        itemId = 19019,
+        itemName = "Thunderfury",
+        status = "open",
+        junk = "x",
+      })
+    ))
+    assert.are.same({
+      eventId = "ev-1",
+      sessionId = "s-1",
+      rev = 2,
+      updatedAt = 100,
+      itemId = 19019,
+      itemName = "Thunderfury",
+      status = "open",
+    }, clean.p)
+  end)
+
+  it("rejects an invalid LOOT_SESSION", function()
+    local good = { itemId = 1, itemName = "X", status = "open" }
+    for _, overrides in ipairs({
+      { eventId = "bad id" },
+      { sessionId = "a:b" },
+      { rev = 0 },
+      { updatedAt = -1 },
+      { itemId = 0 },
+      { itemId = "1" },
+      { itemName = "|cffff0000X" },
+      { itemName = "" },
+      { status = "won" },
+      { status = 5 },
+    }) do
+      local payload = base(good)
+      for k, v in pairs(overrides) do
+        payload[k] = v
+      end
+      invalid("LOOT_SESSION", payload)
+    end
+  end)
+
+  it("accepts a LOOT_AWARD, which carries the item, and never the awarder", function()
+    local clean = Protocol.Validate(raid_message(
+      "LOOT_AWARD",
+      base({
+        itemId = 1,
+        itemName = "X",
+        characterKey = "Ann-Realm",
+        reason = "Highest need",
+        awardedBy = "Fake-Realm",
+      })
+    ))
+    assert.are.equal("Ann-Realm", clean.p.characterKey)
+    assert.are.equal("Highest need", clean.p.reason)
+    assert.is_nil(clean.p.awardedBy)
+  end)
+
+  it("rejects an invalid LOOT_AWARD", function()
+    local good = { itemId = 1, itemName = "X", characterKey = "Ann-Realm", reason = "why" }
+    for _, overrides in ipairs({
+      { characterKey = "" },
+      { characterKey = "A|B" },
+      { reason = "" },
+      { reason = "|cffff0000x" },
+      { reason = ("r"):rep(101) },
+      { itemId = 0 },
+      { rev = 0 },
+    }) do
+      local payload = base(good)
+      for k, v in pairs(overrides) do
+        payload[k] = v
+      end
+      invalid("LOOT_AWARD", payload)
+    end
+  end)
+
+  it("accepts a LOOT_CANDIDATE without a candidate key", function()
+    local clean = Protocol.Validate(raid_message(
+      "LOOT_CANDIDATE",
+      base({
+        spec = "Fury",
+        need = "main",
+        upgrade = "Better axe",
+        candidate = "Fake-Realm",
+      })
+    ))
+    assert.are.equal("Fury", clean.p.spec)
+    assert.are.equal("main", clean.p.need)
+    assert.are.equal("Better axe", clean.p.upgrade)
+    assert.is_nil(clean.p.candidate)
+  end)
+
+  it("rejects an invalid LOOT_CANDIDATE", function()
+    for _, overrides in ipairs({
+      { spec = "" },
+      { need = "greed" },
+      { need = 5 },
+      { upgrade = "|Hitem:1|h" },
+    }) do
+      local payload = base({ spec = "Fury", need = "main" })
+      for k, v in pairs(overrides) do
+        payload[k] = v
+      end
+      invalid("LOOT_CANDIDATE", payload)
+    end
+    invalid("LOOT_CANDIDATE", base({ need = "main" }))
+  end)
+
+  it("accepts a LOOT_VOTE without a voter and rejects a bad target", function()
+    local clean = Protocol.Validate(raid_message("LOOT_VOTE", base({ target = "Ann-Realm", voter = "Fake-Realm" })))
+    assert.are.equal("Ann-Realm", clean.p.target)
+    assert.is_nil(clean.p.voter)
+    invalid("LOOT_VOTE", base({ target = "" }))
+    invalid("LOOT_VOTE", base({ target = "A|B" }))
+    invalid("LOOT_VOTE", base({}))
+  end)
+end)
+
+describe("Protocol.Validate PVP_STATS", function()
+  local function stats(overrides)
+    local p = {
+      rev = 4,
+      updatedAt = 1000,
+      honor = { world = 10, bg = 5 },
+      blows = { world = 3, bg = 1 },
+      today = { day = "2026-10-01", honor = { world = 2, bg = 1 }, blows = { world = 1, bg = 0 } },
+    }
+    for k, v in pairs(overrides or {}) do
+      p[k] = v
+    end
+    return p
+  end
+
+  local function validate(payload)
+    return Protocol.Validate(Protocol.Build("PVP_STATS", payload, "id-1"))
+  end
+
+  it("keeps the counters and the day", function()
+    local clean = validate(stats())
+    assert.are.same(stats(), clean.p)
+  end)
+
+  it("drops unknown fields, such as a name", function()
+    local clean = validate(stats({ owner = "Victim", name = "Victim" }))
+    assert.is_nil(clean.p.owner)
+    assert.is_nil(clean.p.name)
+  end)
+
+  it("accepts a record without killing blows", function()
+    local payload = stats({ today = { day = "2026-10-01", honor = { world = 2, bg = 1 } } })
+    payload.blows = nil
+    local clean = validate(payload)
+    assert.is_nil(clean.p.blows)
+    assert.is_nil(clean.p.today.blows)
+  end)
+
+  it("bounds every counter to whole numbers in 0..PVP_MAX_KILLS", function()
+    local high = Constants.PVP_MAX_KILLS
+    assert.is_truthy(validate(stats({ honor = { world = high, bg = 0 } })))
+    for _, bad in ipairs({ -1, high + 1, 1.5, "7", math.huge, 0 / 0 }) do
+      local _, reason = validate(stats({ honor = { world = bad, bg = 0 } }))
+      assert.are.equal("bad_payload", reason, tostring(bad))
+      _, reason = validate(stats({ blows = { world = 0, bg = bad } }))
+      assert.are.equal("bad_payload", reason, tostring(bad))
+      _, reason = validate(stats({ today = { day = "2026-10-01", honor = { world = bad, bg = 0 } } }))
+      assert.are.equal("bad_payload", reason, tostring(bad))
+      _, reason = validate(
+        stats({ today = { day = "2026-10-01", honor = { world = 0, bg = 0 }, blows = { world = bad, bg = 0 } } })
+      )
+      assert.are.equal("bad_payload", reason, tostring(bad))
+    end
+  end)
+
+  it("needs both counters of a pair and the pair to be a table", function()
+    for _, bad in ipairs({ { world = 1 }, { bg = 1 }, "many", {} }) do
+      local _, reason = validate(stats({ honor = bad }))
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+
+  it("rejects a bad day", function()
+    for _, day in ipairs({ "2026-1-01", "20261001", "2026-13-01", "2026-10-00", "2026-10-32", "1999-10-01", "x", 5 }) do
+      local _, reason = validate(stats({ today = { day = day, honor = { world = 0, bg = 0 } } }))
+      assert.are.equal("bad_payload", reason, tostring(day))
+    end
+    local payload = stats()
+    payload.today = nil
+    local _, reason = validate(payload)
+    assert.are.equal("bad_payload", reason)
+  end)
+
+  it("bounds the revision and the timestamp", function()
+    for _, overrides in ipairs({
+      { rev = 0 },
+      { rev = 2147483648 },
+      { rev = 1.5 },
+      { updatedAt = -1 },
+      { updatedAt = "now" },
+    }) do
+      local _, reason = validate(stats(overrides))
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate PVP_RESET", function()
+  local function validate(payload)
+    return Protocol.Validate(Protocol.Build("PVP_RESET", payload, "id-1"))
+  end
+
+  it("keeps the target and the revision", function()
+    assert.are.same({ target = "Ann-Realm", rev = 7 }, validate({ target = "Ann-Realm", rev = 7, extra = 1 }).p)
+  end)
+
+  it("rejects a hostile or oversized target and a bad revision", function()
+    for _, target in ipairs({ "", ("n"):rep(65), "|cffff0000Ann", "line\nbreak", 5 }) do
+      local _, reason = validate({ target = target, rev = 1 })
+      assert.are.equal("bad_payload", reason)
+    end
+    for _, rev in ipairs({ 0, -1, 2147483648, 1.5, "1" }) do
+      local _, reason = validate({ target = "Ann", rev = rev })
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate PVP_KILL", function()
+  local function kill(overrides)
+    local payload = { victim = "Zed", where = "world", blow = true }
+    for k, v in pairs(overrides or {}) do
+      payload[k] = v
+    end
+    return payload
+  end
+
+  local function validate(payload)
+    return Protocol.Validate(Protocol.Build("PVP_KILL", payload, "id-1"))
+  end
+
+  it("keeps the victim, the place and the blow", function()
+    assert.are.same(kill(), validate(kill()).p)
+    assert.are.same(kill({ where = "bg", blow = false }), validate(kill({ where = "bg", blow = false })).p)
+  end)
+
+  it("accepts multi-word names up to the limit and drops unknown fields such as a killer", function()
+    assert.is_truthy(validate(kill({ victim = "Yonemon Gg" })))
+    assert.is_truthy(validate(kill({ victim = ("x"):rep(Constants.PVP_FEED_VICTIM_MAX) })))
+    local clean = validate(kill({ killer = "Someone", owner = "Someone" }))
+    assert.is_nil(clean.p.killer)
+    assert.is_nil(clean.p.owner)
+  end)
+
+  it("rejects a victim that is empty, too long, not text or carries escapes", function()
+    for _, bad in ipairs({ "", ("x"):rep(Constants.PVP_FEED_VICTIM_MAX + 1), 5, true, "A|cffff0000B", "A\nB" }) do
+      local _, reason = validate(kill({ victim = bad }))
+      assert.are.equal("bad_payload", reason, tostring(bad))
+    end
+    local missing = kill()
+    missing.victim = nil
+    local _, reason = validate(missing)
+    assert.are.equal("bad_payload", reason)
+  end)
+
+  it("rejects a place that is not world or bg", function()
+    for _, bad in ipairs({ "arena", "World", "", 1, true }) do
+      local _, reason = validate(kill({ where = bad }))
+      assert.are.equal("bad_payload", reason, tostring(bad))
+    end
+    local missing = kill()
+    missing.where = nil
+    local _, reason = validate(missing)
+    assert.are.equal("bad_payload", reason)
+  end)
+
+  it("rejects a blow that is not a boolean", function()
+    for _, bad in ipairs({ "true", 1, 0, {} }) do
+      local _, reason = validate(kill({ blow = bad }))
+      assert.are.equal("bad_payload", reason, tostring(bad))
+    end
+    local missing = kill()
+    missing.blow = nil
+    local _, reason = validate(missing)
+    assert.are.equal("bad_payload", reason)
+  end)
+
+  it("is at protocol minor version 7", function()
+    assert.are.equal(7, Constants.PROTOCOL_MINOR)
+  end)
+end)
+
+describe("Protocol.Validate BLACKLIST_UPSERT and BLACKLIST_DELETE", function()
+  local function upsert(overrides)
+    local payload = { key = "yonemongg", name = "Yonemon Gg", reason = "ninja", rev = 1, updatedAt = 1000 }
+    for k, v in pairs(overrides or {}) do
+      payload[k] = v
+    end
+    return payload
+  end
+
+  local function validate_upsert(payload)
+    return Protocol.Validate(Protocol.Build("BLACKLIST_UPSERT", payload, "id-1"))
+  end
+
+  local function validate_delete(payload)
+    return Protocol.Validate(Protocol.Build("BLACKLIST_DELETE", payload, "id-1"))
+  end
+
+  it("keeps the fields of an upsert and drops everything else, such as an author", function()
+    assert.are.same(upsert(), validate_upsert(upsert()).p)
+    local clean = validate_upsert(upsert({ addedBy = "Boss-Realm", updatedBy = "Boss-Realm", addedAt = 5, extra = 1 }))
+    assert.are.same(upsert(), clean.p)
+  end)
+
+  it("accepts the limits of the name and the reason", function()
+    local name = ("n"):rep(Constants.BLACKLIST_NAME_MAX)
+    local reason = ("r"):rep(Constants.BLACKLIST_REASON_MAX)
+    assert.is_truthy(validate_upsert(upsert({ key = name, name = name, reason = reason })))
+  end)
+
+  it("rejects a name or a key that is empty, too long, not text, or carries escapes or separators", function()
+    local long = ("n"):rep(Constants.BLACKLIST_NAME_MAX + 1)
+    for _, bad in ipairs({ "", long, 5, true, "A|cffff0000B", "A\nB", "A:B" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ name = bad }))), tostring(bad))
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ key = bad }))), tostring(bad))
+      assert.are.equal("bad_payload", select(2, validate_delete({ key = bad, rev = 1 })), tostring(bad))
+    end
+  end)
+
+  it("rejects a name that is not the one the blacklist would keep", function()
+    for _, bad in ipairs({ " Ann", "Ann ", "A  nn", "Ann-Realm" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ name = bad }))), bad)
+    end
+  end)
+
+  it("rejects a reason that is empty, too long, not text, or carries escapes", function()
+    local long = ("r"):rep(Constants.BLACKLIST_REASON_MAX + 1)
+    for _, bad in ipairs({ "", long, 5, false, "a|cffff0000b", "two\nlines", " padded " }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ reason = bad }))), tostring(bad))
+    end
+  end)
+
+  it("rejects a revision or a time out of range or not a whole number", function()
+    for _, bad in ipairs({ 0, -1, 1.5, 2147483648, "1", true }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ rev = bad }))), tostring(bad))
+      assert.are.equal("bad_payload", select(2, validate_delete({ key = "ann", rev = bad })), tostring(bad))
+    end
+    for _, bad in ipairs({ -1, 4102444801, 1.5, "1" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ updatedAt = bad }))), tostring(bad))
+    end
+  end)
+
+  it("rejects a message with a missing field", function()
+    for _, field in ipairs({ "key", "name", "reason", "rev", "updatedAt" }) do
+      local payload = upsert()
+      payload[field] = nil
+      assert.are.equal("bad_payload", select(2, validate_upsert(payload)), field)
+    end
+    assert.are.equal("bad_payload", select(2, validate_delete({ key = "ann" })))
+    assert.are.equal("bad_payload", select(2, validate_delete({ rev = 2 })))
+  end)
+
+  it("keeps the fields of a delete", function()
+    assert.are.same({ key = "ann", rev = 2 }, validate_delete({ key = "ann", rev = 2, extra = true }).p)
+  end)
+end)
+
+describe("Protocol.Validate LAYER_STATE", function()
+  local function validate(payload)
+    return Protocol.Validate(Protocol.Build("LAYER_STATE", payload, "ly-1"))
+  end
+
+  it("accepts a layer and drops unknown fields", function()
+    local m = validate({ map = 1, layer = 4321, owner = "Someone" })
+    assert.are.same({ map = 1, layer = 4321 }, m.p)
+  end)
+
+  it("accepts layer 0, which means forget me", function()
+    assert.is_truthy(validate({ map = 0, layer = 0 }))
+  end)
+
+  it("rejects values out of range or not whole numbers", function()
+    for _, bad in ipairs({
+      { map = -1, layer = 5 },
+      { map = 10000, layer = 5 },
+      { map = 1, layer = -1 },
+      { map = 1, layer = 2147483648 },
+      { map = 1.5, layer = 5 },
+      { map = 1, layer = "5" },
+      { map = 1 },
+      { layer = 5 },
+    }) do
+      local _, reason = validate(bad)
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+end)
+
+describe("Protocol.Validate LAYER_SWAP", function()
+  local function validate(payload)
+    return Protocol.Validate(Protocol.Build("LAYER_SWAP", payload, "sw-1"))
+  end
+
+  it("accepts a request for a layer", function()
+    local m = validate({ rid = "a1-b2-c3", s = "request", map = 0, layer = 222, extra = 1 })
+    assert.are.same({ rid = "a1-b2-c3", s = "request", map = 0, layer = 222 }, m.p)
+  end)
+
+  it("accepts an offer without anything else", function()
+    assert.are.same({ rid = "a1", s = "offer" }, validate({ rid = "a1", s = "offer", map = 3, helper = "X" }).p)
+  end)
+
+  it("accepts an assign that names a helper, including a multi-word name", function()
+    assert.are.same(
+      { rid = "a1", s = "assign", helper = "Yonemon Gg" },
+      validate({ rid = "a1", s = "assign", helper = "Yonemon Gg" }).p
+    )
+  end)
+
+  it("accepts a close with each outcome", function()
+    for _, outcome in ipairs({ "done", "expired", "cancelled", "declined", "unconfirmed" }) do
+      assert.are.same({ rid = "a1", s = "close", o = outcome }, validate({ rid = "a1", s = "close", o = outcome }).p)
+    end
+  end)
+
+  it("rejects a bad step, outcome or id", function()
+    for _, bad in ipairs({
+      { rid = "a1", s = "other" },
+      { rid = "a1", s = 4 },
+      { rid = "a1" },
+      { s = "offer" },
+      { rid = "a:1", s = "offer" },
+      { rid = "", s = "offer" },
+      { rid = "a1", s = "close" },
+      { rid = "a1", s = "close", o = "won" },
+      { rid = "a1", s = "close", o = 3 },
+    }) do
+      local _, reason = validate(bad)
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+
+  it("rejects a request without a valid target", function()
+    for _, bad in ipairs({
+      { rid = "a1", s = "request" },
+      { rid = "a1", s = "request", map = 0, layer = 0 },
+      { rid = "a1", s = "request", map = 10000, layer = 5 },
+      { rid = "a1", s = "request", map = 0, layer = 2147483648 },
+      { rid = "a1", s = "request", map = "0", layer = 5 },
+    }) do
+      local _, reason = validate(bad)
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+
+  it("rejects an assign whose helper is not plain text", function()
+    for _, bad in ipairs({ "", "|cffff0000Red|r", "line\nbreak", string.rep("a", 200) }) do
+      local _, reason = validate({ rid = "a1", s = "assign", helper = bad })
+      assert.are.equal("bad_payload", reason)
+    end
+    assert.are.equal("bad_payload", select(2, validate({ rid = "a1", s = "assign" })))
+  end)
+end)
+
+describe("Protocol.Validate PvP season messages", function()
+  local function validate(messageType, payload)
+    return Protocol.Validate(Protocol.Build(messageType, payload, "id-1"))
+  end
+
+  local GOOD = {
+    PVP_SEASON = {
+      id = "s1",
+      name = "Season One",
+      startsAt = 100,
+      endsAt = 200,
+      state = "active",
+      rev = 1,
+      updatedAt = 5,
+    },
+    PVP_MISSION = {
+      id = "m1",
+      seasonId = "s1",
+      title = "Hunt",
+      desc = "Kill ten",
+      points = 10,
+      goal = { kind = "kills", count = 10, zones = { 1424 }, place = "world", distinct = "name" },
+      repeatKind = "daily",
+      perPlayer = 1,
+      active = true,
+      rev = 1,
+      updatedAt = 5,
+    },
+    PVP_PRIZES = { seasonId = "s1", tiers = { ["1"] = { { kind = "gold", amount = 100 } } }, rev = 1, updatedAt = 5 },
+    PVP_OFFICER = { player = "Ann", intervals = { { from = 5 } }, rev = 1, updatedAt = 5 },
+    PVP_CLAIM = {
+      id = "Ann:m1:all:1",
+      missionId = "m1",
+      seasonId = "s1",
+      periodKey = "all",
+      player = "Ann",
+      at = 50,
+      summary = { done = 1, total = 1 },
+      evidence = { { at = 49, victim = "Grunt", place = "world", mapId = 1424 } },
+    },
+    PVP_REJECT = { claimId = "Ann:m1:all:1", seasonId = "s1", reason = "no", at = 60 },
+    PVP_GRANT = { id = "Ann:m1:all:1", seasonId = "s1", player = "Ann", missionId = "m1", points = 10, at = 60 },
+    PVP_VOID = { grantId = "Ann:m1:all:1", seasonId = "s1", reason = "abuse", at = 70 },
+    PVP_DELIVERY = { seasonId = "s1", player = "Ann", tier = "1", delivered = true, rev = 1, updatedAt = 80 },
+    PVP_FINAL = {
+      seasonId = "s1",
+      name = "Season One",
+      startsAt = 100,
+      endsAt = 200,
+      closedAt = 210,
+      standings = { { pos = 1, player = "Ann", points = 10, lastAt = 60 } },
+      prizes = { ["1"] = { { kind = "gold", amount = 100 } } },
+    },
+  }
+
+  it("accepts each record when it is clean", function()
+    for messageType, payload in pairs(GOOD) do
+      local accepted = validate(messageType, payload)
+      assert.is_truthy(accepted, messageType)
+      assert.are.equal(messageType, accepted.t)
+    end
+  end)
+
+  it("drops unknown fields and never takes an author from the payload", function()
+    for messageType, payload in pairs(GOOD) do
+      local copy = {}
+      for key, value in pairs(payload) do
+        copy[key] = value
+      end
+      copy.by, copy.updatedBy, copy.closedBy, copy.extra = "Boss", "Boss", "Boss", 1
+      local clean = assert(validate(messageType, copy), messageType)
+      assert.is_nil(clean.p.by, messageType)
+      assert.is_nil(clean.p.updatedBy, messageType)
+      assert.is_nil(clean.p.closedBy, messageType)
+      assert.is_nil(clean.p.extra, messageType)
+    end
+  end)
+
+  it("refuses each record when a field is out of bounds", function()
+    local bad = {
+      PVP_SEASON = { endsAt = 50 },
+      PVP_MISSION = { points = 0 },
+      PVP_PRIZES = { tiers = "gold" },
+      PVP_OFFICER = { player = "a:b" },
+      PVP_CLAIM = { player = "Bob" },
+      PVP_REJECT = { claimId = "plain" },
+      PVP_GRANT = { points = 5000 },
+      PVP_VOID = { grantId = "has space" },
+      PVP_DELIVERY = { tier = "11-20" },
+      PVP_FINAL = { standings = { { pos = 2, player = "Ann", points = 1, lastAt = 1 } } },
+    }
+    for messageType, change in pairs(bad) do
+      local payload = {}
+      for key, value in pairs(GOOD[messageType]) do
+        payload[key] = value
+      end
+      for key, value in pairs(change) do
+        payload[key] = value
+      end
+      local rejected, reason = validate(messageType, payload)
+      assert.is_nil(rejected, messageType)
+      assert.are.equal("bad_payload", reason)
+    end
+  end)
+
+  it("accepts a ledger request with and without a season", function()
+    local request = assert(validate("PVP_LEDGER_REQ", { seasonId = "s1", count = 12, digest = "0123abcd", x = 1 }))
+    assert.are.same({ seasonId = "s1", count = 12, digest = "0123abcd" }, request.p)
+    assert.are.same(
+      { count = 0, digest = "00000001" },
+      assert(validate("PVP_LEDGER_REQ", { count = 0, digest = "00000001" })).p
+    )
+  end)
+
+  it("refuses a ledger request with a bad season, count or digest", function()
+    for _, payload in ipairs({
+      { seasonId = "a b", count = 1, digest = "0123abcd" },
+      { count = -1, digest = "0123abcd" },
+      { count = 1.5, digest = "0123abcd" },
+      { count = 1000001, digest = "0123abcd" },
+      { count = 1, digest = "0123abc" },
+      { count = 1, digest = "0123abcg" },
+      { count = 1, digest = 5 },
+      { count = 1 },
+    }) do
+      assert.is_nil(validate("PVP_LEDGER_REQ", payload))
+    end
+  end)
+
+  it("checks only the size of a ledger page: each item is validated when it is applied", function()
+    local items = { { t = "PVP_GRANT", p = {}, by = "Boss" }, "anything" }
+    local page = assert(validate("PVP_LEDGER_DATA", { seasonId = "s1", page = 2, pages = 3, items = items, x = 1 }))
+    assert.are.equal(2, #page.p.items)
+    assert.are.equal(2, page.p.page)
+    assert.is_nil(page.p.x)
+    assert.is_truthy(validate("PVP_LEDGER_DATA", { page = 1, pages = 1, items = {} }))
+  end)
+
+  it("refuses a ledger page out of range or too big", function()
+    local tooMany = {}
+    for index = 1, Constants.PVP_LEDGER_PAGE_ITEMS + 1 do
+      tooMany[index] = {}
+    end
+    for _, payload in ipairs({
+      { page = 0, pages = 1, items = {} },
+      { page = 2, pages = 1, items = {} },
+      { page = 1, pages = Constants.PVP_LEDGER_PAGES_MAX + 1, items = {} },
+      { page = 1, pages = 1, items = "x" },
+      { page = 1, pages = 1, items = tooMany },
+      { seasonId = "a b", page = 1, pages = 1, items = {} },
+    }) do
+      assert.is_nil(validate("PVP_LEDGER_DATA", payload))
+    end
+  end)
+end)

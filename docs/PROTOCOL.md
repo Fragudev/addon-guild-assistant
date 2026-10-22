@@ -1,0 +1,432 @@
+# Sync protocol
+
+How Nrage Assistant clients talk to each other. The limits quoted here are the values in
+`NrageAssistant/Core/Constants.lua`, which is the source of truth.
+
+## Principles
+
+- **Every received byte is hostile.** Sizes are bounded before each decoding stage, only whitelisted message
+  types and fields survive, unknown fields are dropped, and text containing `|` (colour codes, links) or control
+  characters is rejected.
+- **The sender comes from the client, never from the payload.** Authors of records (`updatedBy`, `recordedBy`,
+  a loot candidate, a voter, who awarded an item) are always the message sender.
+- **Authority comes from the receiver's own guild roster**, not from the message: the sender's rank is looked up
+  locally and turned into a role. An unknown sender gets nothing.
+- **Nothing is executed.** Deserialization uses LibSerialize; there is no `loadstring` anywhere.
+- **Addon messages are not encrypted or confidential.**
+
+## Transport
+
+- Prefix `NRAGE`, registered only after the addon has passed its access checks (guild Nrage, Alliance, PvP ruleset).
+- AceComm on `GUILD` for shared data and on `WHISPER` for snapshots and PvP ledger pages. Any other channel is
+  ignored.
+- Encoding: LibSerialize, then LibDeflate compression, then the addon-channel encoding. A guild message may be up to
+  4096 characters encoded and 32 KB decoded; a snapshot up to 32 KB encoded and 256 KB decoded.
+- Secret values (encounter restrictions) raised while handling a message make the message be dropped silently.
+
+## Envelope
+
+```text
+{ v = major, m = minor, t = type, id = messageId, p = payload }
+```
+
+- `v` must equal the receiver's major version (currently 1); a different major is reported as an incompatible
+  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 7): a client
+  that does not know a field drops it while validating, and a client that does not know a message type drops the
+  message as `unknown_type`, so older and newer clients keep talking. Minor 5 added the roster and recipe messages and fields
+  below; minor 6 added the layer messages (`LAYER_STATE`, `LAYER_SWAP`); minor 7 added the PvP season messages
+  (`PVP_SEASON` and the others of the "PvP seasons" section).
+- `id` is 1 to 40 characters from `[A-Za-z0-9_-]`; a `(sender, id)` pair is processed once (a bounded cache of the
+  last 200).
+
+## Message types
+
+`rev` is an integer from 1, `updatedAt` a server-time timestamp up to the year 2100. Text fields are plain text of
+the length given by the model (title 60, encounter 60, item name 60, reason 100, note 100, ...).
+
+| Type | Channel | Payload (validated fields) | Who may send it |
+|---|---|---|---|
+| `HELLO` | guild | `version` | anyone |
+| `PROFILE` | guild | `rev`, `class`, `level`, optional `ilvl`, `professions[]` (`name`, `skill`, optional `max`, optional `secondary` = true for cooking, fishing and archaeology), `fields{role, main, notes}` | anyone, for themselves |
+| `EVENT_UPSERT` | guild | `eventId`, `rev`, `updatedAt`, `title`, optional `instance`, `startAt`, `status`, `rosterId` | rl of the roster of the event, admin |
+| `ATTENDANCE_UPSERT` | guild | `eventId`, `characterKey`, `state`, `rev`, `updatedAt` | rl, admin |
+| `ASSIGN_UPSERT` | guild | `eventId`, `assignmentId`, `rev`, `updatedAt`, `encounter`, `characterKey`, optional `group`, `task`, `note` | rl, admin |
+| `DELETE` | guild | `kind` (`event` or `assignment`), `eventId`, optional `assignmentId`, `rev` | rl, admin |
+| `LOOT_SESSION` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `status` | council, admin |
+| `LOOT_CANDIDATE` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `spec`, `need`, optional `upgrade` | anyone; the candidate is the sender |
+| `LOOT_VOTE` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `target` | council, admin; the voter is the sender |
+| `PVP_STATS` | guild | `rev`, `updatedAt`, `honor{world, bg}`, optional `blows{world, bg}`, `today{day, honor{world, bg}, optional blows{world, bg}}` | anyone, for themselves; the record belongs to the sender |
+| `PVP_RESET` | guild | `target`, `rev` | admin |
+| `PVP_KILL` | guild | `victim` (text, 1 to 40 bytes), `where` (`world` or `bg`), `blow` (boolean) | anyone; the killer is the sender |
+| `BLACKLIST_UPSERT` | guild | `key`, `name` (1 to 40 bytes), `reason` (1 to 100 bytes), `rev`, `updatedAt` | anyone; the author is the sender |
+| `BLACKLIST_DELETE` | guild | `key`, `rev` | admin |
+| `RECIPES` | guild | `prof` (profession id), optional `name`, `rev`, `updatedAt`, `part`, `parts` (up to 20), optional `total`, `ids[]` (up to 150 recipe ids per message) | anyone, for themselves; the record belongs to the sender |
+| `ROSTER_UPSERT` | guild | `rosterId`, `name` (1 to 30 bytes, plain text), `rev`, `updatedAt` | admin |
+| `ROSTER_DELETE` | guild | `rosterId`, `rev` | admin |
+| `MEMBER_UPSERT` | guild | `key` (the character name as the guild roster writes it, no `:`), `role` (`member`, `rl` or `council`: never `admin`), optional `rosterId`, `rev`, `updatedAt` | admin |
+| `MEMBER_DELETE` | guild | `key`, `rev` | admin |
+| `LAYER_STATE` | guild | `map` (0 to 9999), `layer` (0 to 2147483647; `0` means "forget me") | anyone, for themselves; the layer belongs to the sender |
+| `LAYER_SWAP` | guild | `rid`, `s` (`request`, `offer`, `assign` or `close`), and by step: `map` + `layer` (`request`), `helper` (`assign`), `o` (`close`: `done`, `expired`, `cancelled`, `declined` or `unconfirmed`) | anyone; the actor is the sender |
+| `READINESS_RULES` | guild | `rev`, `updatedAt`, `rules[]` (up to 30 rules, each validated: see Guild readiness rules) | admin |
+| `LOOT_AWARD` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `characterKey`, `reason` | council, admin |
+| `PVP_SEASON` | guild | `id`, `name` (1 to 40 bytes), `startsAt`, `endsAt`, `state` (`active` or `closed`), `rev`, `updatedAt` | admin |
+| `PVP_MISSION` | guild | `id`, `seasonId`, `title` (1 to 40), `desc` (0 to 100), `points` (1 to 1000), `goal{kind, count, zones[], place, distinct}`, `repeatKind`, `perPlayer`, `active`, `rev`, `updatedAt` | admin |
+| `PVP_PRIZES` | guild | `seasonId`, `tiers{["1"], ["2"], ["3"], ["4-6"], ["7-10"]}` (up to 5 gold or item rewards each), `rev`, `updatedAt` | admin |
+| `PVP_OFFICER` | guild | `player`, `intervals[]` (`from`, optional `to`; up to 10), `rev`, `updatedAt` | admin |
+| `PVP_CLAIM` | guild | `id`, `missionId`, `seasonId`, `periodKey`, `player`, `at`, `summary{}`, `evidence[]` (up to 60 rows), optional `note` | anyone; `player` must be the sender |
+| `PVP_REJECT` | guild | `claimId`, `seasonId`, optional `reason`, `at` | admin, PvP officer |
+| `PVP_GRANT` | guild | `id`, `seasonId`, `player`, `missionId`, `points`, `at` | admin, PvP officer (a direct grant: admin only) |
+| `PVP_VOID` | guild | `grantId`, `seasonId`, optional `reason`, `at` | admin |
+| `PVP_DELIVERY` | guild | `seasonId`, `player`, `tier`, `delivered`, `rev`, `updatedAt` | admin, PvP officer |
+| `PVP_FINAL` | guild | `seasonId`, `name`, `startsAt`, `endsAt`, `closedAt`, `standings[]` (up to 100), `prizes` | admin |
+| `PVP_LEDGER_REQ` | guild | optional `seasonId`, `count`, `digest` | anyone |
+| `PVP_LEDGER_DATA` | whisper | optional `seasonId`, `page`, `pages`, `items[]` (`{ t, p, by }`) | rl, admin, PvP officer (checked before decoding) |
+| `SYNC_REQ` | guild | none | anyone |
+| `SYNC_DATA` | whisper | `items[]`, a list of `{ t, p }` raid, loot, PvP, blacklist, readiness rules or roster messages (a `PVP_STATS` item also carries `owner`, a `BLACKLIST_UPSERT` item `addedBy` and `addedAt`) | rl, admin (checked before decoding) |
+
+`guid` is deliberately never sent.
+
+## Conflict resolution
+
+For the same record the incoming message wins if, in this order:
+
+1. its `rev` is higher; else
+2. its `updatedAt` is later (clamped to the receiver's clock plus five minutes, so nobody can date an edit in the
+   future to always win); else
+3. its sender name is lexicographically larger.
+
+An identical record does not win, so a replay changes nothing, and two clients receiving the same edits in any
+order end up identical.
+
+- An event upsert carries the whole event: fields it omits are cleared, while the receiver's attendance,
+  assignments and loot are kept.
+- A `LOOT_SESSION` that wins replaces the session state, an award included. `LOOT_AWARD` carries the item, so a
+  client that never saw the session can still record the decision.
+- A candidate or vote is accepted only for an open session; a vote only for a known candidate.
+
+## PvP counters
+
+`PVP_STATS` follows the `PROFILE` model: the record belongs to the **sender**, there is no name in the payload and
+a name sent anyway is dropped. Counters are whole numbers from 0 to 1,000,000, `day` is a `YYYY-MM-DD` server date
+in UTC, and `blows` (killing blows) is left out by a client that cannot read the combat log; the receiver then
+keeps the killing blows it already knew. The rank is never sent: every client works it out from the honourable
+kills. The records are stored in `db.global.pvpStats[owner]`, at most 1000 (when full, the record updated longest
+ago makes room).
+
+Sending is automatic: a change of the counters is sent after a couple of seconds, but at most once per minute
+(a burst of kills is one message), and once about 8 to 20 seconds after login. The queue key `pvp` makes a newer
+message replace a queued one, and nothing is sent during an encounter lockdown.
+
+A record is dropped when:
+
+- its `rev` does not exceed the minimum left by an admin reset (`reset`), or it does not win the conflict rules
+  above (`stale`; an identical record is a no-op);
+- it is **implausible** next to the record held for the same sender: a total (open world or battleground,
+  honourable kills or killing blows) went down, the honourable kills grew by more than 300 per hour since the
+  previous record's `updatedAt` (never less than one hour's worth, so there is no zero window), a day holds more
+  than the total, or the totals of a first record exceed 1,000,000.
+
+These checks only limit what a **modified client** can claim: someone who stays within them can still inflate
+their numbers by about 300 kills an hour, and the first record of a sender is only bounded by the maximum. They
+cannot make the counters true.
+
+`PVP_RESET` (admin only, `moderate`) zeroes the record held for `target` and stores `rev` as the **minimum
+accepted revision** (`db.global.pvpResets[target]`, the highest one is kept), so the old totals cannot come back
+with an older `rev`. The admin's client picks a `rev` above everything it has seen of that member. The target's own
+client resets its counters when it receives the message and continues with revisions above it. A member who was
+offline during the reset learns it from the snapshot on the next login, when the snapshot comes from an admin.
+
+## PvP kill feed
+
+`PVP_KILL` tells the guild that the sender killed `victim`. The killer is the **sender**, never a payload field (a
+name sent anyway is dropped). `victim` is plain text of at most 40 bytes without escapes or control characters,
+`where` is `world` or `bg`, and `blow` must be a real boolean (the killing blow, as opposed to honour credit);
+anything else drops the message. It is **not** part of a snapshot: the feed is live only, the own kills are kept in memory (the
+last 50 entries) and never saved. The protocol minor version was raised for it; older clients ignore the unknown type.
+
+Sending: an own kill waits 5 seconds before it is sent, so the honour message and the killing blow (two events for
+one kill, in either order) become one message. A killing blow without honour (a grey target) is sent alone with
+`blow = true`. The message always goes out (no setting), except during an encounter lockdown (it is dropped, never
+queued) and beyond 5 per rolling minute (the rest are dropped).
+
+Receiving: the sender must be a known guild member (`pvp_publish`) and passes the per-sender rate limit of the
+inbox. The kill is validated and then ignored: the Recent kills list only holds the own kills.
+
+## Layers
+
+Protocol minor version 6. Older clients drop both types with `unknown_type`. Both are **guild channel only** (never a
+whisper, never part of a snapshot) and live only: nothing is saved. A sender must be a known guild member
+(`layer_share`, every role).
+
+`LAYER_STATE` is the sender's own layer, a pair `(map, layer)` read from creature GUIDs (see `docs/API_NOTES.md`).
+It is sent when the layer changes and again every 300 seconds, at most once per 30 seconds (queue key `LY`), and
+refused during an encounter lockdown instead of waiting. `layer = 0` means "forget me" and is sent once when the
+player turns "Share my layer" off. The receiver keeps it in memory for 15 minutes.
+
+`LAYER_SWAP` is one step of a swap, tied together by `rid`, which the requester makes. The actor is always the
+**sender**; a name in the payload is only data.
+
+| Step | Sent by | Meaning |
+|---|---|---|
+| `request` | requester | wants to be on `(map, layer)` |
+| `offer` | an eligible member on that layer | can help |
+| `assign` | requester | the first offer won; `helper` names who |
+| `close` | requester (`o` = `done`, `expired`, `cancelled`, `unconfirmed`), or the assigned helper (`o = declined`) | the swap is over |
+
+Only the requester of a `rid` may send `assign` and `close`, with the one exception of `close declined` from the
+assigned helper; the receiver checks this against the sender of the stored request, so another member cannot
+hijack or close a swap. A client takes part in at most one swap at a time and drops one whose `close` was lost
+after 300 seconds without messages. Like `PVP_KILL`, a step is never queued during an encounter lockdown.
+
+## Guild map positions
+
+A second addon prefix, `NRAGEPOS`, carries the position of members who chose to share it. It does **not** use the
+`NRAGE` envelope, AceComm, LibSerialize or LibDeflate, so `PROTOCOL_MINOR` does not change and older clients simply
+never register the prefix. The reasons: with 40 members sending every few seconds, the `(sender, id)` seen cache of
+the main inbox (one ring for all senders, 200 entries) would be evicted within seconds, weakening duplicate
+protection for real data; and four numbers need no serialization, while a strict text pattern is a small attack
+surface.
+
+- Sent on `GUILD` only, through `ChatThrottleLib:SendAddonMessage("BULK", ...)`, so it never delays real traffic. A
+  message that arrives on any other channel is ignored. Live only: nothing is saved, queued during an encounter
+  lockdown or part of a snapshot.
+- A message is at most 32 bytes and one of:
+
+```text
+P1:<mapId>:<x>:<y>     a position; mapId 1 to 9999, x and y integers 0 to 10000 (zone coordinates times 10000)
+P1:0                   "forget me"
+```
+
+- It must match `^P1:(%d+):(%d+):(%d+)$` or `^P1:0$` exactly. Anything else is dropped, and a different leading version
+  (`P2`, ...) is dropped silently: a future format adds a new tag.
+- Name, class and level are not sent: the receiver has them from the guild roster and received profiles. The layer is
+  not sent either: it comes from the layer directory.
+- Sending: every 5 seconds the client checks its position and sends when it moved more than 20 units (0.2 % of the
+  zone), when the map changed or after 20 seconds without a message, and never more than one per 5 seconds. When the
+  position disappears (an instance, a loading screen) after one was sent, it sends one `P1:0`; so does switching
+  "Share my position" off, at once. Nothing is sent from an instance or while the lockdown is on.
+- Receiving, cheapest check first: the channel is `GUILD`; the sender is a non-empty string, normalized (realm
+  stripped), and not the own key; a dedicated inbox allows at most 30 messages per sender per 60 seconds (rate only,
+  never a seen cache); the sender is in the local guild roster (`position_share`, every role); then the strict parse. The
+  whole handler runs in `pcall`, because arguments can be secret values during an encounter.
+- The receiver keeps `{ map, x, y, at }` per sender, in memory, for 60 seconds, at most 200 senders (new ones are
+  refused when full).
+
+## Guild blacklist
+
+A list of players the guild wants to be warned about, each with a short reason. Two messages, both on the guild
+channel; the protocol minor version was raised to 3 for them, and older clients drop the unknown types with
+`unknown_type`.
+
+| Action | Roles | Message |
+|---|---|---|
+| `blacklist_add` | member, rl, council, admin (everyone with a role) | `BLACKLIST_UPSERT` |
+| `blacklist_remove` | admin (guild master, officers and the beta admins) | `BLACKLIST_DELETE` |
+
+The receiver reads the role of the **sender** from its own guild roster, so hiding the Remove button is only
+convenience: a delete from anyone but an admin is dropped with `forbidden`, and one from a sender the roster does
+not know with `unknown_sender`.
+
+- **The author is the sender.** `addedBy` (set once, when the entry is created) and `updatedBy` (every write) are
+  never payload fields; fields sent anyway are dropped.
+- `name` is the name as it is shown: no realm suffix, no leading, trailing or doubled spaces, no `|`, `:` or
+  control characters. `key` is the name in lowercase without any whitespace (`Yonemon Gg` is `yonemongg`). The
+  receiver works the key out again from the name and drops the message (`bad_key`) when they differ.
+- Entries are stored in `db.global.blacklist[key]`, at most 200. A message that would add a 201st player is
+  rejected with `limit`; one that updates a listed player is still accepted.
+- Conflicts follow the rules above (`rev`, then `updatedAt`, then the larger sender). Adding a player who is
+  already listed changes only the reason, locally and on the wire, and only for the member who added the entry and
+  for admins (`blacklist_edit_any`); anyone else gets `forbidden` (`not_author` in the interface). A message with a
+  higher `rev` from one of them replaces its name and reason, and keeps who added it. Inside a snapshot the sender
+  is the relaying leader, so a relay changes a listed player only when that leader is an admin.
+  Known limit: if two members add the same player at nearly the same moment, each client keeps whichever entry it
+  received first and refuses the other as `forbidden`, so clients can briefly hold a different reason and author for
+  that player. Both list the player; an admin edit (a higher `rev`) makes them agree again.
+- **Removal.** `BLACKLIST_DELETE` removes the entry and leaves a tombstone `B:<key>` in the shared, bounded
+  tombstone list (500 entries, 30 days) with the revision of the removal (the entry's `rev` plus one). An upsert
+  whose `rev` does not exceed the tombstone's is dropped (`tombstoned`), so an old copy cannot bring a removed
+  player back. Adding the player again needs `rev = tombstone.rev + 1`; that is a legitimate new entry, and an admin
+  can remove it again. A delete for a player this client never saw is remembered too.
+- Sending goes through the outbound queue with the key `BL:<key>`, so a newer edit replaces a queued older one, and
+  nothing is sent during an encounter lockdown.
+
+**Snapshot.** Blacklist entries and `B:` tombstones are part of `SYNC_DATA`. Here is a second documented exception
+to "the author is the sender": a `BLACKLIST_UPSERT` item of a snapshot may carry `addedBy` (validated like a
+character name) and `addedAt` (a timestamp), so the original author and date are kept when a leader relays an
+entry. Both are only read from the items of a snapshot, which only a raid leader or admin can send (checked before
+decoding); a guild message has nowhere to carry them, and an item with an unusable `addedBy` or `addedAt` is skipped
+(`bad_origin`). The item is otherwise applied as if the relaying leader had sent it, with `updatedBy` set to the
+leader and the usual validation, authority and conflict rules. A `BLACKLIST_DELETE` item only counts when the
+sender of the snapshot is an admin, like a PvP reset. The blacklist part is capped separately, at the 200 most
+recently updated entries and the 200 newest removals, and shrinks together with the events and the PvP records
+(halved until the snapshot fits in 32 KB). The blacklist is not part of the text export, and an imported blacklist
+item is skipped.
+
+## Guild readiness rules
+
+One set of readiness rules for the whole guild (issue #32), in a single record `{ rev, updatedAt, updatedBy, rules }`
+that an admin replaces as a whole with `READINESS_RULES`. The protocol minor version was raised to 4 for it.
+
+- **Authority:** `rules_edit`, admin only, read from the receiver's own guild roster. A newer `rev` wins, then
+  `updatedAt` (clamped), then the sender; a replay is a no-op. Until a set arrives, the starting checklist applies.
+- **Rule validation:** every rule is checked field by field, and unknown fields are dropped. `check` is one of
+  `field`, `confirm`, `level`, `ilvl`, `profession`, `enchants` or `buff`, with the numbers or lists that check
+  needs (levels and item levels 1 to 999, enchant slots 1 to 18, up to 20 spell ids or names). `evidenceMode`
+  is worked out from the check and never taken from the message. Ids are unique, up to 32 characters of `[%w_]`.
+- **Late joiners:** the set is part of a snapshot only when the sender is an admin, and the receiver applies it
+  under the role of the sender, so a leader who is not an admin cannot relay (or forge) rules. For the members who
+  were not online, an admin also sends the set once after login.
+
+## Rosters and assigned roles
+
+Raid rosters (teams) and the addon role of each member are set by the guild master inside the addon (protocol
+minor 5, plan 3.4.1 and 3.4.2).
+
+- **Records:** `rosters[id] = { id, name, rev, updatedAt, updatedBy }` and `members[key] = { role, rosterId,
+  rev, updatedAt, updatedBy }`. A member is in at most one roster (`rosterId` is a single value; a record that leaves
+  it out means no roster). Messages: `ROSTER_UPSERT` and `ROSTER_DELETE` for the definitions, `MEMBER_UPSERT` and
+  `MEMBER_DELETE` for the assignments.
+- **Authority:** `roster_manage`, which is the guild master only. The guild master is recognised from the receiver's
+  own guild roster by **rank index 0** (never by a character name; the beta admin list is gone), and the other roles
+  of a sender are the ones assigned in `members`. `admin` can never be assigned: a `MEMBER_UPSERT` whose `role` is
+  anything but `member`, `rl` or `council` does not pass validation, and a stored record that says `admin` counts as
+  nothing.
+- **Conflicts and deletions:** like the blacklist (higher `rev`, then `updatedAt`, then sender). Removals leave
+  tombstones `R:<rosterId>` and `M:<key>` in the shared tombstones, with the deleted revision plus one.
+- **Events carry their roster:** `EVENT_UPSERT` has an optional `rosterId`; templates and loot sessions follow the
+  roster of their event, so they need nothing of their own. The receiver checks it with the roster it holds for the
+  sender (never from the message): a raid leader's new event has to say it is of their roster, they cannot move an
+  event to another roster, and attendance, assignments, deletions and every loot message (session, candidacy, vote,
+  award) from somebody who is not in the roster of the event, or has none, are refused as `other_roster`. The guild
+  master acts on any roster. An event with no `rosterId` (made before rosters, or by an older client) stays open to
+  the members who have a roster until the guild master assigns one. A message that leaves `rosterId` out never
+  clears the roster an event already has, so an older client editing it does not undo the assignment. Only the
+  guild master can delete something of an event the receiver has never seen.
+- **Late joiners:** the rosters, the 300 most recently updated assignments and the newest removals are part of a
+  snapshot only when the sender is an admin, and the receiver applies them under the role of the sender (a raid
+  leader cannot relay or forge them). An admin also sends the roster definitions after login; the assignments of a
+  member who was offline are only learned from an admin's snapshot, so a client that has never met the guild
+  master online does not know its own assigned role yet.
+- **Visibility is not access control.** Every client with the addon still receives every message on the guild
+  channel; the roster only decides what the window shows and who may change what. See `docs/PRIVACY.md`.
+
+## PvP seasons
+
+A season system for PvP (protocol minor 7, `docs/PVP_MISSIONS_PLAN.md`): admins define missions that award points,
+members claim them, an admin or a PvP officer approves each claim, the points make a season ranking, and the top 10
+get a prize at the end. Points live in an **append-only ledger of grants**; the ranking is derived from it on every
+client, so nothing but the grants has to be trusted.
+
+- **Records:** season, mission, prizes, officer, claim, grant, void, reject, delivery and final, as listed in the table
+  of message types. Each is validated by `PvPSeasonModel` (bounds, plain text, whole numbers; unknown fields are
+  dropped). **No payload carries its author**: `by` is the message sender, or, inside a ledger catch-up, the author the
+  item names.
+- **Authority** is worked out by the receiver. An admin is the guild master of the receiver's own guild roster. A
+  **PvP officer** is a flag, not a role: the receiver's own `PVP_OFFICER` records say since when (a list of
+  `from`/`to` intervals, both ends included). Officers may approve and reject claims and mark deliveries; everything
+  else is admin only. A grant counts if its author was an admin, or a PvP officer at the time of the grant and not
+  approving a claim of their own; removing the flag does not undo earlier grants, and an admin voids any abusive one.
+  A direct grant (an id that is not a claim id) is admin only.
+- **Claims:** `id` is `<player>:<missionId>:<periodKey>:<n>` with the period `all`, `YYYYMMDD` (server day, UTC) or
+  `YYYYWww` (ISO week, UTC), so a claim sent twice is one. Approving a claim sends a `PVP_GRANT` whose `id` is the claim
+  id: two approvers make the same grant and the second is a no-op. Only a client that approves claims keeps them
+  (`queue`: at most 300, 20 per player), and only for the active season, a mission it knows and inside the dates of
+  the season; a claim it cannot place yet is refused and the claimant announces it again. A rejection leaves the claim
+  in the queue marked rejected, so an approver can change their mind: a grant beats a rejection.
+- **Conflicts:** season, mission, prizes, officer and delivery follow the usual rule (higher `rev`, then `updatedAt`,
+  then sender). A grant, a void and a final are append-only: the first record with that id wins and a replay is a
+  no-op. For a reject the latest `at` wins (then the larger author). A second active season is refused. The final of
+  a season is **authoritative**: after it, grants, voids and rejections of that season are ignored.
+- **Closing a season:** the closing admin sends `PVP_FINAL` (the standing, up to 100 rows, cut from the tail if it
+  does not fit one message, never below 10) and then the season as `closed`. Every client, on receiving the final,
+  deletes the grants, voids, rejections and queued claims of that season, creates one delivery per player in the
+  prize tiers (positions 1 to 10) and drops the detail of its own mission log. A season a client never saw is kept
+  as history. The addon never sends gold or mail: delivery is done in game and marked with `PVP_DELIVERY`.
+- **Ranking:** points per player from the grants that count; ties go to whoever reached the total first (the earlier
+  `at` of their last counted grant), then name. Nobody without points is ranked. Tiers: 1, 2, 3, 4 to 6, 7 to 10.
+- **Ledger catch-up (late joiners):** the ranking has to be complete, so it does not travel in `SYNC_DATA`. After
+  login (at the same moment as `SYNC_REQ`) and whenever a season becomes active, a client sends `PVP_LEDGER_REQ` with
+  the number of ledger records it holds for its active season and a digest (Adler-32 of the sorted record tokens: the
+  officers, the seasons, the finals and the deliveries, and for that season its missions, prizes, grants, voids and
+  rejections). A raid leader, admin or PvP officer whose own ledger differs answers, after a random 1 to 10 second
+  delay and at most once a minute per requester, by whispering `PVP_LEDGER_DATA` pages: officers first (they decide who
+  may write what), then the seasons, the missions, prizes, grants, voids, rejections of the requested season and the
+  relay's active one, every final and every delivery. A page holds at most 400 items and fits the snapshot limit (32 KB
+  encoded); there are at most 100 pages. The requester decodes a page only if the whisper comes from a raid leader,
+  admin or PvP officer according to its own data, and applies every item as if its `by` had sent it, through the same
+  validation, authority and conflict rules. Because `by` is read from the item, a relay is trusted to name the right
+  author, the same trust a `PVP_STATS` snapshot gives it. Pending claims are not relayed: they belong to their author,
+  who announces them again.
+- **Order:** a record that reaches a client before the one that authorises it (a grant of an officer before the officer
+  record, a claim before its mission) is refused and comes back with the next catch-up. Records an admin wrote do not
+  depend on any other and may arrive in any order (a void before its grant, a grant before its season).
+- **Interim commands:** until the PvP tab has its own sub-tabs, `/nrage pvp` (`season`, `officer`, `mission`, `claim`,
+  `queue`, `approve`, `reject`, `grant`) drives the same service, for testing.
+
+## Recipes
+
+`RECIPES` carries the recipes a member has learned in one profession, as numeric ids (names and icons are looked up
+in the client). A profession can have hundreds of recipes and a message is limited to 255 encoded bytes, so a list
+is sent as `parts` messages of at most 150 ids. The receiver keeps the parts aside, in memory, until all of them
+arrived and only then replaces the stored list, so a list that never completes changes nothing. A newer `rev`
+starts a new list and drops the half-received one; a `rev` that does not beat the stored one is ignored. The record
+belongs to the sender (there is no name in the payload) and any member may send their own. Bounds: 3000 ids per
+profession, 12 professions per member, 500 members, 100 half-received lists. The revision only goes up when the
+recipes changed, so an unchanged scan sends nothing. Recipes are not part of the snapshot: they are resent 30 to 60
+seconds after login and whenever a scan finds a change.
+
+## Deletions
+
+A `DELETE` removes the record and leaves a **tombstone** (`E:<eventId>` or `A:<eventId>:<assignmentId>`; the
+blacklist has its own, see above) with the
+deleted revision plus one. An upsert whose `rev` does not exceed the tombstone's is dropped, so a stale message
+cannot bring deleted data back; on a tie the delete wins. A newer revision does resurrect the record. Tombstones
+are bounded (500) and expire after 30 days.
+
+## Rate limits and queues
+
+- Received: at most 60 messages per minute per sender, checked before decoding; at most 200 tracked senders.
+- Snapshots: at most 4 per minute per sender, and only from senders whose role can manage events. PvP ledger pages
+  (whispers from a raid leader, admin or PvP officer) have their own limit of 100 per minute per sender, checked
+  before decoding.
+- Sent: everything goes through a queue of at most 100 messages, kept at most 120 seconds. While the encounter
+  lockdown is active (`C_ChatInfo.InChatMessagingLockdown()`), nothing is sent; when it ends the queue drains with
+  a random delay of up to 5 seconds. A newer message for the same record replaces a queued older one.
+- A new `HELLO` peer is answered at most once every 30 seconds, after a random delay.
+
+## Snapshot for late joiners
+
+1. Roughly 8 to 20 seconds after login (once the guild roster had time to load) the client sends `SYNC_REQ`.
+2. A raid leader or admin answers, after a random 1 to 10 second delay and at most once a minute per requester,
+   by whispering `SYNC_DATA`: the 20 most recent events with their attendance, assignments and loot sessions or
+   awards, plus every tombstone. If it does not fit, the number of events is halved until it does.
+3. The requester decodes it only if the whisper comes from someone whose role allows managing events, and applies
+   every item as if that leader had sent it, through the same validation, authority and conflict rules.
+
+The PvP season ledger is not part of `SYNC_DATA` either: it has its own catch-up (see "PvP seasons").
+
+Loot candidates and votes are not part of a snapshot: on the wire they always belong to the sender and cannot be
+re-attributed to whoever relays them.
+
+PvP records are part of a snapshot, and here is the one documented exception to "the author is the sender": inside
+`SYNC_DATA` (only accepted from a raid leader or admin, checked before decoding) a `PVP_STATS` item carries the
+`owner` of the record, validated like a character name, and is applied as if that owner had sent it, through the
+same plausibility and conflict rules, so a relayed record cannot lower or outrun what a client already holds. On
+the guild channel an `owner` is never accepted. The PvP part is capped separately: the 100 most recently updated
+records and the 100 highest resets, shrinking together with the events if the snapshot does not fit. The resets
+in a snapshot only count when its sender is an admin (a raid leader cannot reset anybody). PvP is not part of the
+text export.
+
+## Limits on stored data
+
+20 rosters, 1000 role and roster assignments, 100 events, 60 attendance rows and 50 assignments per event, 40 loot sessions per event with at most 40 candidates
+and 30 votes each, 500 received profiles, 1000 PvP records and 1000 reset floors, 200 blacklist entries, 20 templates.
+PvP seasons: 60 seasons, 50 missions per season, 3000 grants per season (never evicted), 3000 voids, 3000 rejections,
+300 queued claims (20 per player), 50 finals, 20 officers with 10 intervals each, 10 deliveries per season. Events are purged 90 days after their start.
+
+## Text import and export
+
+`NRAGE1:` followed by LibSerialize, LibDeflate and the print encoding of `{ items = { { t, p } ... } }`, the same
+raid items a snapshot carries (never PvP records or the blacklist: an imported `PVP_STATS`, `PVP_RESET` or
+`BLACKLIST_*` item is skipped). Import requires the manage-events role, accepts at most 32 KB of text, 256 KB decoded and
+3000 items, and applies each item like a received message, with the sender `import`.
