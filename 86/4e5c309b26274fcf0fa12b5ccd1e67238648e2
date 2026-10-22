@@ -1,0 +1,14 @@
+docs/GUILD_ASSISTANT_PLAN.md
+  h_7d99c7b8818613 1-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "864e5c309b26274fcf0fa12b5ccd1e67238648e2",
+  "prompts": {},
+  "humans": {
+    "h_7d99c7b8818613": {
+      "author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
