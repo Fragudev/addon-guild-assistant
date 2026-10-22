@@ -10,12 +10,24 @@ end
 
 local function PrintIdentity()
   local P = ns.Platform
-  say("identity (phase 0 measurement):")
+  say("identity:")
   print("  build: " .. tostring(select(4, GetBuildInfo())))
   print("  realm: " .. tostring(P.GetRealmName()))
   print("  guild: " .. tostring(P.GetGuildName()))
   print("  clubId: " .. tostring(P.GetGuildClubId()))
   print("  faction: " .. tostring(P.GetFaction()))
+  local identity = ns.GuildIdentity.Current(P)
+  if identity then
+    print(
+      ("  guild key: %s (resolved by %s)"):format(
+        identity.key,
+        identity.source == "club" and "the club id" or "the guild name and realm (no club id)"
+      )
+    )
+  else
+    print("  guild key: unknown (the client has not returned the club id or the guild name yet)")
+  end
+  print("  active guild key: " .. tostring(ns.guildIdentity and ns.guildIdentity.key))
   print("  lockdown: " .. tostring(P.IsChatMessagingLockedDown()))
 end
 

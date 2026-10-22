@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Account-wide settings (db.global.settings), read and written through these functions so every default lives in one
+-- Account-wide settings (db.settings), read and written through these functions so every default lives in one
 -- place and a damaged value never raises:
 --   language        "auto" | "es" | "en"   the language of the window (auto follows the game client)
 --   blacklistSound  boolean                the sound of the blacklist alert (the chat line and the warning stay)
@@ -10,8 +10,8 @@ local Settings = {}
 Settings.LANGUAGES = { "auto", "es", "en" }
 
 local function settingsOf(db)
-  db.global.settings = type(db.global.settings) == "table" and db.global.settings or {}
-  return db.global.settings
+  db.settings = type(db.settings) == "table" and db.settings or {}
+  return db.settings
 end
 
 -- "auto" | "es" | "en".

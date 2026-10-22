@@ -64,8 +64,8 @@ end
 -- keeps them up to date as it is moved or resized. `width`/`height` are the first-time
 -- size.
 function UI.ApplyWindowStatus(target, name, width, height)
-  local settings = type(ns.db.global.settings) == "table" and ns.db.global.settings or {}
-  ns.db.global.settings = settings
+  local settings = type(ns.db.settings) == "table" and ns.db.settings or {}
+  ns.db.settings = settings
   settings.windows = type(settings.windows) == "table" and settings.windows or {}
   local status = type(settings.windows[name]) == "table" and settings.windows[name] or {}
   settings.windows[name] = status
@@ -452,10 +452,19 @@ function UI.OpenSettings()
   end
 end
 
+-- The window is named after the guild of the player once the client has told it.
+local function windowTitle()
+  local guildName = ns.GetGuildName and ns.GetGuildName()
+  if guildName then
+    return L("%s - Guild Assistant"):format(guildName)
+  end
+  return "Guild Assistant"
+end
+
 local function buildWindow()
   window = Kit.Window.New({
     name = "GuildAssistantWindow",
-    title = "Guild Assistant",
+    title = windowTitle(),
     version = ns.GetVersion(),
     buttons = {
       {

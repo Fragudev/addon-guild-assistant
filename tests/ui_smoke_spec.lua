@@ -2328,11 +2328,11 @@ describe("Window smoke test: settings, language and automatic refresh", function
   it("remembers where the window is left, and the first size", function()
     env = build("Member")
     env.open("home")
-    local saved = env.ns.db.global.settings.windows.mainWindow
+    local saved = env.ns.db.settings.windows.mainWindow
     assert.are.same({ 1000, 640 }, { saved.width, saved.height })
     saved.width = 900
     env.ns.UI.ApplyWindowStatus({ SetStatusTable = function() end }, "mainWindow", 1000, 640)
-    assert.are.equal(900, env.ns.db.global.settings.windows.mainWindow.width)
+    assert.are.equal(900, env.ns.db.settings.windows.mainWindow.width)
   end)
 
   it("listens for gear, level, skill and player aura events while Readiness or Home is on screen", function()

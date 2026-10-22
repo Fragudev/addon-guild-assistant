@@ -343,6 +343,8 @@ ns.Locale.Register("es", {
   ["Voted"] = "Votado",
   ["No loot sessions are open."] = "No hay sesiones de loot abiertas.",
   ["Loot Council"] = "Consejo de loot",
+  ["%s Loot Council"] = "Consejo de loot de %s",
+  ["%s - Guild Assistant"] = "%s - Guild Assistant",
 
   -- UI/MinimapButton.lua
   ["Left click: open the window"] = "Clic izquierdo: abrir la ventana",
@@ -403,9 +405,8 @@ ns.Locale.Register("es", {
 
   -- Core/Init.lua
   ["disabled: you are not in a guild."] = "desactivado: no perteneces a una guild.",
-  ["disabled: this addon is only for the Nrage guild."] = "desactivado: este addon es solo para la guild Nrage.",
-  ["disabled: this addon is only for the Alliance."] = "desactivado: este addon es solo para la Alianza.",
-  ["disabled: this addon is only for the PvP ruleset."] = "desactivado: este addon es solo para el reino PvP.",
+  ["guild changed: type /reload to load the data of %s."] = "guild cambiada: escribe /reload para cargar los datos de %s.",
+  ["guild changed: type /reload to load the data of your guild."] = "guild cambiada: escribe /reload para cargar los datos de tu guild.",
   ["disabled: saved data comes from a newer version of the addon. Update the addon; your data was left untouched."] = "desactivado: los datos guardados son de una versión más reciente del addon. Actualiza el addon; tus datos no se han tocado.",
   -- UI/Kit
   ["Close"] = "Cerrar",
@@ -435,6 +436,7 @@ ns.Locale.Register("es", {
   ["Sync ready"] = "Sincronización lista",
   ["%d queued"] = "%d en cola",
 
+  ["%s %s loaded for %s. Click the minimap button or type /ga to open the window."] = "%s %s cargado para %s. Pulsa el botón del minimapa o escribe /ga para abrir la ventana.",
   ["%s %s loaded. Click the minimap button or type /ga to open the window."] = "%s %s cargado. Pulsa el botón del minimapa o escribe /ga para abrir la ventana.",
 
   -- The redesigned tabs

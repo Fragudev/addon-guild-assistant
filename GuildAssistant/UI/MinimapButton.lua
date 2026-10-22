@@ -2,7 +2,7 @@ local _, ns = ...
 
 -- The minimap button: the guild logo inside the usual gold ring, dragged around the edge of the minimap.
 -- Left click opens the window, right click opens a menu of shortcuts. The position and whether it is hidden
--- are saved account-wide (db.global.settings.minimap). The geometry and the settings are plain functions and
+-- are saved account-wide (db.settings.minimap). The geometry and the settings are plain functions and
 -- are tested; Create/Refresh build and update the real frame and only run in the client.
 local MinimapButton = {}
 
@@ -30,8 +30,8 @@ end
 -- The saved settings, created and repaired as needed: { angle = degrees, hide = boolean }.
 -- Returns the table stored in `db`, so changes to it are saved.
 function MinimapButton.Settings(db)
-  db.global.settings = type(db.global.settings) == "table" and db.global.settings or {}
-  local settings = db.global.settings
+  db.settings = type(db.settings) == "table" and db.settings or {}
+  local settings = db.settings
   settings.minimap = type(settings.minimap) == "table" and settings.minimap or {}
   local minimap = settings.minimap
   minimap.angle = MinimapButton.NormalizeAngle(minimap.angle)

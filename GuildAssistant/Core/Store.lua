@@ -1,8 +1,12 @@
 local _, ns = ...
 
--- SavedVariables layout and migrations. Plain tables (no AceDB yet); the shape follows plan section 9:
---   db.global = { schemaVersion, roster, events, loot, templates, settings = { minimap, pvp, language,
---                 blacklistSound, layer, windows }, sync = { seen, tombstones }, pvpStats = {}, pvpResets = {},
+-- SavedVariables layout and migrations. Plain tables (no AceDB yet). The root of GuildAssistantDB is:
+--   { schemaVersion, settings = { minimap, pvp, language, blacklistSound, layer, position, windows },
+--     guilds = { [guildKey] = <guild data, below> }, chars = { [identityKey] = <character data, below> } }
+-- Settings are account-wide so they work before the guild is known. The data of a guild never mixes with another's:
+-- at runtime ns.db is a view { global = guilds[key], settings, chars, root } built on activation (Core/Init.lua),
+-- so the code reads ns.db.global without knowing about the guild key. The view is never saved.
+--   guilds[guildKey] = { roster, events, loot, templates, sync = { seen, tombstones }, pvpStats = {}, pvpResets = {},
 --                 blacklist = {}, readinessRules = { rev, updatedAt, updatedBy, rules },
 --                 rosters = { [id] = { id, name, rev, ... } }, members = { [key] = { role, rosterId, rev, ... } },
 --                 recipes = { [memberKey] = { [professionId] = { name, ids, rev, receivedAt } } },
@@ -19,7 +23,21 @@ local function ensureTable(parent, key)
   return parent[key]
 end
 
--- Each entry upgrades a db to that version. All of them must be idempotent.
+local PVP_SEASON_TABLES = {
+  "seasons",
+  "missions",
+  "prizes",
+  "officers",
+  "grants",
+  "voids",
+  "rejects",
+  "queue",
+  "finals",
+  "deliveries",
+}
+
+-- Each entry upgrades a db to that version. All of them must be idempotent. Up to version 12 the guild data lived in
+-- db.global; version 13 drops it (no installs existed) and moves to db.guilds / db.settings.
 local MIGRATIONS = {
   [1] = function() end,
   [2] = function(db)
@@ -95,18 +113,7 @@ local MIGRATIONS = {
   [12] = function(db)
     local global = ensureTable(db, "global")
     local season = ensureTable(global, "pvpSeason")
-    for _, name in ipairs({
-      "seasons",
-      "missions",
-      "prizes",
-      "officers",
-      "grants",
-      "voids",
-      "rejects",
-      "queue",
-      "finals",
-      "deliveries",
-    }) do
+    for _, name in ipairs(PVP_SEASON_TABLES) do
       ensureTable(season, name)
     end
     for _, char in pairs(ensureTable(db, "chars")) do
@@ -114,6 +121,15 @@ local MIGRATIONS = {
         ensureTable(char, "pvpMissions")
       end
     end
+  end,
+  -- v13: one table of data per guild (guilds[guildKey], see Store.ForGuild) and account-wide settings at the root.
+  [13] = function(db)
+    ensureTable(db, "guilds")
+    local settings = ensureTable(db, "settings")
+    ensureTable(settings, "minimap")
+    ensureTable(settings, "pvp")
+    ensureTable(db, "chars")
+    db.global = nil
   end,
 }
 
@@ -140,8 +156,52 @@ function Store.Load(raw, targetVersion)
   for target = version + 1, targetVersion do
     MIGRATIONS[target](db)
   end
-  ensureTable(db, "global").schemaVersion = targetVersion
+  if targetVersion >= 13 then
+    db.schemaVersion = targetVersion
+  else
+    ensureTable(db, "global").schemaVersion = targetVersion
+  end
   return db
+end
+
+-- The data table of one guild, created with every sub-table the code reads. Two guild keys never share a table.
+function Store.ForGuild(db, guildKey)
+  local guild = ensureTable(ensureTable(db, "guilds"), guildKey)
+  for _, name in ipairs({
+    "roster",
+    "events",
+    "loot",
+    "templates",
+    "pvpStats",
+    "pvpResets",
+    "blacklist",
+    "readinessRules",
+    "rosters",
+    "members",
+    "recipes",
+  }) do
+    ensureTable(guild, name)
+  end
+  local sync = ensureTable(guild, "sync")
+  ensureTable(sync, "seen")
+  ensureTable(sync, "tombstones")
+  local season = ensureTable(guild, "pvpSeason")
+  for _, name in ipairs(PVP_SEASON_TABLES) do
+    ensureTable(season, name)
+  end
+  return guild
+end
+
+-- The runtime view of the saved root for one guild. Never assign it back to the SavedVariable.
+function Store.View(db, guildKey)
+  return {
+    global = Store.ForGuild(db, guildKey),
+    settings = db.settings,
+    chars = db.chars,
+    root = db,
+    guildKey = guildKey,
+    schemaVersion = db.schemaVersion,
+  }
 end
 
 function Store.GetChar(db, identityKey)

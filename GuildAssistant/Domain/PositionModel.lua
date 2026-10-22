@@ -11,8 +11,8 @@ local FORGET = "P1:0"
 -- The position settings, created and repaired as needed: { share, minimap, worldmap }. Sharing is off until the
 -- player turns it on (a position is finer than a layer); drawing the guild is on until the player turns it off.
 function PositionModel.Settings(db)
-  db.global.settings = type(db.global.settings) == "table" and db.global.settings or {}
-  local settings = db.global.settings
+  db.settings = type(db.settings) == "table" and db.settings or {}
+  local settings = db.settings
   settings.position = type(settings.position) == "table" and settings.position or {}
   local position = settings.position
   position.share = position.share == true

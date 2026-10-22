@@ -56,8 +56,8 @@ end
 -- The layer settings, created and repaired as needed: { share = boolean }. Sharing is on until the player turns it
 -- off. Defaults live here and not in a schema migration, like the minimap settings.
 function LayerModel.Settings(db)
-  db.global.settings = type(db.global.settings) == "table" and db.global.settings or {}
-  local settings = db.global.settings
+  db.settings = type(db.settings) == "table" and db.settings or {}
+  local settings = db.settings
   settings.layer = type(settings.layer) == "table" and settings.layer or {}
   settings.layer.share = settings.layer.share ~= false
   return settings.layer

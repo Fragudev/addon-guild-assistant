@@ -664,6 +664,21 @@ describe("Comm whisper guards", function()
     assert.is_nil(next(env.events))
   end)
 
+  it("drops a whisper from someone who is not in the guild roster before decoding or rate limiting it", function()
+    local decoded = 0
+    local original = env.codec.Decode
+    env.codec.Decode = function(...)
+      decoded = decoded + 1
+      return original(...)
+    end
+    local text = snapshot_text("s-2", { event_item("ev-2") })
+    for _ = 1, 20 do
+      assert.are.same({ false, "unknown_sender" }, { env.comm:HandleMessage(text, "Outsider-OtherRealm", "WHISPER") })
+    end
+    assert.are.equal(0, decoded)
+    assert.is_nil(next(env.events))
+  end)
+
   it("ignores its own whispers and missing senders", function()
     local text = snapshot_text("s-1")
     assert.are.equal("own_message", select(2, env.comm:HandleMessage(text, "Me-Realm", "WHISPER")))

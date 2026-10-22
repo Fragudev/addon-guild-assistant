@@ -2,15 +2,7 @@ local _, ns = ...
 
 ns.Constants = {
   ADDON_PREFIX = "GUILDASST",
-  SCHEMA_VERSION = 12,
-
-  GUILD_NAME = "Nrage",
-  -- Measured on the Forever beta client (build 16001) with /ga debug identity.
-  GUILD_CLUB_ID = 22626971,
-  FACTION = "Alliance",
-  -- The PvP ruleset shows up in the normalized realm name (beta: "ClassicBetaPvP").
-  -- Matched as a plain substring so a rename of the realm prefix does not break it.
-  RULESET_REALM_MARKER = "PvP",
+  SCHEMA_VERSION = 13,
 
   -- Free-text profile fields a player can declare by hand (source = "declared").
   MANUAL_FIELDS = { role = true, role2 = true, main = true, notes = true },
@@ -51,7 +43,7 @@ ns.Constants = {
   -- The roles the guild master can assign. "admin" can never be granted from the addon.
   ASSIGNABLE_ROLES = { "member", "rl", "council" },
 
-  -- Guild rank name (lowercase) -> addon role: "member" | "rl" | "council" | "admin". Placeholder ranks until Nrage
+  -- Guild rank name (lowercase) -> addon role: "member" | "rl" | "council" | "admin". Placeholder ranks until a guild
   -- defines its own; a rank that is not listed here is treated as "member". Only used when ROLE_SOURCE = "rank".
   RANK_ROLES = {
     gm = "admin",

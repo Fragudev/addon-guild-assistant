@@ -9,9 +9,10 @@ from it and measured behaviour belong here.
 | Item | Value | Where it is used |
 |---|---|---|
 | Interface number (`select(4, GetBuildInfo())`) | 16001 (beta) | TOC |
-| Normalized realm name | `ClassicBetaPvP` (beta) | ruleset check: the PvP ruleset is detected as the substring `PvP` |
-| Guild club id (`C_Club.GetGuildClubId()`) | read once by a Nrage member (the value is in `Constants.lua`); that it is the same across sessions and members is not confirmed yet | access check |
-| Faction | `Alliance` | access check |
+| Normalized realm name | `ClassicBetaPvP` (beta) | part of the name-fallback guild key (`name:<guild>-<realm>`); no ruleset check any more |
+| Guild club id (`C_Club.GetGuildClubId()`) | the guild key `club:<id>` (`Core/GuildIdentity.lua`). It may be nil or unavailable for a few seconds after login; then the key falls back to `name:<guild name>-<realm>`. That it is the same across sessions and members is not confirmed yet: `/ga debug identity` prints the key and how it was resolved | guild key |
+| `GetGuildInfo("player")` | can return nil for a few seconds after login even when `IsInGuild()` is true; the addon stays inactive until the guild is known (`guild_unknown`) and asks again on `PLAYER_GUILD_UPDATE` / `GUILD_ROSTER_UPDATE` | guild key, window titles |
+| Faction | `Alliance` on the beta | none (`/ga debug identity` still prints it) |
 
 | Character names | **can have several words** (`Yonemon Gg`, `Black Coffee`) | everywhere a character is named |
 | `UnitName("player")` | only the **first word** (`Yonemon` for `Yonemon Gg`) | must not be used to identify a character |
@@ -24,8 +25,8 @@ All of the beta values above must be measured again at launch (tracked as an iss
 Because `UnitName` is not the roster's name, the addon finds its own full name in the guild roster by GUID (the
 seventeenth value of `GetGuildRosterInfo`) and uses that as its identity in everything shared. Until the roster has
 loaded it falls back to the `UnitName`-based key, which is also the stable key of the saved data. Names received
-from other clients are compared without a `-<this realm>` suffix. `/nrage debug roster` shows the result and
-`/nrage debug senders` shows the last senders exactly as the client delivered them.
+from other clients are compared without a `-<this realm>` suffix. `/ga debug roster` shows the result and
+`/ga debug senders` shows the last senders exactly as the client delivered them.
 
 ## Assumed, not measured yet
 
@@ -38,11 +39,11 @@ from other clients are compared without a `-<this realm>` suffix. `/nrage debug 
   unmeasured assumptions: see "Layers (assumed, not measured yet)" below.
 - The libraries (Ace3 parts, LibSerialize, LibDeflate) load on the Forever build.
 - The `sender` of `CHAT_MSG_ADDON` is the full name, with or without the realm suffix. If it turns out to be the
-  first word only, like `UnitName`, permission lookups by sender will not work. `/nrage debug senders` (after
+  first word only, like `UnitName`, permission lookups by sender will not work. `/ga debug senders` (after
   another member's message arrives) shows the raw sender and whether the roster finds it.
 - Addon whispers between guild members work and their sender name can be used as a whisper target.
 - The behaviour of the encounter lockdown: when it starts and ends, and what happens to queued messages. The probe
-  (`/nrage debug lockdown start | send | log | clear`) exists; the two-client test has not been run.
+  (`/ga debug lockdown start | send | log | clear`) exists; the two-client test has not been run.
 - Whether `CHAT_MSG_LOOT` and item links arrive as secret values during an encounter. Loot sessions currently take
   the item from a link typed after the encounter.
 
@@ -51,8 +52,8 @@ from other clients are compared without a `-<this realm>` suffix. `/nrage debug 
 The whole layer feature (`docs/LAYER_SWAP_PLAN.md`) was built on the assumptions below **without measuring them on
 Forever** (decided 2026-10-20). Every client call is guarded, so a wrong assumption turns the feature off quietly
 (nil or false means unavailable) instead of raising. **All of this must be verified in game before release**, with
-two clients: `/nrage debug layer start`, target and mouse over NPCs, group up, then `/nrage debug layer log` and
-`/nrage debug layer status`, and copy the result here.
+two clients: `/ga debug layer start`, target and mouse over NPCs, group up, then `/ga debug layer log` and
+`/ga debug layer status`, and copy the result here.
 
 | # | Question | API | Assumption in the code | Result |
 |---|---|---|---|---|
@@ -67,7 +68,7 @@ two clients: `/nrage debug layer start`, target and mouse over NPCs, group up, t
 | 9 | Does the game ever move a player who is a group *leader* to another layer, or can a leader invite someone from another layer without effect? | game behaviour | the helper (leader) stays on their layer and the invited player moves | not measured yet |
 
 The probe logs every GUID read (raw string and parsed fields), the zone and group events, the confirmed layer and the
-result of the invite and leave calls made from the swap popup. `/nrage debug layer status` also prints which of
+result of the invite and leave calls made from the swap popup. `/ga debug layer status` also prints which of
 the invite and leave APIs exist on the client. If question 1 or 2 turns out to be false, the layer cannot be read
 and the feature should be removed; if question 5 or 6 fails, the popup buttons will say that the client refused.
 
@@ -82,7 +83,7 @@ drawn). **All of this must be verified in game before release.** Record the resu
 | 1 | `C_Map.GetBestMapForUnit("player")` and `C_Map.GetPlayerMapPosition(map, "player"):GetXY()`: what do they return in the open world, and nil in instances? | `Platform.PlayerMapPosition` | a map id and `x`, `y` in 0..1; nil in an instance (also checked with `IsInInstance`) | not measured yet |
 | 2 | Do `UnitInParty(name)` / `UnitInRaid(name)` find a guildmate by the name the guild roster gives (a multi-word name)? | `Platform.IsGroupMember` | yes; a miss only means the pin is also drawn | not measured yet |
 | 3 | Does HereBeDragons 2.18 draw minimap pins correctly on Forever (rotation, zoom, indoors) and place world map pins? | `HereBeDragons-Pins-2.0` in `UI/MapPins.lua` | yes; it has a `WoWForever` branch upstream | not measured yet |
-| 4 | Does `ChatThrottleLib` "BULK" traffic on `NRAGEPOS` with 20 or more members delay `NRAGE` messages? | `ChatThrottleLib:SendAddonMessage` | no: BULK is the lowest priority | not measured yet |
+| 4 | Does `ChatThrottleLib` "BULK" traffic on `GUILDASSTPOS` with 20 or more members delay `GUILDASST` messages? | `ChatThrottleLib:SendAddonMessage` | no: BULK is the lowest priority | not measured yet |
 | 5 | Do `CLASS_ICON_TCOORDS` and the texture `Interface\GLUES\CHARACTERCREATE\UI-CHARACTERCREATE-CLASSES` exist? | `UI/MapPins.lua` | yes; a grey dot is drawn when not | not measured yet |
 | 6 | Are the map ids of `C_Map.GetBestMapForUnit` all in 1..9999 (the wire limit, `LAYER_MAP_MAX`)? | wire format | yes; a position on another map is simply not sent | not measured yet |
 
@@ -104,15 +105,15 @@ raises in game, report it here.
 ## PvP (to be measured, issue #92)
 
 Nothing PvP-related has been measured on Forever yet. Run the probe on a PvP realm, in the open world and in a
-battleground: `/nrage debug pvp start`, do some honourable kills (also grey targets and repeated kills of the same
-target), then `/nrage debug pvp log` and copy the result here. `/nrage debug pvp status | stop | clear` do what
+battleground: `/ga debug pvp start`, do some honourable kills (also grey targets and repeated kills of the same
+target), then `/ga debug pvp log` and copy the result here. `/ga debug pvp status | stop | clear` do what
 they say. Every value is logged through `pcall`; a secret value shows as `<secret>`.
 
 | # | Question | API | Result |
 |---|---|---|---|
 | 1 | Do the honour counters exist, and do they increase on an honourable kill, including group credit? | `GetPVPSessionStats()`, `GetPVPLifetimeStats()` | not measured yet |
 | 2 | Does `CHAT_MSG_COMBAT_HONOR_GAIN` fire? What text and arguments does it carry (victim name, rank, honour)? Is it a secret value? | event | not measured yet |
-| 3 | Can an addon register `COMBAT_LOG_EVENT_UNFILTERED` outside encounters? Does `CombatLogGetCurrentEventInfo()` return readable `PARTY_KILL` data (source GUID = player, destination = hostile player)? | event | Right after login the client showed "NrageAssistant has been blocked from an action only available to the Blizzard UI". The dialog does not name the call; this registration is the suspect (Midnight protects the event, and a `pcall` does not hide the dialog), not a confirmed cause. The addon no longer registers it (`PVP_COMBAT_LOG_ENABLED = false`). `/nrage debug pvp start` still tries it, so the dialog may show when you run the probe. |
+| 3 | Can an addon register `COMBAT_LOG_EVENT_UNFILTERED` outside encounters? Does `CombatLogGetCurrentEventInfo()` return readable `PARTY_KILL` data (source GUID = player, destination = hostile player)? | event | Right after login the client showed "GuildAssistant has been blocked from an action only available to the Blizzard UI". The dialog does not name the call; this registration is the suspect (Midnight protects the event, and a `pcall` does not hide the dialog), not a confirmed cause. The addon no longer registers it (`PVP_COMBAT_LOG_ENABLED = false`). `/ga debug pvp start` still tries it, so the dialog may show when you run the probe. |
 | 4 | Does `IsInInstance()` return `instanceType == "pvp"` inside a battleground? | `IsInInstance` | not measured yet |
 | 5 | Do kills that give no honour (grey targets, repeated kills of the same target) increase any counter? | counters | not measured yet |
 | 6 | Are victim names multi-word and first-word-only, like `UnitName`? | event | not measured yet |
@@ -130,7 +131,7 @@ blows are available.
 The PvP missions (`docs/PVP_MISSIONS_PLAN.md`, sections 2 and 5) read the client in five places that nobody has
 measured on Forever yet. Each reader in `Core/Platform.lua` is guarded (a missing API, an error or a secret value gives
 nil) and a mission criterion whose source does not work is shown as "Not available on this client" instead of
-blocking anything. Run `/nrage debug pvp start` on a PvP realm, play, then `/nrage debug pvp log` and copy the
+blocking anything. Run `/ga debug pvp start` on a PvP realm, play, then `/ga debug pvp log` and copy the
 lines here. The probe logs the map (`GetBestMapForUnit` and `C_Map.GetMapInfo` name) at start, on login and zone
 changes, the victim parsed from the honour message next to the names of the target (`victim` lines), each distinct
 unit seen on `target`, `mouseover` and nameplates (`unit` lines, with `UnitIsPlayer`, `UnitIsEnemy`, `UnitClass`,
@@ -215,7 +216,7 @@ For the two events, log them for a minute while opening professions and a corpse
 
 ## APIs the addon uses
 
-`/nrage debug selftest` checks each of these on the running client.
+`/ga debug selftest` checks each of these on the running client.
 
 | Area | APIs |
 |---|---|
@@ -225,16 +226,16 @@ For the two events, log them for a minute while opening professions and a corpse
 | Messaging | `C_ChatInfo.RegisterAddonMessagePrefix`, `C_ChatInfo.SendAddonMessage`, `C_ChatInfo.InChatMessagingLockdown`, event `CHAT_MSG_ADDON` |
 | Encounters and combat | events `ENCOUNTER_START`, `ENCOUNTER_END`, `PLAYER_REGEN_DISABLED`, `PLAYER_REGEN_ENABLED` (the lockdown probe) |
 | PvP counters (**not measured yet**, #99) | `GetPVPSessionStats`, `IsInInstance`, `CombatLogGetCurrentEventInfo` (also the destination name, for the kill feed), the globals `COMBATLOG_HONORGAIN` and `COMBATLOG_HONORGAIN_NO_RANK`, events `CHAT_MSG_COMBAT_HONOR_GAIN`, `PLAYER_PVP_KILLS_CHANGED`, `COMBAT_LOG_EVENT_UNFILTERED`. Each is guarded and registered in `pcall`, so a missing or restricted one disables only that counter; they are not in the self test on purpose, because a missing one would show a permanent warning on the minimap button |
-| PvP probe | the above plus `GetPVPLifetimeStats` (`/nrage debug pvp`, to answer #99) |
-| Guild map (**not measured yet**) | `C_Map.GetBestMapForUnit`, `C_Map.GetPlayerMapPosition`, `UnitInParty`, `UnitInRaid`, `IsInInstance`, `ChatThrottleLib`, the globals `RAID_CLASS_COLORS`, `CLASS_ICON_TCOORDS`, `HBD_PINS_WORLDMAP_SHOW_CONTINENT`, events `CHAT_MSG_ADDON` (prefix `NRAGEPOS`), `GROUP_ROSTER_UPDATE`. Each is guarded; not in the self test on purpose |
-| PvP probe | the above plus `GetPVPLifetimeStats`, `C_Map`, the unit functions and `GetBattlefieldWinner` (`/nrage debug pvp`, to answer #99 and the PvP seasons questions M1 to M5) |
+| PvP probe | the above plus `GetPVPLifetimeStats` (`/ga debug pvp`, to answer #99) |
+| Guild map (**not measured yet**) | `C_Map.GetBestMapForUnit`, `C_Map.GetPlayerMapPosition`, `UnitInParty`, `UnitInRaid`, `IsInInstance`, `ChatThrottleLib`, the globals `RAID_CLASS_COLORS`, `CLASS_ICON_TCOORDS`, `HBD_PINS_WORLDMAP_SHOW_CONTINENT`, events `CHAT_MSG_ADDON` (prefix `GUILDASSTPOS`), `GROUP_ROSTER_UPDATE`. Each is guarded; not in the self test on purpose |
+| PvP probe | the above plus `GetPVPLifetimeStats`, `C_Map`, the unit functions and `GetBattlefieldWinner` (`/ga debug pvp`, to answer #99 and the PvP seasons questions M1 to M5) |
 | PvP missions (**not measured yet**) | `C_Map.GetBestMapForUnit`, `UnitIsPlayer`, `UnitIsEnemy`, `UnitClass`, `UnitRace`, `GetUnitName`, `GetBattlefieldWinner`, `UnitFactionGroup`, events `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `NAME_PLATE_UNIT_ADDED`, `UPDATE_BATTLEFIELD_STATUS`. Each reader is guarded and each event registered in `pcall`; not in the self test, for the same reason as the PvP counters |
 | Group and warning (**not measured yet**) | `IsInGroup`, `IsInRaid`, `GetNumGroupMembers`, `GetRaidRosterInfo`, `UnitName("party1".."party4")`, `RaidNotice_AddMessage`, `RaidWarningFrame`, `PlaySound`, events `GROUP_ROSTER_UPDATE`, `PLAYER_ENTERING_WORLD`. Each is guarded and registered in `pcall`; not in the self test on purpose |
 | Time | `GetServerTime`, `GetTime`, `date`, `time` |
 | UI | `CreateFrame`, `C_Timer.After`, `C_Timer.NewTicker`, `C_AddOns.GetAddOnMetadata` |
 | Load | events `ADDON_LOADED`, `PLAYER_LOGIN`, `PLAYER_GUILD_UPDATE`, `## SavedVariables` |
 
-All access goes through `NrageAssistant/Core/Platform.lua`, so a change in the client API is fixed in one place,
+All access goes through `GuildAssistant/Core/Platform.lua`, so a change in the client API is fixed in one place,
 and the domain code is tested against fakes.
 
 ## Restrictions to keep in mind
@@ -253,5 +254,5 @@ minor), so nothing was ever sent. Standard Lua gives `inf` for `1 / 0`; this cli
 
 Also, `LibStub` returns one instance per library name, and other addons (DBM ships `LibSerialize` too) load first,
 so asking for `LibSerialize` returned DBM's copy. The vendored copy is therefore patched and registered as
-`NrageAssistant-LibSerialize` (see `Libs/README.md`). Never divide by a value that can be zero in addon code
+`GuildAssistant-LibSerialize` (see `Libs/README.md`). Never divide by a value that can be zero in addon code
 either.

@@ -84,7 +84,7 @@ end)
 
 describe("MinimapButton.Settings", function()
   local function database()
-    return { global = {} }
+    return { settings = {} }
   end
 
   it("creates the defaults", function()
@@ -98,34 +98,34 @@ describe("MinimapButton.Settings", function()
     local db = database()
     MinimapButton.Settings(db).angle = 90
     MinimapButton.Settings(db).hide = true
-    assert.are.same({ angle = 90, hide = true }, db.global.settings.minimap)
+    assert.are.same({ angle = 90, hide = true }, db.settings.minimap)
   end)
 
   it("keeps valid saved values", function()
-    local db = { global = { settings = { minimap = { angle = 45.5, hide = true } } } }
+    local db = { settings = { minimap = { angle = 45.5, hide = true } } }
     assert.are.same({ angle = 45.5, hide = true }, MinimapButton.Settings(db))
   end)
 
   it("repairs values that are not what they should be, and wrong section types", function()
-    local db = { global = { settings = { minimap = { angle = "left", hide = "yes" } } } }
+    local db = { settings = { minimap = { angle = "left", hide = "yes" } } }
     assert.are.same({ angle = Constants.MINIMAP_DEFAULT_ANGLE, hide = false }, MinimapButton.Settings(db))
 
-    db = { global = { settings = "oops" } }
+    db = { settings = "oops" }
     assert.are.equal(Constants.MINIMAP_DEFAULT_ANGLE, MinimapButton.Settings(db).angle)
 
-    db = { global = { settings = { minimap = 5 } } }
+    db = { settings = { minimap = 5 } }
     assert.is_false(MinimapButton.Settings(db).hide)
   end)
 
   it("wraps an out-of-range saved angle", function()
-    local db = { global = { settings = { minimap = { angle = -90 } } } }
+    local db = { settings = { minimap = { angle = -90 } } }
     assert.are.equal(270, MinimapButton.Settings(db).angle)
   end)
 end)
 
 describe("MinimapButton.SetHidden and ResetPosition", function()
   local function database()
-    return { global = {} }
+    return { settings = {} }
   end
 
   it("hides and shows the button", function()

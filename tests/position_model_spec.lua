@@ -11,31 +11,31 @@ local PositionModel, Constants = ns.PositionModel, ns.Constants
 
 describe("PositionModel.Settings", function()
   it("shares nothing by default and shows the guild on both maps", function()
-    local db = { global = {} }
+    local db = { settings = {} }
     assert.are.same({ share = false, minimap = true, worldmap = true }, PositionModel.Settings(db))
-    assert.are.same({ share = false, minimap = true, worldmap = true }, db.global.settings.position)
+    assert.are.same({ share = false, minimap = true, worldmap = true }, db.settings.position)
   end)
 
   it("keeps what the player chose", function()
-    local db = { global = { settings = { position = { share = true, minimap = false, worldmap = true } } } }
+    local db = { settings = { position = { share = true, minimap = false, worldmap = true } } }
     assert.are.same({ share = true, minimap = false, worldmap = true }, PositionModel.Settings(db))
   end)
 
   it("falls back to the defaults for damaged values", function()
     for _, damaged in ipairs({ "x", 5, true }) do
-      local db = { global = { settings = damaged } }
+      local db = { settings = damaged }
       assert.are.same({ share = false, minimap = true, worldmap = true }, PositionModel.Settings(db))
     end
-    local db = { global = { settings = { position = { share = "yes", minimap = 0, worldmap = "no" } } } }
+    local db = { settings = { position = { share = "yes", minimap = 0, worldmap = "no" } } }
     assert.are.same({ share = false, minimap = true, worldmap = true }, PositionModel.Settings(db))
-    db = { global = { settings = { position = "broken" } } }
+    db = { settings = { position = "broken" } }
     assert.are.same({ share = false, minimap = true, worldmap = true }, PositionModel.Settings(db))
   end)
 
   it("returns the stored table, so a change is saved", function()
-    local db = { global = {} }
+    local db = { settings = {} }
     PositionModel.Settings(db).share = true
-    assert.is_true(db.global.settings.position.share)
+    assert.is_true(db.settings.position.share)
   end)
 end)
 

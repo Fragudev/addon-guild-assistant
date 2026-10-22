@@ -7,9 +7,6 @@ local PREFIX = "|cff33ff99Guild Assistant|r"
 local NOTICES = ns.Locale.Table(function()
   return {
     not_in_guild = L("disabled: you are not in a guild."),
-    wrong_guild = L("disabled: this addon is only for the Nrage guild."),
-    wrong_faction = L("disabled: this addon is only for the Alliance."),
-    wrong_ruleset = L("disabled: this addon is only for the PvP ruleset."),
     incompatible_data = L(
       "disabled: saved data comes from a newer version of the addon. Update the addon; your data was left untouched."
     ),
@@ -24,13 +21,21 @@ function ns.GetVersion()
   return version
 end
 
+-- The name of the guild the player is in, or nil while the client has not told it yet.
+function ns.GetGuildName()
+  return ns.Platform.GetGuildName() or (ns.guildIdentity and ns.guildIdentity.name) or nil
+end
+
 local function InitDatabase()
   local db, err = ns.Store.Load(GuildAssistantDB)
   if db then
+    -- GuildAssistantDB is the root and the only table that is saved. ns.db is a runtime view of it: until the guild
+    -- is known it has the account-wide parts only, and Activate adds the data of the guild (Store.View).
     GuildAssistantDB = db
-    ns.db = db
+    ns.root = db
+    ns.db = { settings = db.settings, chars = db.chars, root = db, schemaVersion = db.schemaVersion }
     -- The saved language is applied before anything is drawn, so every text is read in it.
-    ns.Locale.UsePreference(ns.Settings.Language(db), ns.Platform.GetLocale())
+    ns.Locale.UsePreference(ns.Settings.Language(ns.db), ns.Platform.GetLocale())
   else
     -- Leave GuildAssistantDB as it is so nothing is lost on a downgrade.
     ns.dbError = err
@@ -785,7 +790,9 @@ local function StartPvPSeason()
   })
 end
 
-local function Activate()
+local function Activate(identity)
+  ns.guildIdentity = identity
+  ns.db = ns.Store.View(ns.root, identity.key)
   ns.active = true
   -- The saved data of this character keeps the key it always had; the shared name is resolved later.
   -- The roles the guild master assigned are read from the saved assignments.
@@ -819,31 +826,49 @@ local function Activate()
   StartRecipes()
   StartAutoPublish()
   ScheduleSelfTest()
-  print(L("%s %s loaded. Click the minimap button or type /ga to open the window."):format(PREFIX, ns.GetVersion()))
+  local guildName = ns.GetGuildName()
+  if guildName then
+    print(
+      L("%s %s loaded for %s. Click the minimap button or type /ga to open the window."):format(
+        PREFIX,
+        ns.GetVersion(),
+        guildName
+      )
+    )
+  else
+    print(L("%s %s loaded. Click the minimap button or type /ga to open the window."):format(PREFIX, ns.GetVersion()))
+  end
 end
 
-local noticeShown = false
-
--- Re-evaluated on login and on guild changes; shows at most one notice per session.
-local function EvaluateAccess()
-  local ok, reason = ns.AccessGuard.Evaluate(ns.Platform, Constants)
-  if ok and ns.dbError then
-    ok, reason = false, "incompatible_data"
-  end
-
-  if ok then
-    if not ns.active then
-      Activate()
-    end
-    return
-  end
-
-  ns.active = false
-  ns.MinimapButton.Refresh()
-  if not noticeShown then
-    noticeShown = true
+-- Re-evaluated on login and on guild changes (AccessGuard.NewSession); shows at most one notice per kind per session.
+local session = ns.AccessGuard.NewSession({
+  platform = ns.Platform,
+  dbError = function()
+    return ns.dbError
+  end,
+  activate = Activate,
+  inactive = function()
+    ns.active = false
+    ns.MinimapButton.Refresh()
+  end,
+  deactivate = function()
+    ns.active = false
+    ns.MinimapButton.Refresh()
+  end,
+  notify = function(reason)
     print(("%s %s"):format(PREFIX, NOTICES[reason]))
-  end
+  end,
+  notifyChange = function(identity)
+    if identity and identity.name then
+      print(("%s %s"):format(PREFIX, L("guild changed: type /reload to load the data of %s."):format(identity.name)))
+    else
+      print(("%s %s"):format(PREFIX, L("guild changed: type /reload to load the data of your guild.")))
+    end
+  end,
+})
+
+local function EvaluateAccess()
+  session:Evaluate()
 end
 
 local frame = CreateFrame("Frame")
@@ -860,6 +885,9 @@ frame:SetScript("OnEvent", function(_, event, arg1)
   elseif event == "GUILD_ROSTER_UPDATE" then
     if ns.active and ns.guildRoster then
       ns.guildRoster:OnUpdate()
+    elseif not session.identity then
+      -- The client may only name the guild a few seconds after login: ask again until it does.
+      EvaluateAccess()
     end
   else
     EvaluateAccess()

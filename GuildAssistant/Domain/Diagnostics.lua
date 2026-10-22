@@ -161,14 +161,14 @@ local function behaviourChecks(addon)
     if not db or not db.global then
       return result("saved data", "error", "no database loaded")
     end
-    if db.global.schemaVersion ~= addon.Constants.SCHEMA_VERSION then
+    if db.schemaVersion ~= addon.Constants.SCHEMA_VERSION then
       return result(
         "saved data",
         "error",
-        ("schema %s, expected %s"):format(tostring(db.global.schemaVersion), addon.Constants.SCHEMA_VERSION)
+        ("schema %s, expected %s"):format(tostring(db.schemaVersion), addon.Constants.SCHEMA_VERSION)
       )
     end
-    return result("saved data", "ok", ("schema %d"):format(db.global.schemaVersion))
+    return result("saved data", "ok", ("schema %d"):format(db.schemaVersion))
   end
 
   return checks
@@ -269,7 +269,7 @@ function Diagnostics.Info(addon)
   add(
     ("version: %s, schema: %s, active: %s"):format(
       addon.GetVersion(),
-      tostring(addon.db and addon.db.global.schemaVersion),
+      tostring(addon.db and addon.db.schemaVersion),
       tostring(addon.active == true)
     )
   )
@@ -277,15 +277,17 @@ function Diagnostics.Info(addon)
 
   if addon.db then
     local global = addon.db.global
-    add(
-      ("data: %d event(s), %d received profile(s), %d tombstone(s), %d character(s)"):format(
-        countKeys(global.events),
-        countKeys(global.roster),
-        countKeys(global.sync.tombstones),
-        countKeys(addon.db.chars)
+    if global then
+      add(
+        ("data: %d event(s), %d received profile(s), %d tombstone(s), %d character(s)"):format(
+          countKeys(global.events),
+          countKeys(global.roster),
+          countKeys(global.sync.tombstones),
+          countKeys(addon.db.chars)
+        )
       )
-    )
-    local entries, truncated = countEntries(addon.db, SIZE_BUDGET)
+    end
+    local entries, truncated = countEntries(addon.db.root or addon.db, SIZE_BUDGET)
     add(("saved data size: about %d%s entries"):format(entries, truncated and "+" or ""))
   end
 

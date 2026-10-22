@@ -108,7 +108,7 @@ local function full_addon()
         return 42
       end,
     },
-    db = { global = { schemaVersion = 2 } },
+    db = { global = {}, schemaVersion = 2 },
   }
 end
 
@@ -248,7 +248,7 @@ describe("Diagnostics behaviour checks", function()
       "error",
       find(
         run(function(addon)
-          addon.db.global.schemaVersion = 1
+          addon.db.schemaVersion = 1
         end),
         "saved data"
       ).status
@@ -310,8 +310,8 @@ describe("Diagnostics.Info", function()
       end,
       active = true,
       db = {
+        schemaVersion = 2,
         global = {
-          schemaVersion = 2,
           events = { a = {}, b = {} },
           roster = { ["Ann-Realm"] = {} },
           sync = { tombstones = { t1 = {}, t2 = {}, t3 = {} } },

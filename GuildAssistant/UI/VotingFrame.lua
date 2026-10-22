@@ -345,9 +345,10 @@ local function ensureWindow()
     return
   end
   local Kit = ns.Kit
+  local guildName = ns.GetGuildName and ns.GetGuildName()
   window = Kit.Window.New({
     name = "GuildAssistantVotingFrame",
-    title = L("Loot Council"),
+    title = guildName and L("%s Loot Council"):format(guildName) or L("Loot Council"),
     width = WIDTH,
     height = HEIGHT,
     minWidth = 600,

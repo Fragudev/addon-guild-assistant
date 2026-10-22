@@ -15,6 +15,7 @@ Core\Platform.lua
 Core\Locale.lua
 Locales\esES.lua
 Core\Validate.lua
+Core\GuildIdentity.lua
 Core\AccessGuard.lua
 Core\LockdownGuard.lua
 Core\LockdownProbe.lua
