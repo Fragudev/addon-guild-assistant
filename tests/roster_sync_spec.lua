@@ -446,7 +446,7 @@ describe("Rosters through Comm", function()
       end,
     }
     env.codec = ns.Codec.New({
-      serialize = _G.LibStub("NrageAssistant-LibSerialize"),
+      serialize = _G.LibStub("GuildAssistant-LibSerialize"),
       deflate = _G.LibStub("LibDeflate"),
     })
     env.queue = ns.OutboundQueue.New({

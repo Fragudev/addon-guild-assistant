@@ -25,7 +25,7 @@ end
 local ns = load_addon()
 local Protocol, Sync, Model, Constants = ns.Protocol, ns.PvPSeasonSync, ns.PvPSeasonModel, ns.Constants
 local codec = ns.Codec.New({
-  serialize = _G.LibStub("NrageAssistant-LibSerialize"),
+  serialize = _G.LibStub("GuildAssistant-LibSerialize"),
   deflate = _G.LibStub("LibDeflate"),
 })
 

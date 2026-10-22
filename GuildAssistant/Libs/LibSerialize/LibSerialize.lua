@@ -568,9 +568,9 @@ The type byte uses the following formats to implement the above:
 [Writer protocol]: #writer-protocol
 END_README --]]
 
--- NRAGE PATCH (see ../README.md): a private name, so the copy another addon loads (DBM ships one) is never
+-- GUILD ASSISTANT PATCH (see ../README.md): a private name, so the copy another addon loads (DBM ships one) is never
 -- picked instead of this one, and no division by zero (the Forever client's Lua raises on it).
-local MAJOR, MINOR = "NrageAssistant-LibSerialize", 6
+local MAJOR, MINOR = "GuildAssistant-LibSerialize", 6
 local LibSerialize
 if LibStub then
     LibSerialize = LibStub:NewLibrary(MAJOR, MINOR)

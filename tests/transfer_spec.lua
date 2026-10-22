@@ -36,7 +36,7 @@ end
 
 local ns = load_modules()
 local Transfer, EventService, Constants = ns.Transfer, ns.EventService, ns.Constants
-local libs = { serialize = _G.LibStub("NrageAssistant-LibSerialize"), deflate = _G.LibStub("LibDeflate") }
+local libs = { serialize = _G.LibStub("GuildAssistant-LibSerialize"), deflate = _G.LibStub("LibDeflate") }
 
 local function store()
   local s = { events = {}, tombstones = {}, clock = 10000, counter = 0 }

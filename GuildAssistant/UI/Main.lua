@@ -527,7 +527,7 @@ end
 -- text to import. Addons cannot write to the clipboard, so the export selects its text and the player copies it.
 
 local function TransferLibs()
-  return { serialize = LibStub("NrageAssistant-LibSerialize"), deflate = LibStub("LibDeflate") }
+  return { serialize = LibStub("GuildAssistant-LibSerialize"), deflate = LibStub("LibDeflate") }
 end
 
 local IMPORT_ERRORS = ns.Locale.Table(function()

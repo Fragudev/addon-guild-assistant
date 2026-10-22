@@ -14,7 +14,7 @@ end
 
 function Codec.Default()
   return Codec.New({
-    serialize = LibStub("NrageAssistant-LibSerialize"),
+    serialize = LibStub("GuildAssistant-LibSerialize"),
     deflate = LibStub("LibDeflate"),
   })
 end
