@@ -1,6 +1,6 @@
 # Privacy and data
 
-What Nrage Assistant stores, what it shares and how to take it back. The guild's decisions on retention and on
+What Guild Assistant stores, what it shares and how to take it back. The guild's decisions on retention and on
 which fields are shared are still open (see the issues labelled `decision`).
 
 ## The short version
@@ -8,11 +8,12 @@ which fields are shared are still open (see the issues labelled `decision`).
 - Nothing about you leaves your client until you say so, one kind of data at a time.
 - **Addon messages are not encrypted or confidential.** Anything shared is readable by every guild member running
   the addon, and possibly by others. Do not share what you would not put in guild chat.
-- The addon is meant for the Nrage guild only and disables itself elsewhere.
+- The addon works for the guild you are in and disables itself on characters outside a guild. Each guild's data is
+  kept separately on your computer, and the shared data stays inside that guild.
 
 ## What is stored on your machine
 
-Everything is kept in the game's `SavedVariables` (`NrageAssistantDB`). It is a normal file on your disk, not a
+Everything is kept in the game's `SavedVariables` (`GuildAssistantDB`). It is a normal file on your disk, not a
 secret store.
 
 | Data | Where it comes from |
@@ -24,7 +25,7 @@ secret store.
 | PvP counters received from other members | the guild channel |
 | Recent guild kills (killer, victim, place), in memory only | the guild channel, and your own kills |
 | Your layer, and the layers other members share, in memory only | read from the creatures you target, and the guild channel |
-| Your map position, if you chose to share it, and the positions other members share, in memory only | read from the game map, and the guild channel (prefix `NRAGEPOS`) |
+| Your map position, if you chose to share it, and the positions other members share, in memory only | read from the game map, and the guild channel (prefix `GUILDASSTPOS`) |
 | The guild blacklist: names of players, a short free-text reason, who added each one and when | you, or received |
 | Raid events, attendance, assignments, loot sessions and awards | you, or received |
 | Tombstones (records of deletions) | local deletions and received ones |
@@ -122,7 +123,7 @@ want, not the one you are on. A guildmate who answers a request tells the reques
 
 Your position on the map is finer than your layer, so **Share my position** (settings, the gear of the window) is
 **off by default**. While it is on, the addon sends the map and your coordinates to the guild channel every few
-seconds while you move, on its own addon prefix (`NRAGEPOS`); the message carries only the map and two numbers, not
+seconds while you move, on its own addon prefix (`GUILDASSTPOS`); the message carries only the map and two numbers, not
 your name, class or level (the others already know those from the guild roster). Guildmates see you as a pin on the
 minimap and the world map. Nothing is saved: positions are kept **in memory only** and forgotten by everyone after 60
 seconds without a new message. Switching sharing off tells the guild once to forget you and sends nothing more.

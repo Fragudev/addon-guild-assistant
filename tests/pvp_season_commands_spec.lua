@@ -1,4 +1,4 @@
--- The interim /nrage pvp commands: they turn text into service calls and the answers into lines.
+-- The interim /ga pvp commands: they turn text into service calls and the answers into lines.
 local function load_addon()
   local ns = {}
   for _, path in ipairs({
@@ -14,7 +14,7 @@ local function load_addon()
     "Sync/PvPSeasonSync",
     "Commands/PvPSeasonCommands",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end
@@ -79,8 +79,8 @@ describe("PvPSeasonCommands", function()
   it("lists the commands for anything it does not know", function()
     for _, text in ipairs({ "", "frobnicate", "   " }) do
       local out, failed = admin.run(text)
-      assert.is_truthy(out:find("/nrage pvp season", 1, true))
-      assert.is_truthy(out:find("/nrage pvp grant", 1, true))
+      assert.is_truthy(out:find("/ga pvp season", 1, true))
+      assert.is_truthy(out:find("/ga pvp grant", 1, true))
       assert.is_false(failed)
     end
   end)

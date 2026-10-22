@@ -185,7 +185,7 @@ local NAMES = {
   "CreateFont",
   "CreateFrame",
   "GetPhysicalScreenSize",
-  "NrageAssistantModal",
+  "GuildAssistantModal",
 }
 local saved
 

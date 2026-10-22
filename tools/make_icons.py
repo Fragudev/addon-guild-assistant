@@ -4,7 +4,7 @@
 The icons are our own simple shapes: lines, circles, arcs and a few filled dots, rasterized with an analytic
 anti-aliasing (no third-party art). The game tints them at runtime with SetVertexColor, so they are drawn white.
 
-Usage: tools/make_icons.py [output-directory]   (default NrageAssistant/Media/Icons)
+Usage: tools/make_icons.py [output-directory]   (default GuildAssistant/Media/Icons)
 """
 
 import math
@@ -189,7 +189,7 @@ def write_tga(path, alphas):
 
 
 def main():
-    output = sys.argv[1] if len(sys.argv) > 1 else os.path.join("NrageAssistant", "Media", "Icons")
+    output = sys.argv[1] if len(sys.argv) > 1 else os.path.join("GuildAssistant", "Media", "Icons")
     os.makedirs(output, exist_ok=True)
     for name, shapes in ICONS.items():
         write_tga(os.path.join(output, name + ".tga"), render(shapes))

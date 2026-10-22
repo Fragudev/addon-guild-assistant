@@ -1,6 +1,6 @@
 local function load_diagnostics()
   local ns = {}
-  assert(loadfile("NrageAssistant/Domain/Diagnostics.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/Diagnostics.lua"))("GuildAssistant", ns)
   return ns.Diagnostics
 end
 
@@ -39,7 +39,7 @@ local EXISTS = {
   "C_Timer.NewTicker",
   "C_AddOns.GetAddOnMetadata",
 }
-local LIBRARIES = { "AceComm-3.0", "NrageAssistant-LibSerialize", "LibDeflate", "CallbackHandler-1.0" }
+local LIBRARIES = { "AceComm-3.0", "GuildAssistant-LibSerialize", "LibDeflate", "CallbackHandler-1.0" }
 
 local function set(env, path, value)
   local parts = {}
@@ -94,7 +94,7 @@ local function full_addon()
     },
     Platform = {
       GetIdentityKey = function()
-        return "Nrager-ClassicBetaPvP"
+        return "Guildmate-ClassicBetaPvP"
       end,
     },
     guildRoster = {
@@ -108,7 +108,7 @@ local function full_addon()
         return 42
       end,
     },
-    db = { global = { schemaVersion = 2 } },
+    db = { global = {}, schemaVersion = 2 },
   }
 end
 
@@ -179,12 +179,12 @@ describe("Diagnostics.SelfTest", function()
     local results = Diagnostics.SelfTest(env, full_addon())
     assert.are.equal("missing", find(results, "library LibDeflate").status)
     assert.are.equal("error", find(results, "library AceComm-3.0").status)
-    assert.are.equal("ok", find(results, "library NrageAssistant-LibSerialize").status)
+    assert.are.equal("ok", find(results, "library GuildAssistant-LibSerialize").status)
 
     env.LibStub = nil
     results = Diagnostics.SelfTest(env, full_addon())
-    assert.are.equal("missing", find(results, "library NrageAssistant-LibSerialize").status)
-    assert.is_truthy(find(results, "library NrageAssistant-LibSerialize").detail:find("LibStub", 1, true))
+    assert.are.equal("missing", find(results, "library GuildAssistant-LibSerialize").status)
+    assert.is_truthy(find(results, "library GuildAssistant-LibSerialize").detail:find("LibStub", 1, true))
   end)
 end)
 
@@ -196,7 +196,7 @@ describe("Diagnostics behaviour checks", function()
   end
 
   it("accepts the roster's name without a realm, with spaces, and Name-Realm", function()
-    for _, key in ipairs({ "Yonemon Gg", "Nrager", "Nrager-Realm", "Yonemon Gg-Realm" }) do
+    for _, key in ipairs({ "Yonemon Gg", "Guildmate", "Guildmate-Realm", "Yonemon Gg-Realm" }) do
       local results = run(function(addon)
         addon.Platform.GetIdentityKey = function()
           return key
@@ -207,7 +207,7 @@ describe("Diagnostics behaviour checks", function()
   end)
 
   it("warns about an identity key built from missing values", function()
-    for _, key in ipairs({ "nil-nil", "Nrager-nil", "nil", "", "   ", 42 }) do
+    for _, key in ipairs({ "nil-nil", "Guildmate-nil", "nil", "", "   ", 42 }) do
       local results = run(function(addon)
         addon.Platform.GetIdentityKey = function()
           return key
@@ -248,7 +248,7 @@ describe("Diagnostics behaviour checks", function()
       "error",
       find(
         run(function(addon)
-          addon.db.global.schemaVersion = 1
+          addon.db.schemaVersion = 1
         end),
         "saved data"
       ).status
@@ -310,8 +310,8 @@ describe("Diagnostics.Info", function()
       end,
       active = true,
       db = {
+        schemaVersion = 2,
         global = {
-          schemaVersion = 2,
           events = { a = {}, b = {} },
           roster = { ["Ann-Realm"] = {} },
           sync = { tombstones = { t1 = {}, t2 = {}, t3 = {} } },

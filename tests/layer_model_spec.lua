@@ -1,7 +1,7 @@
 local function load_model()
   local ns = {}
   for _, path in ipairs({ "Core/Constants", "Core/Validate", "Domain/LayerModel" }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns.LayerModel
 end
@@ -85,13 +85,13 @@ describe("LayerModel helpers", function()
   end)
 
   it("shares the layer by default and keeps a choice", function()
-    local db = { global = {} }
+    local db = { settings = {} }
     assert.is_true(LayerModel.Settings(db).share)
-    db.global.settings.layer.share = false
+    db.settings.layer.share = false
     assert.is_false(LayerModel.Settings(db).share)
-    db.global.settings = "broken"
+    db.settings = "broken"
     assert.is_true(LayerModel.Settings(db).share)
-    db.global.settings.layer = { share = "yes" }
+    db.settings.layer = { share = "yes" }
     assert.is_true(LayerModel.Settings(db).share)
   end)
 end)

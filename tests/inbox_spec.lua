@@ -1,7 +1,7 @@
 local function load_inbox()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Sync/Inbox.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Sync/Inbox.lua"))("GuildAssistant", ns)
   return ns.Inbox
 end
 
@@ -9,7 +9,7 @@ describe("Inbox", function()
   local Inbox = load_inbox()
 
   it("accepts a new message", function()
-    assert.is_true(Inbox.New():Accept("Nrager-Realm", "id-1", 0))
+    assert.is_true(Inbox.New():Accept("Guildmate-Realm", "id-1", 0))
   end)
 
   it("rejects a missing sender", function()

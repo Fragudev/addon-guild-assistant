@@ -14,7 +14,7 @@ local function load_view_model(locale)
     "UI/ViewModel",
     "UI/ViewModelLayers",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     if path == "Locales/esES" and locale then
       ns.Locale.Use(locale)
     end

@@ -9,7 +9,7 @@ local function load_controller()
     "UI/ViewModelLayers",
     "UI/LayerPopup",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns.LayerPopup.Controller, ns
 end

@@ -10,7 +10,7 @@ local function load_kit()
     "UI/Kit/Calendar",
     "UI/Kit/Icons",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns.Kit
 end
@@ -106,7 +106,7 @@ describe("Kit.Theme", function()
       assert.is_truthy(handle, file)
       handle:close()
     end
-    assert.is_truthy(io.open("NrageAssistant/Media/Fonts/OFL.txt", "r"))
+    assert.is_truthy(io.open("GuildAssistant/Media/Fonts/OFL.txt", "r"))
   end)
 end)
 
@@ -227,7 +227,7 @@ describe("Kit.Icons", function()
 
   it("has a TGA file for every icon it lists", function()
     for _, name in ipairs(Icons.NAMES) do
-      local handle = io.open("NrageAssistant/Media/Icons/" .. name .. ".tga", "rb")
+      local handle = io.open("GuildAssistant/Media/Icons/" .. name .. ".tga", "rb")
       assert.is_truthy(handle, name)
       local header = handle:read(18)
       handle:close()
@@ -240,7 +240,7 @@ describe("Kit.Icons", function()
   end)
 
   it("gives the texture path without an extension, and nothing for an unknown icon", function()
-    assert.are.equal("Interface\\AddOns\\NrageAssistant\\Media\\Icons\\home", Icons.Path("home"))
+    assert.are.equal("Interface\\AddOns\\GuildAssistant\\Media\\Icons\\home", Icons.Path("home"))
     assert.is_nil(Icons.Path("unicorn"))
     assert.is_true(Icons.Exists("gear"))
     assert.is_false(Icons.Exists("unicorn"))

@@ -19,7 +19,7 @@ local function load_kit()
     "UI/Kit/Data",
     "UI/Kit/Shell",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns.Kit, ns
 end
@@ -474,10 +474,10 @@ describe("Kit widgets", function()
     end)
 
     it("shows a multi-line text area and selects all its text", function()
-      local area = Kit.TextArea(root, { text = "NRAGE1:abc", readOnly = true, height = 160 })
+      local area = Kit.TextArea(root, { text = "GUILDA1:abc", readOnly = true, height = 160 })
       assert.are.equal(160, root:Layout(300))
       area:HighlightAll()
-      assert.are.equal("NRAGE1:abc", area:GetValueText())
+      assert.are.equal("GUILDA1:abc", area:GetValueText())
       area.edit.scripts.OnEditFocusGained()
       area.scroll.scripts.OnMouseWheel(area.scroll, -1)
     end)
@@ -881,8 +881,8 @@ describe("Kit widgets", function()
       local resized, closed = {}, false
       local pressed
       local window = Kit.Window.New({
-        name = "NrageTestWindow",
-        title = "Nrage Assistant",
+        name = "GuildAssistantTestWindow",
+        title = "Guild Assistant",
         version = "1.2.3",
         buttons = {
           {
@@ -902,7 +902,7 @@ describe("Kit widgets", function()
         end,
       })
       window:SetPill("Sync ready", "success")
-      window:SetTitle("Nrage")
+      window:SetTitle("Guild Assistant")
       window:SetVersion("dev")
       local status = {}
       window:SetStatusTable(status)
@@ -925,7 +925,7 @@ describe("Kit widgets", function()
       assert.is_false(window:IsShown())
       window:SetStatusTable({ width = 800, height = 500, left = 10, top = 600 })
       assert.are.equal(800, window.frame:GetWidth())
-      assert.are.equal("NrageTestWindow", _G.UISpecialFrames[#_G.UISpecialFrames])
+      assert.are.equal("GuildAssistantTestWindow", _G.UISpecialFrames[#_G.UISpecialFrames])
     end)
   end)
 end)

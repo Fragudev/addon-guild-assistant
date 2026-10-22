@@ -7,7 +7,7 @@ local function load_pins()
     "Domain/PositionModel",
     "Domain/PositionPins",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

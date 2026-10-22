@@ -2,7 +2,7 @@
 local function load(paths)
   local ns = {}
   for _, path in ipairs(paths) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end
@@ -15,13 +15,13 @@ describe("Settings", function()
   end)
 
   it("defaults to the game language and the alert sound on", function()
-    local db = { global = {} }
+    local db = { settings = {} }
     assert.are.equal("auto", Settings.Language(db))
     assert.is_true(Settings.BlacklistSound(db))
   end)
 
   it("keeps a chosen language and refuses one that does not exist", function()
-    local db = { global = { settings = {} } }
+    local db = { settings = {} }
     assert.is_true(Settings.SetLanguage(db, "es"))
     assert.are.equal("es", Settings.Language(db))
     assert.are.same({ false, "invalid" }, { Settings.SetLanguage(db, "klingon") })
@@ -32,18 +32,18 @@ describe("Settings", function()
   end)
 
   it("repairs a damaged value instead of raising", function()
-    local db = { global = { settings = { language = 5, blacklistSound = "no" } } }
+    local db = { settings = { language = 5, blacklistSound = "no" } }
     assert.are.equal("auto", Settings.Language(db))
     assert.is_true(Settings.BlacklistSound(db))
-    db.global.settings = "broken"
+    db.settings = "broken"
     assert.are.equal("auto", Settings.Language(db))
   end)
 
   it("saves the alert sound switch", function()
-    local db = { global = {} }
+    local db = { settings = {} }
     Settings.SetBlacklistSound(db, false)
     assert.is_false(Settings.BlacklistSound(db))
-    assert.is_false(db.global.settings.blacklistSound)
+    assert.is_false(db.settings.blacklistSound)
     Settings.SetBlacklistSound(db, true)
     assert.is_true(Settings.BlacklistSound(db))
   end)

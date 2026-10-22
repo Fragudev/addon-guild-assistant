@@ -1,0 +1,272 @@
+local _, ns = ...
+
+-- SavedVariables layout and migrations. Plain tables (no AceDB yet). The root of GuildAssistantDB is:
+--   { schemaVersion, settings = { minimap, pvp, language, blacklistSound, layer, position, windows },
+--     guilds = { [guildKey] = <guild data, below> }, chars = { [identityKey] = <character data, below> } }
+-- Settings are account-wide so they work before the guild is known. The data of a guild never mixes with another's:
+-- at runtime ns.db is a view { global = guilds[key], settings, chars, root } built on activation (Core/Init.lua),
+-- so the code reads ns.db.global without knowing about the guild key. The view is never saved.
+--   guilds[guildKey] = { meta = { name, realm }, roster, events, loot, templates,
+--                 sync = { seen, tombstones }, pvpStats = {}, pvpResets = {},
+--                 blacklist = {}, readinessRules = { rev, updatedAt, updatedBy, rules },
+--                 rosters = { [id] = { id, name, rev, ... } }, members = { [key] = { role, rosterId, rev, ... } },
+--                 recipes = { [memberKey] = { [professionId] = { name, ids, rev, receivedAt } } },
+--                 pvpSeason = { seasons, activeId, missions, prizes, officers, grants, voids, rejects, queue, finals,
+--                               deliveries } (see PvPSeasonSync) }
+--   db.chars[identityKey] = { profile = {}, readiness = {}, publish = {}, pvp = {}, recipes = {},
+--                             pvpSync = { rev }, pvpMissions = { seasonId, kills = {}, claims = {} } }
+local Store = {}
+
+local function ensureTable(parent, key)
+  if type(parent[key]) ~= "table" then
+    parent[key] = {}
+  end
+  return parent[key]
+end
+
+local PVP_SEASON_TABLES = {
+  "seasons",
+  "missions",
+  "prizes",
+  "officers",
+  "grants",
+  "voids",
+  "rejects",
+  "queue",
+  "finals",
+  "deliveries",
+}
+
+-- Each entry upgrades a db to that version. All of them must be idempotent. Up to version 12 the guild data lived in
+-- db.global; version 13 drops it (no installs existed) and moves to db.guilds / db.settings.
+local MIGRATIONS = {
+  [1] = function() end,
+  [2] = function(db)
+    local global = ensureTable(db, "global")
+    ensureTable(global, "roster")
+    ensureTable(global, "events")
+    ensureTable(global, "loot")
+    local sync = ensureTable(global, "sync")
+    ensureTable(sync, "seen")
+    ensureTable(sync, "tombstones")
+    ensureTable(db, "chars")
+    -- v1 kept the version at the top level.
+    db.schemaVersion = nil
+  end,
+  -- v3: reusable assignment templates.
+  [3] = function(db)
+    ensureTable(ensureTable(db, "global"), "templates")
+  end,
+  -- v4: account-wide settings, starting with the minimap button (see MinimapButton.Settings).
+  [4] = function(db)
+    ensureTable(ensureTable(ensureTable(db, "global"), "settings"), "minimap")
+  end,
+  -- v5: per-character PvP counters (char.pvp, filled by PvPService.Ensure). Nothing global changes; GetChar
+  -- creates the table for each character, so this only makes sure the characters already saved have it.
+  [5] = function(db)
+    for _, char in pairs(ensureTable(db, "chars")) do
+      if type(char) == "table" then
+        ensureTable(char, "pvp")
+      end
+    end
+  end,
+  -- v6: PvP counters received from the guild (pvpStats[ownerKey]) and the minimum revision accepted for a
+  -- member after an admin reset (pvpResets[ownerKey]); GetChar creates the revision of the own record.
+  [6] = function(db)
+    local global = ensureTable(db, "global")
+    ensureTable(global, "pvpStats")
+    ensureTable(global, "pvpResets")
+  end,
+  -- v7: account-wide PvP settings table (db.global.settings.pvp). The kill feed switches that lived there are
+  -- gone: every kill is shared; the table is kept so older data migrates unchanged.
+  [7] = function(db)
+    ensureTable(ensureTable(ensureTable(db, "global"), "settings"), "pvp")
+  end,
+  -- v8: the guild blacklist (blacklist[nameKey], see BlacklistService). Its removals are tombstones "B:<key>" in
+  -- sync.tombstones, which already exists.
+  [8] = function(db)
+    ensureTable(ensureTable(db, "global"), "blacklist")
+  end,
+  -- v9: the guild's readiness rules (readinessRules = { rev, updatedAt, updatedBy, rules }, see ReadinessRules).
+  -- Empty until an admin sets them; the starting checklist applies meanwhile.
+  [9] = function(db)
+    ensureTable(ensureTable(db, "global"), "readinessRules")
+  end,
+  -- v10: raid rosters (rosters[id]) and the role and roster of each member (members[key]), both set by the guild
+  -- master (see RosterService). Existing events and templates have no rosterId: they stay as they are (legacy).
+  [10] = function(db)
+    local global = ensureTable(db, "global")
+    ensureTable(global, "rosters")
+    ensureTable(global, "members")
+  end,
+  -- v11: recipes received from the guild (recipes[memberKey][professionId], see RecipeService); the own character keeps
+  -- its scans in char.recipes, which GetChar creates.
+  [11] = function(db)
+    ensureTable(ensureTable(db, "global"), "recipes")
+    for _, char in pairs(ensureTable(db, "chars")) do
+      if type(char) == "table" then
+        ensureTable(char, "recipes")
+      end
+    end
+  end,
+  -- v12: the PvP season ledger (see PvPSeasonSync) and the per-character mission log. activeId stays nil until an
+  -- admin creates a season.
+  [12] = function(db)
+    local global = ensureTable(db, "global")
+    local season = ensureTable(global, "pvpSeason")
+    for _, name in ipairs(PVP_SEASON_TABLES) do
+      ensureTable(season, name)
+    end
+    for _, char in pairs(ensureTable(db, "chars")) do
+      if type(char) == "table" then
+        ensureTable(char, "pvpMissions")
+      end
+    end
+  end,
+  -- v13: one table of data per guild (guilds[guildKey], see Store.ForGuild) and account-wide settings at the root.
+  [13] = function(db)
+    ensureTable(db, "guilds")
+    local settings = ensureTable(db, "settings")
+    ensureTable(settings, "minimap")
+    ensureTable(settings, "pvp")
+    ensureTable(db, "chars")
+    db.global = nil
+  end,
+}
+
+local function versionOf(db)
+  local global = type(db.global) == "table" and db.global or nil
+  local version = (global and global.schemaVersion) or db.schemaVersion
+  if type(version) == "number" and version >= 0 and version % 1 == 0 then
+    return version
+  end
+  return 0
+end
+
+-- Returns db, or nil plus "newer_schema" when the saved data comes from a newer addon version.
+-- In that case the raw table is left untouched so the local data survives a downgrade.
+function Store.Load(raw, targetVersion)
+  targetVersion = targetVersion or ns.Constants.SCHEMA_VERSION
+  local db = type(raw) == "table" and raw or {}
+
+  local version = versionOf(db)
+  if version > targetVersion then
+    return nil, "newer_schema"
+  end
+
+  for target = version + 1, targetVersion do
+    MIGRATIONS[target](db)
+  end
+  if targetVersion >= 13 then
+    db.schemaVersion = targetVersion
+  else
+    ensureTable(db, "global").schemaVersion = targetVersion
+  end
+  return db
+end
+
+-- The data table of one guild, created with every sub-table the code reads. Two guild keys never share a table.
+function Store.ForGuild(db, guildKey)
+  local guild = ensureTable(ensureTable(db, "guilds"), guildKey)
+  for _, name in ipairs({
+    "roster",
+    "events",
+    "loot",
+    "templates",
+    "pvpStats",
+    "pvpResets",
+    "blacklist",
+    "readinessRules",
+    "rosters",
+    "members",
+    "recipes",
+  }) do
+    ensureTable(guild, name)
+  end
+  local sync = ensureTable(guild, "sync")
+  ensureTable(sync, "seen")
+  ensureTable(sync, "tombstones")
+  local season = ensureTable(guild, "pvpSeason")
+  for _, name in ipairs(PVP_SEASON_TABLES) do
+    ensureTable(season, name)
+  end
+  return guild
+end
+
+local function nameKeyOf(identity)
+  if identity.name and identity.realm then
+    return ("name:%s-%s"):format(identity.name, identity.realm)
+  end
+  return nil
+end
+
+-- The key under which the data of the guild described by `identity` (GuildIdentity.Current) is saved. The club id can
+-- be unavailable at one login and available at the next, so one guild must not end up with two data sets:
+--   1. a club key whose entry exists: use it;
+--   2. a club key without an entry, but an entry under the name key: move it to the club key (never over an existing
+--      entry) and use it;
+--   3. only a name key: use the club entry whose saved meta has the same name and realm, else the name key.
+function Store.ResolveGuildKey(db, identity)
+  local guilds = ensureTable(db, "guilds")
+  local nameKey = nameKeyOf(identity)
+  if identity.source == "club" then
+    if guilds[identity.key] == nil and nameKey and type(guilds[nameKey]) == "table" then
+      guilds[identity.key] = guilds[nameKey]
+      guilds[nameKey] = nil
+    end
+    return identity.key
+  end
+  local matches = {}
+  for key, guild in pairs(guilds) do
+    local meta = type(guild) == "table" and guild.meta
+    if
+      type(key) == "string"
+      and key:sub(1, 5) == "club:"
+      and type(meta) == "table"
+      and meta.name == identity.name
+      and meta.realm == identity.realm
+    then
+      matches[#matches + 1] = key
+    end
+  end
+  table.sort(matches)
+  return matches[1] or identity.key
+end
+
+-- The runtime view of the saved root for one guild. Never assign it back to the SavedVariable. With `identity`, the
+-- name and realm of the guild are saved in guild.meta (kept when the client does not return them).
+function Store.View(db, guildKey, identity)
+  local guild = Store.ForGuild(db, guildKey)
+  if identity then
+    local meta = ensureTable(guild, "meta")
+    meta.name = identity.name or meta.name
+    meta.realm = identity.realm or meta.realm
+  end
+  return {
+    global = guild,
+    settings = db.settings,
+    chars = db.chars,
+    root = db,
+    guildKey = guildKey,
+    schemaVersion = db.schemaVersion,
+  }
+end
+
+function Store.GetChar(db, identityKey)
+  local char = ensureTable(db.chars, identityKey)
+  ensureTable(char, "profile")
+  ensureTable(char, "readiness")
+  ensureTable(char, "publish")
+  ensureTable(char, "pvp")
+  ensureTable(char, "recipes")
+  local missions = ensureTable(char, "pvpMissions")
+  ensureTable(missions, "kills")
+  ensureTable(missions, "claims")
+  local sync = ensureTable(char, "pvpSync")
+  if type(sync.rev) ~= "number" or sync.rev < 0 or sync.rev % 1 ~= 0 then
+    sync.rev = 0
+  end
+  return char
+end
+
+ns.Store = Store

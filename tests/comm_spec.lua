@@ -1,9 +1,9 @@
 -- Exercises the whole receive/send pipeline with the real codec, protocol, inbox and queue.
 -- Only the client (AceComm, timers, platform) is faked.
 local function load_addon()
-  dofile("NrageAssistant/Libs/LibStub/LibStub.lua")
-  dofile("NrageAssistant/Libs/LibDeflate/LibDeflate.lua")
-  dofile("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
+  dofile("GuildAssistant/Libs/LibStub/LibStub.lua")
+  dofile("GuildAssistant/Libs/LibDeflate/LibDeflate.lua")
+  dofile("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
 
   local ns = {}
   for _, path in ipairs({
@@ -37,7 +37,7 @@ local function load_addon()
     "Sync/Transfer",
     "Sync/Comm",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end
@@ -90,7 +90,7 @@ local function build_env()
     end,
   }
   env.codec = ns.Codec.New({
-    serialize = _G.LibStub("NrageAssistant-LibSerialize"),
+    serialize = _G.LibStub("GuildAssistant-LibSerialize"),
     deflate = _G.LibStub("LibDeflate"),
   })
   env.guard = {}
@@ -660,6 +660,21 @@ describe("Comm whisper guards", function()
     local text = snapshot_text("s-1", { event_item("ev-1") })
     assert.are.equal("forbidden", select(2, env.comm:HandleMessage(text, "Raider-Realm", "WHISPER")))
     assert.are.equal("unknown_sender", select(2, env.comm:HandleMessage(text, "Stranger-Realm", "WHISPER")))
+    assert.are.equal(0, decoded)
+    assert.is_nil(next(env.events))
+  end)
+
+  it("drops a whisper from someone who is not in the guild roster before decoding or rate limiting it", function()
+    local decoded = 0
+    local original = env.codec.Decode
+    env.codec.Decode = function(...)
+      decoded = decoded + 1
+      return original(...)
+    end
+    local text = snapshot_text("s-2", { event_item("ev-2") })
+    for _ = 1, 20 do
+      assert.are.same({ false, "unknown_sender" }, { env.comm:HandleMessage(text, "Outsider-OtherRealm", "WHISPER") })
+    end
     assert.are.equal(0, decoded)
     assert.is_nil(next(env.events))
   end)

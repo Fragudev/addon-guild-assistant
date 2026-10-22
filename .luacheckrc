@@ -1,13 +1,14 @@
 std = "lua51"
 
 -- Third-party code, vendored unmodified.
-exclude_files = { "NrageAssistant/Libs/**" }
+exclude_files = { "GuildAssistant/Libs/**" }
 max_line_length = 120
 
 -- Addon entry files receive (addonName, ns) via varargs and write SavedVariables.
 globals = {
-  "NrageAssistantDB",
-  "SLASH_NRAGE1",
+  "GuildAssistantDB",
+  "SLASH_GUILDASSISTANT1",
+  "SLASH_GUILDASSISTANT2",
   "SlashCmdList",
 }
 
@@ -104,4 +105,4 @@ files["tests/"] = {
 }
 
 -- The translation catalogs hold whole sentences as keys, which do not wrap.
-files["NrageAssistant/Locales/**"] = { max_line_length = false }
+files["GuildAssistant/Locales/**"] = { max_line_length = false }

@@ -1,6 +1,6 @@
 -- Recipes: the service (scan, chunks, index), the wire validation and the receiving side.
 local function load_addon()
-  dofile("NrageAssistant/Libs/LibStub/LibStub.lua")
+  dofile("GuildAssistant/Libs/LibStub/LibStub.lua")
   local ns = {}
   for _, path in ipairs({
     "Core/Constants",
@@ -12,7 +12,7 @@ local function load_addon()
     "Sync/SyncRules",
     "Sync/RecipeSync",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

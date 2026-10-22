@@ -1,6 +1,6 @@
 local function load_log()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/PvPProbeLog.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/PvPProbeLog.lua"))("GuildAssistant", ns)
   return ns.PvPProbeLog
 end
 

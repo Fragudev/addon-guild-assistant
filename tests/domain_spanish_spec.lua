@@ -17,7 +17,7 @@ local function load_spanish(locale)
     "Domain/TemplateService",
     "Domain/ReportService",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     if path == "Locales/esES" then
       ns.Locale.Use(locale)
     end

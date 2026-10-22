@@ -2,16 +2,16 @@ local ns_codec
 
 -- Uses the real vendored libraries: the codec is only worth testing against them.
 local function load_codec()
-  dofile("NrageAssistant/Libs/LibStub/LibStub.lua")
-  dofile("NrageAssistant/Libs/LibDeflate/LibDeflate.lua")
-  dofile("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
+  dofile("GuildAssistant/Libs/LibStub/LibStub.lua")
+  dofile("GuildAssistant/Libs/LibDeflate/LibDeflate.lua")
+  dofile("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
 
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Sync/Codec.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Sync/Codec.lua"))("GuildAssistant", ns)
   ns_codec = ns.Codec
   local codec = ns.Codec.New({
-    serialize = _G.LibStub("NrageAssistant-LibSerialize"),
+    serialize = _G.LibStub("GuildAssistant-LibSerialize"),
     deflate = _G.LibStub("LibDeflate"),
   })
   return codec, ns.Constants
@@ -91,7 +91,7 @@ describe("Codec", function()
   end)
 
   it("rejects a valid frame whose content is not a table", function()
-    local libs = { serialize = _G.LibStub("NrageAssistant-LibSerialize"), deflate = _G.LibStub("LibDeflate") }
+    local libs = { serialize = _G.LibStub("GuildAssistant-LibSerialize"), deflate = _G.LibStub("LibDeflate") }
     local serialized = libs.serialize:Serialize("just a string")
     local text = libs.deflate:EncodeForWoWAddonChannel(libs.deflate:CompressDeflate(serialized))
     local value, reason = codec:Decode(text)
@@ -100,7 +100,7 @@ describe("Codec", function()
   end)
 
   it("rejects content that decompresses beyond the limit", function()
-    local libs = { serialize = _G.LibStub("NrageAssistant-LibSerialize"), deflate = _G.LibStub("LibDeflate") }
+    local libs = { serialize = _G.LibStub("GuildAssistant-LibSerialize"), deflate = _G.LibStub("LibDeflate") }
     local big = libs.serialize:Serialize({ blob = ("x"):rep(Constants.MAX_DECOMPRESSED_BYTES + 1) })
     local text = libs.deflate:EncodeForWoWAddonChannel(libs.deflate:CompressDeflate(big))
     assert.is_true(#text <= Constants.MAX_ENCODED_BYTES)
@@ -163,13 +163,13 @@ describe("Vendored LibSerialize", function()
   end
 
   it("never divides by the number it is serializing", function()
-    local source = read("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
+    local source = read("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
     assert.is_nil(source:find("1 / num", 1, true))
   end)
 
   it("has its own name, so another addon's copy is never picked instead", function()
-    local source = read("NrageAssistant/Libs/LibSerialize/LibSerialize.lua")
-    assert.is_truthy(source:find('"NrageAssistant-LibSerialize"', 1, true))
+    local source = read("GuildAssistant/Libs/LibSerialize/LibSerialize.lua")
+    assert.is_truthy(source:find('"GuildAssistant-LibSerialize"', 1, true))
     assert.is_nil(source:find('"LibSerialize", ', 1, true))
   end)
 end)

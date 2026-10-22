@@ -15,7 +15,7 @@ local function load_modules()
     "Domain/LootService",
     "Commands/LootCommands",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

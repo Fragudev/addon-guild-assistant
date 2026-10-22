@@ -1,7 +1,7 @@
 # Sync protocol
 
-How Nrage Assistant clients talk to each other. The limits quoted here are the values in
-`NrageAssistant/Core/Constants.lua`, which is the source of truth.
+How Guild Assistant clients talk to each other. The limits quoted here are the values in
+`GuildAssistant/Core/Constants.lua`, which is the source of truth.
 
 ## Principles
 
@@ -17,7 +17,8 @@ How Nrage Assistant clients talk to each other. The limits quoted here are the v
 
 ## Transport
 
-- Prefix `NRAGE`, registered only after the addon has passed its access checks (guild Nrage, Alliance, PvP ruleset).
+- Prefix `GUILDASST`, registered only after the addon has passed its access check (the player is in a guild). The addon works for any
+  guild; a message is only accepted from a sender found in the local guild roster.
 - AceComm on `GUILD` for shared data and on `WHISPER` for snapshots and PvP ledger pages. Any other channel is
   ignored.
 - Encoding: LibSerialize, then LibDeflate compression, then the addon-channel encoding. A guild message may be up to
@@ -180,8 +181,8 @@ after 300 seconds without messages. Like `PVP_KILL`, a step is never queued duri
 
 ## Guild map positions
 
-A second addon prefix, `NRAGEPOS`, carries the position of members who chose to share it. It does **not** use the
-`NRAGE` envelope, AceComm, LibSerialize or LibDeflate, so `PROTOCOL_MINOR` does not change and older clients simply
+A second addon prefix, `GUILDASSTPOS`, carries the position of members who chose to share it. It does **not** use the
+`GUILDASST` envelope, AceComm, LibSerialize or LibDeflate, so `PROTOCOL_MINOR` does not change and older clients simply
 never register the prefix. The reasons: with 40 members sending every few seconds, the `(sender, id)` seen cache of
 the main inbox (one ring for all senders, 200 entries) would be evicted within seconds, weakening duplicate
 protection for real data; and four numbers need no serialization, while a strict text pattern is a small attack
@@ -312,7 +313,7 @@ minor 5, plan 3.4.1 and 3.4.2).
 
 ## PvP seasons
 
-A season system for PvP (protocol minor 7, `docs/PVP_MISSIONS_PLAN.md`): admins define missions that award points,
+A season system for PvP (protocol minor 7): admins define missions that award points,
 members claim them, an admin or a PvP officer approves each claim, the points make a season ranking, and the top 10
 get a prize at the end. Points live in an **append-only ledger of grants**; the ranking is derived from it on every
 client, so nothing but the grants has to be trusted.
@@ -360,7 +361,7 @@ client, so nothing but the grants has to be trusted.
 - **Order:** a record that reaches a client before the one that authorises it (a grant of an officer before the officer
   record, a claim before its mission) is refused and comes back with the next catch-up. Records an admin wrote do not
   depend on any other and may arrive in any order (a void before its grant, a grant before its season).
-- **Interim commands:** until the PvP tab has its own sub-tabs, `/nrage pvp` (`season`, `officer`, `mission`, `claim`,
+- **Interim commands:** until the PvP tab has its own sub-tabs, `/ga pvp` (`season`, `officer`, `mission`, `claim`,
   `queue`, `approve`, `reject`, `grant`) drives the same service, for testing.
 
 ## Recipes
@@ -426,7 +427,7 @@ PvP seasons: 60 seasons, 50 missions per season, 3000 grants per season (never e
 
 ## Text import and export
 
-`NRAGE1:` followed by LibSerialize, LibDeflate and the print encoding of `{ items = { { t, p } ... } }`, the same
+`GUILDA1:` followed by LibSerialize, LibDeflate and the print encoding of `{ items = { { t, p } ... } }`, the same
 raid items a snapshot carries (never PvP records or the blacklist: an imported `PVP_STATS`, `PVP_RESET` or
 `BLACKLIST_*` item is skipped). Import requires the manage-events role, accepts at most 32 KB of text, 256 KB decoded and
 3000 items, and applies each item like a received message, with the sender `import`.

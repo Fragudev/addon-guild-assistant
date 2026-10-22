@@ -1,23 +1,24 @@
-local function load_store()
+local function load_store_current()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Constants.lua"))("NrageAssistant", ns)
-  assert(loadfile("NrageAssistant/Core/Store.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Store.lua"))("GuildAssistant", ns)
   return ns.Store, ns.Constants
 end
 
-describe("Store.Load", function()
-  local Store, Constants = load_store()
+-- Migrations 2 to 12 work on the old db.global layout: their specs load up to schema 12, migration 13 has its own.
+local function load_store()
+  local Store, Constants = load_store_current()
+  local legacy = {
+    Load = function(raw)
+      return Store.Load(raw, 12)
+    end,
+    GetChar = Store.GetChar,
+  }
+  return legacy, Constants
+end
 
-  it("builds the full layout from an empty database", function()
-    local db = Store.Load(nil)
-    assert.are.equal(Constants.SCHEMA_VERSION, db.global.schemaVersion)
-    assert.is_table(db.global.roster)
-    assert.is_table(db.global.events)
-    assert.is_table(db.global.loot)
-    assert.is_table(db.global.sync.seen)
-    assert.is_table(db.global.sync.tombstones)
-    assert.is_table(db.chars)
-  end)
+describe("Store.Load", function()
+  local Store = load_store()
 
   it("migrates a v1 database and keeps its content", function()
     local raw = { schemaVersion = 1, keep = "me" }
@@ -63,13 +64,13 @@ describe("Store.GetChar", function()
 
   it("creates profile and readiness once per identity key", function()
     local db = Store.Load(nil)
-    local char = Store.GetChar(db, "Nrager-ClassicBetaPvP")
+    local char = Store.GetChar(db, "Guildmate-ClassicBetaPvP")
     char.profile.level = 60
     assert.is_table(char.readiness)
     assert.is_nil(char.consent)
     assert.is_table(char.publish)
     assert.is_table(char.pvp)
-    assert.are.equal(60, Store.GetChar(db, "Nrager-ClassicBetaPvP").profile.level)
+    assert.are.equal(60, Store.GetChar(db, "Guildmate-ClassicBetaPvP").profile.level)
   end)
 end)
 
@@ -362,5 +363,174 @@ describe("Store migration to schema 12", function()
     local char = Store.GetChar(db, "New-Realm")
     assert.are.same({}, char.pvpMissions.kills)
     assert.are.same({}, char.pvpMissions.claims)
+  end)
+end)
+
+describe("Store migration to schema 13", function()
+  local Store, Constants = load_store_current()
+
+  it("is the current schema", function()
+    assert.are.equal(13, Constants.SCHEMA_VERSION)
+  end)
+
+  it("builds the root layout from an empty database", function()
+    local db = Store.Load(nil)
+    assert.are.equal(13, db.schemaVersion)
+    assert.are.same({}, db.guilds)
+    assert.are.same({ minimap = {}, pvp = {} }, db.settings)
+    assert.are.same({}, db.chars)
+    assert.is_nil(db.global)
+  end)
+
+  it("drops the old global table, keeps the characters and is idempotent", function()
+    local raw = {
+      global = { schemaVersion = 12, roster = { x = 1 }, settings = { minimap = { angle = 90 } } },
+      chars = { ["Me-Realm"] = { profile = { level = 60 } } },
+    }
+    local db = Store.Load(raw)
+    assert.are.equal(raw, db)
+    assert.is_nil(db.global)
+    assert.are.equal(13, db.schemaVersion)
+    assert.are.equal(60, db.chars["Me-Realm"].profile.level)
+    db.settings.language = "es"
+    local again = Store.Load(db)
+    assert.are.equal("es", again.settings.language)
+    assert.are.equal(13, again.schemaVersion)
+  end)
+
+  it("refuses data from a newer schema", function()
+    local raw = { schemaVersion = 99, guilds = { ["club:1"] = {} } }
+    local db, err = Store.Load(raw)
+    assert.is_nil(db)
+    assert.are.equal("newer_schema", err)
+    assert.are.equal(99, raw.schemaVersion)
+  end)
+end)
+
+describe("Store.ForGuild", function()
+  local Store = load_store_current()
+
+  it("creates every table the code reads", function()
+    local guild = Store.ForGuild(Store.Load(nil), "club:1")
+    for _, name in ipairs({
+      "roster",
+      "events",
+      "loot",
+      "templates",
+      "pvpStats",
+      "pvpResets",
+      "blacklist",
+      "readinessRules",
+      "rosters",
+      "members",
+      "recipes",
+    }) do
+      assert.is_table(guild[name], name)
+    end
+    assert.is_table(guild.sync.seen)
+    assert.is_table(guild.sync.tombstones)
+    assert.is_table(guild.pvpSeason.seasons)
+    assert.is_table(guild.pvpSeason.deliveries)
+  end)
+
+  it("keeps the data of two guilds apart", function()
+    local db = Store.Load(nil)
+    local a = Store.ForGuild(db, "club:1")
+    local b = Store.ForGuild(db, "name:Other-Realm")
+    a.roster["Ann-Realm"] = { level = 60 }
+    a.events.e1 = { title = "Raid" }
+    a.loot.l1 = {}
+    a.sync.tombstones.t = {}
+    a.members.m = {}
+    assert.are_not.equal(a, b)
+    for _, name in ipairs({ "roster", "events", "loot", "members" }) do
+      assert.are_not.equal(a[name], b[name], name)
+      assert.is_nil(next(b[name]), name)
+    end
+    assert.is_nil(next(b.sync.tombstones))
+    assert.are.equal(a, Store.ForGuild(db, "club:1"))
+  end)
+
+  it("repairs a guild table that is damaged", function()
+    local db = Store.Load({ guilds = { ["club:1"] = { roster = "oops", sync = 5 } } })
+    local guild = Store.ForGuild(db, "club:1")
+    assert.is_table(guild.roster)
+    assert.is_table(guild.sync.seen)
+  end)
+end)
+
+describe("Store.View", function()
+  local Store = load_store_current()
+
+  it("exposes one guild, the account settings and the characters, and is never part of the root", function()
+    local db = Store.Load(nil)
+    local view = Store.View(db, "club:1")
+    assert.are.equal(db.guilds["club:1"], view.global)
+    assert.are.equal(db.settings, view.settings)
+    assert.are.equal(db.chars, view.chars)
+    assert.are.equal(db, view.root)
+    assert.are.equal(13, view.schemaVersion)
+    for _, value in pairs(db) do
+      assert.are_not.equal(view, value)
+    end
+  end)
+
+  it("shares the account settings between two guilds but not their data", function()
+    local db = Store.Load(nil)
+    local a, b = Store.View(db, "club:1"), Store.View(db, "club:2")
+    a.settings.language = "es"
+    assert.are.equal("es", b.settings.language)
+    a.global.events.e = { title = "Raid" }
+    assert.is_nil(b.global.events.e)
+  end)
+end)
+
+describe("Store.ResolveGuildKey", function()
+  local Store = load_store_current()
+  local club = { key = "club:7", source = "club", name = "G", realm = "R" }
+  local byName = { key = "name:G-R", source = "name", name = "G", realm = "R" }
+
+  it("uses the club entry when it exists", function()
+    local db = Store.Load(nil)
+    db.guilds["club:7"] = { marker = "club" }
+    db.guilds["name:G-R"] = { marker = "name" }
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, club))
+    assert.are.equal("name", db.guilds["name:G-R"].marker)
+  end)
+
+  it("moves the name entry to the club key when the club id appears late", function()
+    local db = Store.Load(nil)
+    local data = { marker = "name" }
+    db.guilds["name:G-R"] = data
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, club))
+    assert.are.equal(data, db.guilds["club:7"])
+    assert.is_nil(db.guilds["name:G-R"])
+  end)
+
+  it("never overwrites an existing club entry and starts fresh when there is nothing to move", function()
+    local db = Store.Load(nil)
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, club))
+    assert.is_nil(db.guilds["club:7"])
+  end)
+
+  it("uses the club entry with the same saved name and realm when only the name key is available", function()
+    local db = Store.Load(nil)
+    Store.View(db, "club:7", club).global.roster.A = {}
+    Store.View(db, "club:8", { key = "club:8", name = "Other", realm = "R" })
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, byName))
+    assert.is_nil(db.guilds["name:G-R"])
+  end)
+
+  it("uses the name key when no club entry matches", function()
+    local db = Store.Load(nil)
+    Store.View(db, "club:8", { key = "club:8", name = "Other", realm = "R" })
+    assert.are.equal("name:G-R", Store.ResolveGuildKey(db, byName))
+  end)
+
+  it("saves the name and realm of the guild and keeps them when the client stops returning them", function()
+    local db = Store.Load(nil)
+    Store.View(db, "club:7", club)
+    Store.View(db, "club:7", { key = "club:7", source = "club" })
+    assert.are.same({ name = "G", realm = "R" }, db.guilds["club:7"].meta)
   end)
 end)

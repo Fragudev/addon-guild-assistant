@@ -11,7 +11,7 @@ local function load_modules()
     "Domain/EventService",
     "Domain/TemplateService",
   }) do
-    assert(loadfile("NrageAssistant/" .. path .. ".lua"))("NrageAssistant", ns)
+    assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
   return ns
 end

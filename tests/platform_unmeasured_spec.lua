@@ -2,7 +2,7 @@
 -- behind pcall and an availability check, so a missing or restricted API degrades to "not available".
 local function load_platform()
   local ns = {}
-  assert(loadfile("NrageAssistant/Core/Platform.lua"))("NrageAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Platform.lua"))("GuildAssistant", ns)
   return ns.Platform
 end
 
@@ -28,7 +28,7 @@ describe("Platform guild leader and rank index", function()
   it("returns the rank name and the rank index of the own character", function()
     with_globals({
       GetGuildInfo = function()
-        return "Nrage", "Guild Master", 0
+        return "Example Guild", "Guild Master", 0
       end,
     }, function()
       local name, index = load_platform().GetOwnGuildRank()
@@ -40,7 +40,7 @@ describe("Platform guild leader and rank index", function()
   it("gives no index when the client does not return a number", function()
     with_globals({
       GetGuildInfo = function()
-        return "Nrage", "Soldado"
+        return "Example Guild", "Soldado"
       end,
     }, function()
       local name, index = load_platform().GetOwnGuildRank()
