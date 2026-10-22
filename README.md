@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="Licence: proprietary" src="https://img.shields.io/badge/licence-proprietary-e6ba66?style=flat-square&labelColor=1c1a17"></a>
+  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-e6ba66?style=flat-square&labelColor=1c1a17"></a>
   <img alt="World of Warcraft: Forever, client 1.60.1" src="https://img.shields.io/badge/WoW-Forever_1.60.1-94c9ff?style=flat-square&labelColor=1c1a17">
   <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-fabf4d?style=flat-square&labelColor=1c1a17">
 </p>
@@ -232,4 +232,4 @@ shipped: `tests/` and `docs/` stay out of the zip.
 
 Guild Assistant started as a fork of Nrage Assistant.
 
-Proprietary. All rights reserved. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
