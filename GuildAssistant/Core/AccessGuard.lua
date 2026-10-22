@@ -23,7 +23,10 @@ function AccessGuard.SameGuild(a, b)
   if a.key == b.key then
     return true
   end
-  return a.source ~= b.source and a.name ~= nil and a.name == b.name
+  return a.source ~= b.source
+    and a.name ~= nil
+    and a.name == b.name
+    and (not (a.realm and b.realm) or a.realm == b.realm)
 end
 
 local Session = {}

@@ -792,7 +792,7 @@ end
 
 local function Activate(identity)
   ns.guildIdentity = identity
-  ns.db = ns.Store.View(ns.root, identity.key)
+  ns.db = ns.Store.View(ns.root, ns.Store.ResolveGuildKey(ns.root, identity), identity)
   ns.active = true
   -- The saved data of this character keeps the key it always had; the shared name is resolved later.
   -- The roles the guild master assigned are read from the saved assignments.

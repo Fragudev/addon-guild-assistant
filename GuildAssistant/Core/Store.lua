@@ -6,7 +6,8 @@ local _, ns = ...
 -- Settings are account-wide so they work before the guild is known. The data of a guild never mixes with another's:
 -- at runtime ns.db is a view { global = guilds[key], settings, chars, root } built on activation (Core/Init.lua),
 -- so the code reads ns.db.global without knowing about the guild key. The view is never saved.
---   guilds[guildKey] = { roster, events, loot, templates, sync = { seen, tombstones }, pvpStats = {}, pvpResets = {},
+--   guilds[guildKey] = { meta = { name, realm }, roster, events, loot, templates,
+--                 sync = { seen, tombstones }, pvpStats = {}, pvpResets = {},
 --                 blacklist = {}, readinessRules = { rev, updatedAt, updatedBy, rules },
 --                 rosters = { [id] = { id, name, rev, ... } }, members = { [key] = { role, rosterId, rev, ... } },
 --                 recipes = { [memberKey] = { [professionId] = { name, ids, rev, receivedAt } } },
@@ -192,10 +193,57 @@ function Store.ForGuild(db, guildKey)
   return guild
 end
 
--- The runtime view of the saved root for one guild. Never assign it back to the SavedVariable.
-function Store.View(db, guildKey)
+local function nameKeyOf(identity)
+  if identity.name and identity.realm then
+    return ("name:%s-%s"):format(identity.name, identity.realm)
+  end
+  return nil
+end
+
+-- The key under which the data of the guild described by `identity` (GuildIdentity.Current) is saved. The club id can
+-- be unavailable at one login and available at the next, so one guild must not end up with two data sets:
+--   1. a club key whose entry exists: use it;
+--   2. a club key without an entry, but an entry under the name key: move it to the club key (never over an existing
+--      entry) and use it;
+--   3. only a name key: use the club entry whose saved meta has the same name and realm, else the name key.
+function Store.ResolveGuildKey(db, identity)
+  local guilds = ensureTable(db, "guilds")
+  local nameKey = nameKeyOf(identity)
+  if identity.source == "club" then
+    if guilds[identity.key] == nil and nameKey and type(guilds[nameKey]) == "table" then
+      guilds[identity.key] = guilds[nameKey]
+      guilds[nameKey] = nil
+    end
+    return identity.key
+  end
+  local matches = {}
+  for key, guild in pairs(guilds) do
+    local meta = type(guild) == "table" and guild.meta
+    if
+      type(key) == "string"
+      and key:sub(1, 5) == "club:"
+      and type(meta) == "table"
+      and meta.name == identity.name
+      and meta.realm == identity.realm
+    then
+      matches[#matches + 1] = key
+    end
+  end
+  table.sort(matches)
+  return matches[1] or identity.key
+end
+
+-- The runtime view of the saved root for one guild. Never assign it back to the SavedVariable. With `identity`, the
+-- name and realm of the guild are saved in guild.meta (kept when the client does not return them).
+function Store.View(db, guildKey, identity)
+  local guild = Store.ForGuild(db, guildKey)
+  if identity then
+    local meta = ensureTable(guild, "meta")
+    meta.name = identity.name or meta.name
+    meta.realm = identity.realm or meta.realm
+  end
   return {
-    global = Store.ForGuild(db, guildKey),
+    global = guild,
     settings = db.settings,
     chars = db.chars,
     root = db,

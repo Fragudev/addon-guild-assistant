@@ -484,3 +484,53 @@ describe("Store.View", function()
     assert.is_nil(b.global.events.e)
   end)
 end)
+
+describe("Store.ResolveGuildKey", function()
+  local Store = load_store_current()
+  local club = { key = "club:7", source = "club", name = "G", realm = "R" }
+  local byName = { key = "name:G-R", source = "name", name = "G", realm = "R" }
+
+  it("uses the club entry when it exists", function()
+    local db = Store.Load(nil)
+    db.guilds["club:7"] = { marker = "club" }
+    db.guilds["name:G-R"] = { marker = "name" }
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, club))
+    assert.are.equal("name", db.guilds["name:G-R"].marker)
+  end)
+
+  it("moves the name entry to the club key when the club id appears late", function()
+    local db = Store.Load(nil)
+    local data = { marker = "name" }
+    db.guilds["name:G-R"] = data
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, club))
+    assert.are.equal(data, db.guilds["club:7"])
+    assert.is_nil(db.guilds["name:G-R"])
+  end)
+
+  it("never overwrites an existing club entry and starts fresh when there is nothing to move", function()
+    local db = Store.Load(nil)
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, club))
+    assert.is_nil(db.guilds["club:7"])
+  end)
+
+  it("uses the club entry with the same saved name and realm when only the name key is available", function()
+    local db = Store.Load(nil)
+    Store.View(db, "club:7", club).global.roster.A = {}
+    Store.View(db, "club:8", { key = "club:8", name = "Other", realm = "R" })
+    assert.are.equal("club:7", Store.ResolveGuildKey(db, byName))
+    assert.is_nil(db.guilds["name:G-R"])
+  end)
+
+  it("uses the name key when no club entry matches", function()
+    local db = Store.Load(nil)
+    Store.View(db, "club:8", { key = "club:8", name = "Other", realm = "R" })
+    assert.are.equal("name:G-R", Store.ResolveGuildKey(db, byName))
+  end)
+
+  it("saves the name and realm of the guild and keeps them when the client stops returning them", function()
+    local db = Store.Load(nil)
+    Store.View(db, "club:7", club)
+    Store.View(db, "club:7", { key = "club:7", source = "club" })
+    assert.are.same({ name = "G", realm = "R" }, db.guilds["club:7"].meta)
+  end)
+end)
