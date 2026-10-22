@@ -1,0 +1,25 @@
+.gitignore
+  s_6762a89caa723f::t_75679f233f2e54 6
+docs/API_NOTES.md
+  s_6762a89caa723f::t_6f6030b1f975e6 52,77,131,169
+docs/PROTOCOL.md
+  s_6762a89caa723f::t_1e1a5443056475 316
+release-notes/v0.1.0.md
+  s_6762a89caa723f::t_f9eb1d1bac9e3f 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d0e7dd0a7cbab1669ea4705e08f19841c3a050f0",
+  "prompts": {},
+  "sessions": {
+    "s_6762a89caa723f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9863eff-9575-46c4-b096-2b4299b92bd1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
