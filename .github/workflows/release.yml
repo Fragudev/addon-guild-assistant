@@ -18,8 +18,8 @@ permissions:
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
-  # Empty until the new Guild Assistant CurseForge project exists; the upload step refuses to run.
-  CF_PROJECT_ID: ""
+  # The Guild Assistant project on CurseForge.
+  CF_PROJECT_ID: "1759329"
 
 jobs:
   ci:
