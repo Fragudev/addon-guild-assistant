@@ -89,6 +89,8 @@ read_globals = {
   "time",
   "UIParent",
   "UISpecialFrames",
+  "UIErrorsFrame",
+  "UnitExists",
   "UnitClass",
   "UnitFactionGroup",
   "UnitAffectingCombat",

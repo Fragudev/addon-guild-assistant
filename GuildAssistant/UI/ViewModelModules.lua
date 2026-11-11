@@ -29,6 +29,10 @@ ViewModel.MODULE_TEXT = ns.Locale.Table(function()
       label = L("Layers"),
       description = L("Your layer, the layer swaps and the layer popup."),
     },
+    groups = {
+      label = L("Groups"),
+      description = L("The group board and the popup of join requests."),
+    },
     map = {
       label = L("Map pins"),
       description = L("Guildmates' positions on the map and the minimap."),

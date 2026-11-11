@@ -23,7 +23,10 @@ describe("ModuleRegistry", function()
   end)
 
   it("lists the toggleable modules in the order of the Modules tab", function()
-    assert.are.same({ "professions", "raid", "loot", "pvp", "layers", "map", "blacklist" }, ids(Registry.List()))
+    assert.are.same(
+      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist" },
+      ids(Registry.List())
+    )
   end)
 
   it("finds the module that owns a tab", function()

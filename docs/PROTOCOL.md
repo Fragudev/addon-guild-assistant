@@ -35,14 +35,15 @@ How Guild Assistant clients talk to each other. The limits quoted here are the v
 ```
 
 - `v` must equal the receiver's major version (currently 1); a different major is reported as an incompatible
-  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 11): a client
+  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 14): a client
   that does not know a field drops it while validating, and a client that does not know a message type drops the
   message as `unknown_type`, so older and newer clients keep talking. Minor 5 added the roster and recipe messages and fields
   below; minor 6 added the layer messages (`LAYER_STATE`, `LAYER_SWAP`); minor 7 added the PvP season messages
   (`PVP_SEASON` and the others of the "PvP seasons" section); minor 8 added event sign-up (`SIGNUP_UPSERT`); minor 9
   replaced `READINESS_RULES` with the per-roster `ROSTER_RULES`; minor 10 added the rank map (`RANK_MAP`, see
   *Rank mapping*); minor 11 added `PVP_PROGRESS`, the optional `queue` of `PVP_LEDGER_REQ`, claims in the PvP
-  catch-up between approvers and the optional mission goal fields (see *PvP seasons*).
+  catch-up between approvers and the optional mission goal fields (see *PvP seasons*);
+  minor 13 added the Groups post (`LFG_POST`, see *Groups*) and minor 14 its application steps (`LFG_APPLY`).
 - `id` is 1 to 40 characters from `[A-Za-z0-9_-]`; a `(sender, id)` pair is processed once (a bounded cache of the
   last 200).
 
@@ -75,6 +76,8 @@ the length given by the model (title 60, encounter 60, item name 60, reason 100,
 | `MEMBER_DELETE` | guild | `key`, `rev` | gm, cogm; rl, only for a member of its own roster |
 | `LAYER_STATE` | guild | `map` (0 to 9999), `layer` (0 to 2147483647; `0` means "forget me") | anyone, for themselves; the layer belongs to the sender |
 | `LAYER_SWAP` | guild | `rid`, `s` (`request`, `offer`, `assign` or `close`), and by step: `map` + `layer` (`request`), `helper` (`assign`), `o` (`close`: `done`, `expired`, `cancelled`, `declined` or `unconfirmed`) | anyone; the actor is the sender |
+| `LFG_POST` | guild | `pid`, `rev`, `s` (`open` or `closed`); open: `kind`, `title`, `needs{tank, heal, dps}`, `members`, optional `minLevel`, `note` and `party[]` (`c`, optional `r`); closed: `o` (`full`, `cancelled` or `expired`) | anyone; the owner is the sender |
+| `LFG_APPLY` | guild | `pid`, `s` (`apply`, `withdraw`, `accept` or `decline`); `apply`: `role`, optional `note`; `accept` and `decline`: `to` | anyone; the actor is the sender |
 | `ROSTER_RULES` | guild | `rosterId`, `rev`, `updatedAt`, `rules[]` (up to 30 rules, each validated: see Readiness rules per roster) | gm, cogm; rl for its own roster |
 | `LOOT_AWARD` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `characterKey`, `reason` | gm, cogm; officer and rl, for the roster of the event |
 | `PVP_SEASON` | guild | `id`, `name` (1 to 40 bytes), `startsAt`, `endsAt`, `state` (`active` or `closed`), `rev`, `updatedAt` | gm, cogm |
@@ -187,6 +190,41 @@ Only the requester of a `rid` may send `assign` and `close`, with the one except
 assigned helper; the receiver checks this against the sender of the stored request, so another member cannot
 hijack or close a swap. A client takes part in at most one swap at a time and drops one whose `close` was lost
 after 300 seconds without messages. Like `PVP_KILL`, a step is never queued during an encounter lockdown.
+
+## Groups
+
+`LFG_POST` is protocol minor 13 and `LFG_APPLY` is minor 14. Older clients drop both types with `unknown_type`, so a member without this version does not
+see the board. Both are **guild channel only**, live only: nothing is saved, and during an encounter lockdown the send
+is refused with `locked` instead of queued. A sender must be a known guild member (`lfg_use`, every role). The sender is
+always the owner or the actor; a name in a payload is only data.
+
+`LFG_POST` is the post of its sender. The receiver keeps one post per sender on a board of at most 50: a higher `rev`
+replaces it, the same `rev` only refreshes it, a lower one is dropped, and a new `pid` replaces the old one. A closed
+post stays as a tombstone until it is stale, so a late open message cannot bring it back. The leader repeats an open
+post every 120 seconds with the same `rev`, and a post nobody repeats for 360 seconds is dropped.
+
+Rules for an open post: `kind` is `dungeon`, `quest` or `other`; `title` is 1 to 60 bytes; `needs` holds `tank`, `heal`
+and `dps`, each 0 to 4, and their sum is at least 1; `members` is 1 to 4; the needs and the members together never
+exceed five. `minLevel` (1 to 100) and `note` (up to 100 bytes) are optional. Text fields refuse `|` and control
+characters. Unknown fields are dropped.
+
+`party` (optional, part of `LFG_POST` since minor 13) lists the seats already taken, the leader first, so the board can show who is in the
+group: each seat is `{ c, r }` where `c` is a class file token (`WARRIOR`, upper-case letters, up to 20) and `r` is an
+optional role (`tank`, `heal` or `dps`) when the leader knows it (the leader's own declared role, or the role an
+applicant joined as). It must hold exactly `members` seats; a `party` that does not fit is dropped and the post is
+kept. Older clients drop it as an unknown field.
+
+`LFG_APPLY` is one step of an application.
+
+| Step | Sent by | Fields | Meaning |
+|---|---|---|---|
+| `apply` | applicant | `pid`, `role` (`tank`, `heal` or `dps`), optional `note` | wants to go as `role` on post `pid`; only the owner of `pid` acts on it, and a role the post does not need is dropped |
+| `withdraw` | applicant | `pid` | takes the application back |
+| `accept` | leader | `pid`, `to` (a character) | invites `to`; counts only from the owner of `pid` on the receiver's board, and only when `to` is the receiver |
+| `decline` | leader | `pid`, `to` | turns `to` down; the same check as `accept` |
+
+A leader keeps at most 10 pending applicants per post. A repeated `apply` refreshes its row. The applicant's level is
+never sent: a minimum level is checked by the applicant's own client.
 
 ## Guild map positions
 

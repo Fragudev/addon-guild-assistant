@@ -117,6 +117,21 @@ local function lootCard(grid, events, viewer)
   })
 end
 
+-- The open groups of the guild, with a way to the board.
+local function groupsCard(grid)
+  local card = Kit.Card(grid, { title = L("Groups"), gap = 8 })
+  Kit.Label(card, { text = ViewModel.GroupsSummary(ns.lfgBoard:OpenCount()), color = "text" })
+  Kit.Button(card, {
+    text = L("Open Groups"),
+    variant = "ghost",
+    icon = "chevron",
+    layout = { width = "auto" },
+    onClick = function()
+      UI.OpenTab("groups")
+    end,
+  })
+end
+
 UI.Register("home", function(page)
   Kit.PageHeader(page, {
     title = L("Home"),
@@ -129,4 +144,7 @@ UI.Register("home", function(page)
   syncCard(grid)
   nextEventCard(grid, events, viewer)
   lootCard(grid, events, viewer)
+  if ns.lfgBoard and (not ns.modules or ns.modules:IsEnabled("groups")) then
+    groupsCard(grid)
+  end
 end)

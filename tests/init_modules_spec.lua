@@ -75,6 +75,7 @@ local function build()
   spy(ns.MinimapButton, "Refresh", "minimapRefresh")
   spy(ns.LootPopup, "Start", "lootPopup")
   spy(ns.VotingFrame, "Start", "votingFrame")
+  spy(ns.LfgPopup, "Start", "lfgPopup")
   ns.GuildRoster.New = function()
     calls[#calls + 1] = "roster"
     return {
@@ -164,5 +165,49 @@ describe("Init modules", function()
     assert.is_false(env.ns.modules:NeedsReload("loot"))
     env.ns.modules:SetEnabled("loot", true)
     assert.is_true(env.ns.modules:NeedsReload("loot"))
+  end)
+
+  it("starts the Groups board and service with their own frame and tickers, and hands the service to Comm", function()
+    local tickers = {}
+    _G.C_Timer.NewTicker = function(seconds)
+      tickers[seconds] = true
+    end
+    env.fire("ADDON_LOADED", "GuildAssistant")
+    env.fire("PLAYER_LOGIN")
+    assert.is_table(env.ns.lfgBoard)
+    assert.is_table(env.ns.lfgService)
+    assert.are.equal(env.ns.lfgService, env.ns.comm.lfgService)
+    assert.is_function(env.ns.comm.onLfgChange)
+    assert.is_true(tickers[env.ns.Constants.LFG_REPUBLISH_SECONDS])
+    assert.is_true(tickers[env.ns.Constants.LFG_SWEEP_SECONDS])
+    assert.is_truthy(table.concat(env.calls, ","):find("lfgPopup", 1, true))
+  end)
+
+  it("does not start Groups when its module is off", function()
+    env.fire("ADDON_LOADED", "GuildAssistant")
+    env.ns.Settings.SetModuleOff(env.root(), "groups", true)
+    env.fire("PLAYER_LOGIN")
+    assert.is_nil(env.ns.lfgService)
+    assert.is_nil(env.ns.lfgBoard)
+    assert.are.same({ "lfg" }, env.ns.skippedSteps)
+  end)
+
+  it("keeps a layer swap out while a Groups flow is busy, and the other way round", function()
+    env.fire("ADDON_LOADED", "GuildAssistant")
+    env.fire("PLAYER_LOGIN")
+    env.ns.lockdown = {
+      CanSend = function()
+        return true
+      end,
+    }
+    local rules = env.ns.layerSwap.deps.eligibility
+    assert.is_true(rules.requester())
+    env.ns.lfgService.application = { state = "applied" }
+    assert.are.same({ false, "lfg" }, { rules.requester() })
+    env.ns.lfgService.application = nil
+    env.ns.layerSwap.IsActive = function()
+      return true
+    end
+    assert.are.same({ false, "swap" }, { env.ns.lfgService.deps.eligibility.apply() })
   end)
 end)
