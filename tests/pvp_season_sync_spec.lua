@@ -40,6 +40,8 @@ local ROLES = {
   Bob = "member",
   Cat = "member",
 }
+-- A catch-up is only believed about other authors when whoever whispered it is a gm or cogm.
+local GLOBAL_RELAY = { sender = "Boss", global = true }
 local DAY = 86400
 local T0 = 1792454400 -- 2026-10-20 00:00 UTC
 local SEASON_START, SEASON_END = T0 - 10 * DAY, T0 + 30 * DAY
@@ -285,18 +287,45 @@ describe("PvPSeasonSync seasons, missions, prizes and officers", function()
     assert.are.equal("Boss", stored.updatedBy)
   end)
 
-  it("refuses a second active season, and accepts one once the first is closed", function()
+  it("elects one active season among several, the same on every client whatever order they arrived in", function()
+    local seasons = {
+      { seasonRecord(), "Boss" },
+      { seasonRecord({ id = "s2", name = "Two" }), "Boss" },
+      { seasonRecord({ id = "s3", name = "Three", rev = 2 }), "Boss" },
+      { seasonRecord({ id = "s4", name = "Four", rev = 2, updatedAt = T0 + 5 }), "Off" },
+      { seasonRecord({ id = "s5", name = "Five", rev = 2, updatedAt = T0 + 5 }), "Boss" },
+    }
+    -- Every rotation (and the reverse) of the arrival order ends with the same winner: s4 (rev, then time, then the
+    -- larger author, "Off" over "Boss").
+    for shift = 0, #seasons - 1 do
+      for _, reverse in ipairs({ false, true }) do
+        local other = new_client()
+        for step = 1, #seasons do
+          local index = (step + shift - 1) % #seasons + 1
+          if reverse then
+            index = #seasons + 1 - index
+          end
+          assert.is_true(other.deliver("PVP_SEASON", seasons[index][1], seasons[index][2]))
+        end
+        assert.are.equal("s4", other.ledger.activeId, ("shift %d, reverse %s"):format(shift, tostring(reverse)))
+      end
+    end
+  end)
+
+  it("hands the active season to the one that outranks the rest when the first is closed", function()
     assert.is_true(client.deliver("PVP_SEASON", seasonRecord(), "Boss"))
-    local ok, reason = client.deliver("PVP_SEASON", seasonRecord({ id = "s2", name = "Two" }), "Boss")
-    assert.is_false(ok)
-    assert.are.equal("active_exists", reason)
-    assert.is_nil(client.ledger.seasons.s2)
+    assert.is_true(client.deliver("PVP_SEASON", seasonRecord({ id = "s2", name = "Two", rev = 2 }), "Boss"))
+    assert.are.equal("s2", client.ledger.activeId)
+    assert.is_true(
+      client.deliver("PVP_SEASON", seasonRecord({ id = "s2", rev = 3, state = "closed", updatedAt = T0 + 1 }), "Boss")
+    )
+    assert.are.equal("s1", client.ledger.activeId)
     assert.is_true(
       client.deliver("PVP_SEASON", seasonRecord({ rev = 2, state = "closed", updatedAt = T0 + 1 }), "Boss")
     )
     assert.is_nil(client.ledger.activeId)
-    assert.is_true(client.deliver("PVP_SEASON", seasonRecord({ id = "s2", name = "Two" }), "Boss"))
-    assert.are.equal("s2", client.ledger.activeId)
+    assert.is_true(client.deliver("PVP_SEASON", seasonRecord({ id = "s3", name = "Three" }), "Boss"))
+    assert.are.equal("s3", client.ledger.activeId)
   end)
 
   it("follows revisions: a newer edit wins, an older or equal one does not", function()
@@ -507,6 +536,57 @@ describe("PvPSeasonSync claims", function()
     Constants.PVP_QUEUE_MAX = oldQueue
     assert.is_false(ok)
     assert.are.equal("limit", reason)
+  end)
+end)
+
+describe("PvPSeasonSync claims past maxCompletions", function()
+  local client
+
+  before_each(function()
+    client = new_client()
+    assert(client.deliver("PVP_SEASON", seasonRecord(), "Boss"))
+    assert(client.deliver(
+      "PVP_MISSION",
+      missionRecord({
+        goal = { kind = "kills", count = 2, zones = {}, place = "any", distinct = "none", maxCompletions = 1 },
+        perPlayer = 5,
+      }),
+      "Boss"
+    ))
+  end)
+
+  it("refuses a second claim while the first one waits, and accepts it again once it is rejected", function()
+    assert.is_true(client.deliver("PVP_CLAIM", claimRecord("Ann", 1), "Ann"))
+    local ok, reason = client.deliver("PVP_CLAIM", claimRecord("Ann", 2), "Ann")
+    assert.is_false(ok)
+    assert.are.equal("limit", reason)
+    -- another member is not affected
+    assert.is_true(client.deliver("PVP_CLAIM", claimRecord("Bob", 1), "Bob"))
+    assert.is_true(
+      client.deliver("PVP_REJECT", { claimId = "Ann:m1:20261020:1", seasonId = "s1", at = T0 + 300 }, "Boss")
+    )
+    assert.is_true(client.deliver("PVP_CLAIM", claimRecord("Ann", 2), "Ann"))
+  end)
+
+  it("counts the approved claims of the player, and not a voided grant", function()
+    assert.is_true(client.deliver("PVP_GRANT", grantRecord("Ann:m1:20261019:1", "Ann", 10), "Boss"))
+    local ok, reason = client.deliver("PVP_CLAIM", claimRecord("Ann", 1), "Ann")
+    assert.is_false(ok)
+    assert.are.equal("limit", reason)
+    assert.is_true(
+      client.deliver(
+        "PVP_VOID",
+        { grantId = "Ann:m1:20261019:1", seasonId = "s1", reason = "mistake", at = T0 + 400 },
+        "Boss"
+      )
+    )
+    assert.is_true(client.deliver("PVP_CLAIM", claimRecord("Ann", 1), "Ann"))
+  end)
+
+  it("does not limit a mission without maxCompletions", function()
+    assert(client.deliver("PVP_MISSION", missionRecord({ rev = 2, perPlayer = 5 }), "Boss"))
+    assert.is_true(client.deliver("PVP_CLAIM", claimRecord("Ann", 1), "Ann"))
+    assert.is_true(client.deliver("PVP_CLAIM", claimRecord("Ann", 2), "Ann"))
   end)
 end)
 
@@ -911,7 +991,7 @@ describe("PvPSeasonSync ledger catch-up", function()
     end
 
     local fresh = new_client()
-    local summary = Sync.ApplyItems(fresh.ctx(), items)
+    local summary = Sync.ApplyItems(fresh.ctx(), items, GLOBAL_RELAY)
     assert.are.equal(#items, summary.total)
     assert.are.equal(#items, summary.applied)
     assert.are.same(Sync.Summary(relay.ledger, "s1"), Sync.Summary(fresh.ledger, "s1"))
@@ -928,10 +1008,57 @@ describe("PvPSeasonSync ledger catch-up", function()
         entry.by = "Ann"
       end
     end
-    local summary = Sync.ApplyItems(fresh.ctx(), items)
+    local summary = Sync.ApplyItems(fresh.ctx(), items, GLOBAL_RELAY)
     assert.is_true(summary.applied < summary.total)
     assert.is_nil(fresh.ledger.activeId)
     assert.is_nil(next(fresh.ledger.missions))
+  end)
+
+  it("only believes an author other than the relay when the relay is a gm or cogm", function()
+    local relay = seeded_admin()
+    local items = Sync.LedgerItems(relay.ledger, { "s1" })
+
+    -- An officer (rl) naming the guild master as the author of a season, a grant and a final: nothing is applied.
+    local forged = new_client()
+    local summary = Sync.ApplyItems(forged.ctx(), items, { sender = "Rl", global = false })
+    assert.are.equal(0, summary.applied)
+    assert.are.equal(#items, summary.forged)
+    assert.is_nil(forged.ledger.activeId)
+    assert.is_nil(next(forged.ledger.seasons))
+    assert.is_nil(next(forged.ledger.grants))
+
+    local finals = new_client()
+    local final = {
+      t = "PVP_FINAL",
+      by = "Boss",
+      p = {
+        seasonId = "s1",
+        name = "Season One",
+        startsAt = SEASON_START,
+        endsAt = SEASON_END,
+        closedAt = T0 + 900,
+        standings = { { pos = 1, player = "Ann", points = 10, lastAt = T0 + 10 } },
+        prizes = {},
+      },
+    }
+    summary = Sync.ApplyItems(finals.ctx(), { final }, { sender = "Rl", global = false })
+    assert.are.equal(0, summary.applied)
+    assert.is_nil(next(finals.ledger.finals))
+
+    -- A relay that is not global is believed for records it authored itself, if its role allows them (it does not
+    -- for an admin record), and without a relay nothing is believed.
+    local own = new_client()
+    local entry = { t = "PVP_SEASON", p = seasonRecord(), by = "Rl" }
+    summary = Sync.ApplyItems(own.ctx(), { entry }, { sender = "Rl", global = false })
+    assert.are.equal(0, summary.forged)
+    assert.are.equal(0, summary.applied)
+    assert.are.equal(0, Sync.ApplyItems(new_client().ctx(), items).applied)
+
+    -- A gm or cogm relays them all.
+    local trusted = new_client()
+    summary = Sync.ApplyItems(trusted.ctx(), items, { sender = "Off", global = true })
+    assert.are.equal(#items, summary.applied)
+    assert.are.equal(0, summary.forged)
   end)
 
   it("skips items that are not records, have no author or do not validate", function()
@@ -945,7 +1072,7 @@ describe("PvPSeasonSync ledger catch-up", function()
       { t = "PVP_SEASON", p = seasonRecord() },
       { t = "PVP_SEASON", p = seasonRecord(), by = "a:b" },
       good,
-    })
+    }, GLOBAL_RELAY)
     assert.are.equal(7, summary.total)
     assert.are.equal(1, summary.applied)
   end)
@@ -994,7 +1121,7 @@ describe("PvPSeasonSync ledger catch-up", function()
     assert.is_nil(seen.PVP_VOID)
 
     local fresh = new_client()
-    Sync.ApplyItems(fresh.ctx(), items)
+    Sync.ApplyItems(fresh.ctx(), items, GLOBAL_RELAY)
     assert.are.equal("Bob", fresh.ledger.finals.s1.standings[1].player)
     assert.is_true(fresh.ledger.deliveries.s1.Bob.delivered)
     assert.are.same(Sync.Summary(relay.ledger, "s1"), Sync.Summary(fresh.ledger, "s1"))
@@ -1074,7 +1201,7 @@ describe("PvPSeasonSync ledger catch-up", function()
       assert.are.equal("PVP_LEDGER_DATA", message.t)
       assert.is_true(#message.p.items <= Constants.PVP_LEDGER_PAGE_ITEMS)
       total = total + #message.p.items
-      Sync.ApplyItems(fresh.ctx(), message.p.items)
+      Sync.ApplyItems(fresh.ctx(), message.p.items, GLOBAL_RELAY)
     end
     assert.are.equal(#items, total)
     assert.are.same(Sync.Summary(relay.ledger, "s1"), Sync.Summary(fresh.ledger, "s1"))
@@ -1114,10 +1241,197 @@ local function catchUp(from, to)
   end
   local items = Sync.LedgerItems(from.ledger, Sync.ScopeFor(from.ledger, request))
   for _, page in ipairs(Sync.Paginate(items, fits_one_whisper, Constants.PVP_LEDGER_PAGE_ITEMS)) do
-    Sync.ApplyItems(to.ctx(), page)
+    Sync.ApplyItems(to.ctx(), page, GLOBAL_RELAY)
   end
   return true
 end
+
+local function progressRecord(change)
+  return copy({ seasonId = "s1", rows = { { missionId = "m1", count = 1, goal = 2 } } }, change)
+end
+
+describe("PvPSeasonSync progress summaries", function()
+  local client
+
+  before_each(function()
+    client = new_client().setup()
+  end)
+
+  it("keeps the last summary of a member, for an approver", function()
+    assert.is_true(client.deliver("PVP_PROGRESS", progressRecord(), "Ann"))
+    local held = client.ledger.progress.Ann
+    assert.are.equal("s1", held.seasonId)
+    assert.are.same({ { missionId = "m1", count = 1, goal = 2 } }, held.rows)
+    assert.are.equal(client.clock, held.at)
+    -- the next summary replaces it, an empty one clears it
+    assert.is_true(
+      client.deliver("PVP_PROGRESS", progressRecord({ rows = { { missionId = "m1", count = 2, goal = 2 } } }), "Ann")
+    )
+    assert.are.equal(2, client.ledger.progress.Ann.rows[1].count)
+    assert.is_true(client.deliver("PVP_PROGRESS", progressRecord({ rows = {} }), "Ann"))
+    assert.are.same({}, client.ledger.progress.Ann.rows)
+  end)
+
+  it("is ignored by a client that does not approve claims", function()
+    local member = new_client({ approver = false }).setup()
+    local ok, reason = member.deliver("PVP_PROGRESS", progressRecord(), "Ann")
+    assert.is_false(ok)
+    assert.are.equal("not_approver", reason)
+    assert.is_nil(member.ledger.progress.Ann)
+  end)
+
+  it("needs a known sender, the active season and drops the rows of unknown missions", function()
+    local ok, reason = client.deliver("PVP_PROGRESS", progressRecord(), "Stranger")
+    assert.are.same({ false, "unknown_sender" }, { ok, reason })
+    ok, reason = client.deliver("PVP_PROGRESS", progressRecord({ seasonId = "s9" }), "Ann")
+    assert.are.same({ false, "unknown_season" }, { ok, reason })
+    assert.is_true(client.deliver(
+      "PVP_PROGRESS",
+      progressRecord({
+        rows = { { missionId = "m1", count = 1, goal = 2 }, { missionId = "ghost", count = 1, goal = 2 } },
+      }),
+      "Ann"
+    ))
+    assert.are.equal(1, #client.ledger.progress.Ann.rows)
+    assert.is_true(
+      client.deliver("PVP_SEASON", seasonRecord({ state = "closed", rev = 2, updatedAt = T0 + 1 }), "Boss")
+    )
+    ok, reason = client.deliver("PVP_PROGRESS", progressRecord(), "Bob")
+    assert.are.same({ false, "closed" }, { ok, reason })
+  end)
+
+  it("limits how many members it keeps", function()
+    local old = Constants.PVP_PROGRESS_MEMBERS_MAX
+    Constants.PVP_PROGRESS_MEMBERS_MAX = 1
+    assert.is_true(client.deliver("PVP_PROGRESS", progressRecord(), "Ann"))
+    local ok, reason = client.deliver("PVP_PROGRESS", progressRecord(), "Bob")
+    -- a member already held can still update
+    local again = client.deliver("PVP_PROGRESS", progressRecord(), "Ann")
+    Constants.PVP_PROGRESS_MEMBERS_MAX = old
+    assert.are.same({ false, "limit" }, { ok, reason })
+    assert.is_true(again)
+  end)
+
+  it("is forgotten when the season closes", function()
+    assert.is_true(client.deliver("PVP_PROGRESS", progressRecord(), "Ann"))
+    assert.is_true(client.deliver("PVP_FINAL", {
+      seasonId = "s1",
+      name = "Season One",
+      startsAt = SEASON_START,
+      endsAt = SEASON_END,
+      closedAt = T0 + 500,
+      standings = {},
+      prizes = {},
+    }, "Boss"))
+    assert.is_nil(client.ledger.progress.Ann)
+  end)
+
+  it("is validated on the wire: a count past the goal, repeated missions and bad ids are refused", function()
+    for _, record in ipairs({
+      progressRecord({ rows = { { missionId = "m1", count = 3, goal = 2 } } }),
+      progressRecord({
+        rows = { { missionId = "m1", count = 1, goal = 2 }, { missionId = "m1", count = 1, goal = 2 } },
+      }),
+      progressRecord({ rows = { { missionId = "a b", count = 1, goal = 2 } } }),
+      progressRecord({ rows = { { missionId = "m1", count = -1, goal = 2 } } }),
+      progressRecord({ rows = { { missionId = "m1", count = 0, goal = 0 } } }),
+      progressRecord({ rows = "x" }),
+      progressRecord({ seasonId = "" }),
+    }) do
+      local message, reason = Protocol.Validate(Protocol.Build("PVP_PROGRESS", record, "id-1"))
+      assert.is_nil(message)
+      assert.are.equal("bad_payload", reason)
+    end
+    local too_many = {}
+    for index = 1, Constants.PVP_MISSIONS_MAX + 1 do
+      too_many[index] = { missionId = "m" .. index, count = 0, goal = 1 }
+    end
+    assert.is_nil((Protocol.Validate(Protocol.Build("PVP_PROGRESS", progressRecord({ rows = too_many }), "id-1"))))
+  end)
+
+  it("never travels in a ledger catch-up", function()
+    local fresh = new_client().setup()
+    local summary =
+      Sync.ApplyItems(fresh.ctx(), { { t = "PVP_PROGRESS", p = progressRecord(), by = "Ann" } }, GLOBAL_RELAY)
+    assert.are.equal(0, summary.applied)
+    assert.is_nil(fresh.ledger.progress.Ann)
+  end)
+end)
+
+describe("PvPSeasonSync claim queue in the ledger catch-up", function()
+  local relay
+
+  before_each(function()
+    relay = new_client().setup()
+    assert.is_true(relay.deliver("PVP_CLAIM", claimRecord("Ann", 1), "Ann"))
+    assert.is_true(relay.deliver("PVP_CLAIM", claimRecord("Bob", 1), "Bob"))
+    assert.is_true(relay.deliver("PVP_CLAIM", claimRecord("Cat", 1), "Cat"))
+    -- Bob's was approved and Cat's rejected: only Ann's is still waiting
+    assert.is_true(relay.deliver("PVP_GRANT", grantRecord("Bob:m1:20261020:1", "Bob", 10), "Boss"))
+    assert.is_true(
+      relay.deliver("PVP_REJECT", { claimId = "Cat:m1:20261020:1", seasonId = "s1", at = T0 + 300 }, "Boss")
+    )
+  end)
+
+  it("compares the queue only when the requester approves claims", function()
+    local other = new_client().setup()
+    other.deliver("PVP_GRANT", grantRecord("Bob:m1:20261020:1", "Bob", 10), "Boss")
+    other.deliver("PVP_REJECT", { claimId = "Cat:m1:20261020:1", seasonId = "s1", at = T0 + 300 }, "Boss")
+    assert.is_false(Sync.Differs(relay.ledger, Sync.RequestPayload(other.ledger, "s1")))
+    local asking = Sync.RequestPayload(other.ledger, "s1", true)
+    assert.is_true(asking.queue)
+    assert.is_true(Sync.Differs(relay.ledger, asking))
+    assert.is_nil(Sync.RequestPayload(other.ledger, "s1").queue)
+  end)
+
+  it("sends the claims still waiting, last, and a requester that approves queues them", function()
+    local items = Sync.LedgerItems(relay.ledger, { "s1" }, true)
+    local claims = {}
+    for index, entry in ipairs(items) do
+      if entry.t == "PVP_CLAIM" then
+        claims[#claims + 1] = entry
+        assert.are.equal(#items, index)
+      end
+    end
+    assert.are.equal(1, #claims)
+    assert.are.equal("Ann", claims[1].by)
+    assert.are.equal("Ann:m1:20261020:1", claims[1].p.id)
+    for _, entry in ipairs(Sync.LedgerItems(relay.ledger, { "s1" })) do
+      assert.are_not.equal("PVP_CLAIM", entry.t)
+    end
+
+    local requester = new_client()
+    local summary = Sync.ApplyItems(requester.ctx(), items, GLOBAL_RELAY)
+    assert.are.equal(#items, summary.applied)
+    assert.is_truthy(requester.ledger.queue["Ann:m1:20261020:1"])
+    assert.is_false(Sync.Differs(relay.ledger, Sync.RequestPayload(requester.ledger, "s1", true)))
+  end)
+
+  it("does not queue a claim for a client that does not approve, or from a relay that is not a gm or cogm", function()
+    local items = Sync.LedgerItems(relay.ledger, { "s1" }, true)
+    local member = new_client({ approver = false })
+    Sync.ApplyItems(member.ctx(), items, GLOBAL_RELAY)
+    assert.is_nil(next(member.ledger.queue))
+    local officer = new_client()
+    Sync.ApplyItems(officer.ctx(), items, { sender = "Rl", global = false })
+    assert.is_nil(next(officer.ledger.queue))
+  end)
+
+  it("leaves a claim out when the claim of the season already closed", function()
+    assert.is_true(relay.deliver("PVP_FINAL", {
+      seasonId = "s1",
+      name = "Season One",
+      startsAt = SEASON_START,
+      endsAt = SEASON_END,
+      closedAt = T0 + 500,
+      standings = {},
+      prizes = {},
+    }, "Boss"))
+    for _, entry in ipairs(Sync.LedgerItems(relay.ledger, { "s1" }, true)) do
+      assert.are_not.equal("PVP_CLAIM", entry.t)
+    end
+  end)
+end)
 
 describe("PvPSeasonSync convergence", function()
   -- Records whose authority does not depend on other records: an admin wrote them all.

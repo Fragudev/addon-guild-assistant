@@ -196,17 +196,23 @@ end
 -- sender of the snapshot, so it only counts when that is an admin). Only a snapshot names an owner.
 local function applyPvPItem(item, ctx, sender, role)
   local owner = sender
+  local relayed = false
   if item.t == "PVP_STATS" then
     if not ns.EventModel.IsCharacterKey(item.owner) then
       return false, "bad_owner"
     end
+    -- The owner has to be somebody this client's own guild roster knows: a relay cannot invent members.
+    if not ctx.roleOf or ctx.roleOf(item.owner) == nil then
+      return false, "unknown_owner"
+    end
     owner = item.owner
+    relayed = true
   end
   local message, invalid = ns.Protocol.Validate(ns.Protocol.Build(item.t, item.p, "import"))
   if not message then
     return false, invalid
   end
-  return ns.PvPSync.Apply(ctx, message, owner, role)
+  return ns.PvPSync.Apply(ctx, message, owner, role, relayed)
 end
 
 -- A blacklist item of a snapshot, applied as if its sender had sent it. The author and date it carries are only

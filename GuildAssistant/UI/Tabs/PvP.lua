@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- PvP (plan 3.6 and docs/PVP_MISSIONS_PLAN.md phases 4 and 5): sub-tabs Season, Missions, Stats (My stats and the
--- kill Ranking), Recent kills and History (the admin views are in UI/Tabs/PvPAdmin.lua). PvP is guild-wide: rosters do
+-- kill Ranking), Recent kills, History; the admin views are in UI/Tabs/PvPAdmin.lua.
+-- PvP is guild-wide: rosters do
 -- not apply. The season data comes from `ns.pvpSeason` (the ledger service) and the progress of the missions from
 -- `ns.pvpMissions` (the detection), which may be missing: then the missions show without progress and cannot be
 -- claimed.
@@ -387,6 +388,11 @@ local function drawMissionCard(page, card)
   for _, text in ipairs(card.chips) do
     Kit.Badge(chips, { text = text, color = "muted" })
   end
+  -- The rules in plain words, and since when they count.
+  Kit.Label(box, { text = card.rules, style = "small", color = "muted", wrap = true })
+  if card.countsFrom then
+    Kit.Label(box, { text = card.countsFrom, style = "small", color = "dim", wrap = true })
+  end
   for _, bar in ipairs(card.bars) do
     local line = Kit.Row(box, { gap = 8, layout = { gap = 8 } })
     Kit.Label(line, { text = bar.label, style = "small", color = "dim", layout = { weight = 1 } })
@@ -488,6 +494,8 @@ local function missionsView(page)
     ended = ended,
     labelText = barLabel,
     zoneName = zoneName,
+    now = ns.Platform.ServerTime(),
+    season = season,
   })
   for _, card in ipairs(cards) do
     drawMissionCard(page, card)
@@ -638,6 +646,9 @@ end
 
 -- What the PvP admin tab (UI/Tabs/PvPAdmin.lua) shares with this one.
 UI.PvPShared = {
+  sub = function()
+    return state.sub
+  end,
   service = service,
   fail = fail,
   noSeason = noSeason,
@@ -652,6 +663,10 @@ UI.Register("pvp", function(page)
     description = L("Season missions with a points ranking and prizes, and the guild's honourable kills."),
   })
   local tabs = ViewModel.PvPSubTabs()
+  -- A link from another place names the sub-tab to start on.
+  if UI.nav.pvpSub then
+    state.sub, UI.nav.pvpSub = UI.nav.pvpSub, nil
+  end
   state.sub = ViewModel.PvPPick(tabs, state.sub)
   Kit.TabStrip(page, {
     tabs = tabs,

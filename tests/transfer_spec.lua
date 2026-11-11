@@ -530,6 +530,10 @@ describe("Transfer PvP items in a snapshot", function()
       tombstones = {},
       pvpStats = {},
       pvpResets = {},
+      -- The guild roster of the receiver: every owner of a relayed record has to be somebody it knows.
+      roleOf = function()
+        return "member"
+      end,
       now = function()
         return 10000
       end,
@@ -604,6 +608,19 @@ describe("Transfer PvP items in a snapshot", function()
     assert.are.equal(2, summary.applied)
     assert.are.equal(1, summary.skipped.forbidden)
     assert.is_nil(other.pvpResets["Cid-Realm"])
+  end)
+
+  it("skips a record whose owner the receiver's guild roster does not know", function()
+    local items = Transfer.BuildSnapshot({}, {}, 5, source_context(), 10)
+    local ctx = pvp_context({
+      roleOf = function(name)
+        return name == "Ann-Realm" and "member" or nil
+      end,
+    })
+    local summary = Transfer.ApplyItems(items, ctx, "Lead-Realm", "gm")
+    assert.are.equal(1, summary.skipped.unknown_owner)
+    assert.is_truthy(ctx.pvpStats["Ann-Realm"])
+    assert.is_nil(ctx.pvpStats["Bob-Realm"])
   end)
 
   it("skips an item whose owner is missing or not a valid name", function()

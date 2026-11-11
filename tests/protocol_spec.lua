@@ -674,8 +674,8 @@ describe("Protocol.Validate PVP_KILL", function()
     assert.are.equal("bad_payload", reason)
   end)
 
-  it("is at protocol minor version 10", function()
-    assert.are.equal(10, Constants.PROTOCOL_MINOR)
+  it("is at protocol minor version 11", function()
+    assert.are.equal(11, Constants.PROTOCOL_MINOR)
   end)
 end)
 
@@ -964,6 +964,52 @@ describe("Protocol.Validate PvP season messages", function()
       { count = 0, digest = "00000001" },
       assert(validate("PVP_LEDGER_REQ", { count = 0, digest = "00000001" })).p
     )
+  end)
+
+  it("keeps the queue flag of a ledger request and refuses any other value", function()
+    local request = assert(validate("PVP_LEDGER_REQ", { count = 0, digest = "00000001", queue = true }))
+    assert.is_true(request.p.queue)
+    assert.is_nil(assert(validate("PVP_LEDGER_REQ", { count = 0, digest = "00000001", queue = false })).p.queue)
+    assert.is_nil(validate("PVP_LEDGER_REQ", { count = 0, digest = "00000001", queue = "yes" }))
+  end)
+
+  it("accepts a progress summary (protocol minor 11) and keeps only its known fields", function()
+    local progress = assert(validate("PVP_PROGRESS", {
+      seasonId = "s1",
+      rows = { { missionId = "m1", count = 2, goal = 5, x = 1 }, { missionId = "m2", count = 0, goal = 1 } },
+      x = 1,
+    }))
+    assert.are.same({
+      seasonId = "s1",
+      rows = { { missionId = "m1", count = 2, goal = 5 }, { missionId = "m2", count = 0, goal = 1 } },
+    }, progress.p)
+    assert.is_truthy(validate("PVP_PROGRESS", { seasonId = "s1", rows = {} }))
+  end)
+
+  it("refuses a progress summary with a bad season, row, count or goal", function()
+    local function row(change)
+      local clean = { missionId = "m1", count = 1, goal = 2 }
+      for key, value in pairs(change) do
+        clean[key] = value
+      end
+      return clean
+    end
+    for _, payload in ipairs({
+      { rows = {} },
+      { seasonId = "a b", rows = {} },
+      { seasonId = "s1" },
+      { seasonId = "s1", rows = "x" },
+      { seasonId = "s1", rows = { row({ missionId = "a b" }) } },
+      { seasonId = "s1", rows = { row({ count = 3 }) } },
+      { seasonId = "s1", rows = { row({ count = -1 }) } },
+      { seasonId = "s1", rows = { row({ goal = 0 }) } },
+      { seasonId = "s1", rows = { row({ goal = Constants.PVP_MISSION_COUNT_MAX + 1 }) } },
+      { seasonId = "s1", rows = { row({ count = 1.5 }) } },
+      { seasonId = "s1", rows = { row({}), row({}) } },
+      { seasonId = "s1", rows = { "x" } },
+    }) do
+      assert.is_nil(validate("PVP_PROGRESS", payload))
+    end
   end)
 
   it("refuses a ledger request with a bad season, count or digest", function()

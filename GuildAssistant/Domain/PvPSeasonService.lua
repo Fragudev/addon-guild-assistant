@@ -11,6 +11,9 @@ local _, ns = ...
 --     now = function() -> server time,         newId = function() -> unique id,
 --     ownName = function() -> own character name,   ownRole = function() -> role or nil,
 --     roleOf = function(name) -> role or nil (the guild roster),
+--     rosterReady = function() -> boolean (optional: has the guild roster been read? Without it the roster is
+--       assumed ready),
+--     canonicalName = function(name) -> the roster's spelling of a name, or nil (optional, DirectGrant),
 --     send = function(messageType, payload, key) -> queued (true), or false plus a reason,
 --     onChange = function(messageType) (optional: the interface redraws),
 --     onSeasonClosed = function(seasonId) (optional: the per-character mission log of that season is dropped),
@@ -19,7 +22,7 @@ local _, ns = ...
 --
 -- Every action returns the record it made and whether it was queued for the guild (`false` means it was saved here
 -- but not sent: the lockdown, or a full queue); or nil plus the reason. Reasons: "forbidden", "invalid:<field>",
--- "no_season", "closed", "not_found", "decided", "unknown_mission", "unknown_player" and
+-- "no_season", "closed", "not_found", "decided", "unknown_mission", "unknown_player", "roster_not_ready" and
 -- the ones of PvPSeasonSync.Apply ("limit", "active_exists", "stale", ...).
 local PvPSeasonService = {}
 PvPSeasonService.__index = PvPSeasonService
@@ -39,6 +42,8 @@ function PvPSeasonService.New(deps)
     ownName = deps.ownName,
     ownRole = deps.ownRole,
     guildRoleOf = deps.roleOf,
+    rosterReady = deps.rosterReady,
+    canonicalName = deps.canonicalName,
     send = deps.send,
     onChange = deps.onChange,
     onSeasonClosed = deps.onSeasonClosed,
@@ -58,6 +63,11 @@ end
 -- Does this client approve claims (gm or cogm)?
 function PvPSeasonService:IsApprover()
   return self:CanPvP("pvp_claim_decide")
+end
+
+-- Has the guild roster been read (so a role lookup of a missing name means "not in the guild")? True without the dep.
+function PvPSeasonService:RosterReady()
+  return self.rosterReady == nil or self.rosterReady() ~= false
 end
 
 -- The rules a record goes through: the roster for roles, the own role for the own name.
@@ -224,6 +234,51 @@ function PvPSeasonService:Queue()
     return a.id < b.id
   end)
   return list
+end
+
+-- How far the members say they are, by mission, for the active season (an approver keeps the last summary of each
+-- member; other clients have none): { [missionId] = { { player, count, goal, ready, claimed, at } } }, each list
+-- ordered by progress (the closest to the goal first), then by name. `ready` is a member who reports the goal
+-- reached, `claimed` one that has a claim for the mission waiting for a decision. Display only: the claim and its
+-- evidence are what decide.
+function PvPSeasonService:ProgressBoard(seasonId)
+  local board = {}
+  local waiting = {}
+  for _, claim in ipairs(self:Queue()) do
+    waiting[claim.player .. "\n" .. claim.missionId] = true
+  end
+  for player, held in pairs(self.ledger.progress or {}) do
+    if held.seasonId == seasonId then
+      for _, row in ipairs(held.rows) do
+        local mission = self.ledger.missions[row.missionId]
+        if mission and mission.seasonId == seasonId then
+          local list = board[row.missionId] or {}
+          board[row.missionId] = list
+          list[#list + 1] = {
+            player = player,
+            count = row.count,
+            goal = row.goal,
+            ready = row.count >= row.goal,
+            claimed = waiting[player .. "\n" .. row.missionId] == true,
+            at = held.at,
+          }
+        end
+      end
+    end
+  end
+  for _, list in pairs(board) do
+    table.sort(list, function(a, b)
+      local left, right = a.count / a.goal, b.count / b.goal
+      if left ~= right then
+        return left > right
+      end
+      if a.count ~= b.count then
+        return a.count > b.count
+      end
+      return a.player < b.player
+    end)
+  end
+  return board
 end
 
 -- The claims an approver rejected and could still approve: each claim with `rejectedBy`, `rejectedAt` and `reason`.
@@ -423,6 +478,10 @@ function PvPSeasonService:CloseSeason(seasonId)
   local denied = forbidden(self, "pvp_season_manage")
   if denied then
     return nil, denied
+  end
+  -- The grants count through the roster: closing before it is read would freeze an empty, irreversible final.
+  if not self:RosterReady() then
+    return nil, "roster_not_ready"
   end
   seasonId = seasonId or self.ledger.activeId
   local season = seasonId and self.ledger.seasons[seasonId]
@@ -721,6 +780,22 @@ function PvPSeasonService:DirectGrant(player, missionId, points)
   if not clean then
     return nil, reason
   end
+  -- With a roster that was read, a name that is not in the guild gets no points (the own name always exists).
+  if self.rosterReady ~= nil and self:RosterReady() and clean.player ~= self.ownName() and self.guildRoleOf then
+    -- The roster's spelling wins over the typed one ("yonemon gg" is "Yonemon Gg"); a real typo has none.
+    local canonical = self.canonicalName and self.canonicalName(clean.player)
+    local name = type(canonical) == "string" and canonical ~= "" and canonical or clean.player
+    if self.guildRoleOf(name) == nil then
+      return nil, "unknown_player"
+    end
+    if name ~= clean.player then
+      clean.player = name
+      clean, reason = Model.ValidateGrant(clean)
+      if not clean then
+        return nil, reason
+      end
+    end
+  end
   local payload, queued = self:Commit("PVP_GRANT", clean, "PG:" .. clean.id)
   if not payload then
     return nil, queued
@@ -781,15 +856,14 @@ function PvPSeasonService:MarkDelivery(seasonId, player, delivered)
   return self.ledger.deliveries[seasonId][player], queued
 end
 
--- Forgets the mission log of a season that closed, in the saved data of the local character (`missions` =
--- char.pvpMissions: the kills and the claims of the season). Returns true when something was dropped.
-function PvPSeasonService.ClearMissionLog(missions, seasonId)
-  if type(missions) ~= "table" or missions.seasonId ~= seasonId then
+-- Forgets the claims of a season that closed, in the saved data of the local character (`claims` = char.pvpClaims:
+-- { [seasonId] = { [claimId] = { claim, state } } }). The PvP log itself is not tied to a season and stays (it ages out
+-- by itself). Returns true when something was dropped.
+function PvPSeasonService.ClearClaims(claims, seasonId)
+  if type(claims) ~= "table" or claims[seasonId] == nil then
     return false
   end
-  missions.seasonId = nil
-  missions.kills = {}
-  missions.claims = {}
+  claims[seasonId] = nil
   return true
 end
 

@@ -347,6 +347,26 @@ describe("Comm HELLO", function()
     assert.are.equal(2, #env.scheduled)
   end)
 
+  it("tells onApproverHello about a HELLO from a gm or cogm, and from nobody else", function()
+    local seen = {}
+    env.comm.onApproverHello = function(sender)
+      seen[#seen + 1] = sender
+    end
+    env.roles["Boss-Realm"] = "gm"
+    env.roles["Off-Realm"] = "cogm"
+    env.roles["Lead-Realm"] = "rl"
+    env.roles["Ann-Realm"] = "member"
+    for index, sender in ipairs({ "Boss-Realm", "Off-Realm", "Lead-Realm", "Ann-Realm", "Stranger-Realm" }) do
+      env.comm:HandleMessage(env.wire("HELLO", { version = "0.1.0" }, "h" .. index), sender, "GUILD")
+    end
+    assert.are.same({ "Boss-Realm", "Off-Realm" }, seen)
+    -- a callback that raises changes nothing
+    env.comm.onApproverHello = function()
+      error("boom")
+    end
+    assert.is_true(env.comm:HandleMessage(env.wire("HELLO", { version = "0.1.0" }, "h9"), "Boss-Realm", "GUILD"))
+  end)
+
   it("holds HELLO during a lockdown and sends it afterwards", function()
     env.locked = true
     assert.is_true(env.comm:SendHello())
@@ -1184,6 +1204,8 @@ describe("Comm PvP in a snapshot", function()
     leader, joiner = build_env(), build_env()
     leader.ownRole = "rl"
     joiner.roles["Lead-Realm"] = "rl"
+    -- The owners of a relayed record have to be members this client knows.
+    joiner.roles["Ann-Realm"], joiner.roles["Bob-Realm"] = "member", "member"
     leader.pvpStats["Ann-Realm"] = record()
     leader.pvpStats["Bob-Realm"] = record({ honor = { world = 20, bg = 5 } })
   end)
@@ -1238,7 +1260,7 @@ describe("Comm PvP in a snapshot", function()
     end
     for i = 1, ns.Constants.GUILD_ROSTER_MAX do
       leader.pvpStats[noise(64)] = record({
-        rev = math.random(1, 2000000000),
+        rev = math.random(90000, 100000),
         updatedAt = 1000 + i,
         honor = { world = math.random(500000, 600000), bg = math.random(1, 400000) },
         blows = { world = math.random(500000, 600000), bg = math.random(1, 400000) },
@@ -1251,6 +1273,10 @@ describe("Comm PvP in a snapshot", function()
 
     local admin = build_env()
     admin.roles["Boss-Realm"] = "gm"
+    -- The owners of a snapshot have to be known to the receiver's own guild roster.
+    admin.comm.roleOf = function(name)
+      return admin.roles[name] or "member"
+    end
     assert.is_true(admin.comm:HandleMessage(leader.sent[1], "Boss-Realm", "WHISPER"))
     local received, resets = 0, 0
     for _ in pairs(admin.pvpStats) do
@@ -2090,8 +2116,8 @@ describe("Comm PvP seasons", function()
     end
 
     before_each(function()
-      -- The relay saw everything, plus a grant; the late joiner saw nothing.
-      relay = populated(build_env(), "rl")
+      -- The relay (a gm or cogm: only they answer) saw everything, plus a grant; the late joiner saw nothing.
+      relay = populated(build_env(), "cogm")
       assert.is_true(
         guild(
           relay,
@@ -2111,7 +2137,7 @@ describe("Comm PvP seasons", function()
       relay.sent, relay.targets = {}, {}
       late = build_env()
       late.ownRole = "member"
-      late.roles["Lead-Realm"] = "rl"
+      late.roles["Lead-Realm"] = "cogm"
       late.roles["Boss-Realm"] = "gm"
       late.roles["Off-Realm"] = "member"
     end)
@@ -2166,16 +2192,16 @@ describe("Comm PvP seasons", function()
       assert.is_true(relay.comm:HandleMessage(ask(fresh), "Late-Realm", "GUILD"))
     end)
 
-    it("answers a leader (raid_manage), and not a stored PvP officer who is only a member", function()
+    it("answers as a gm or cogm only: the catch-up of an officer or rl would be refused by the requester", function()
       local officer = populated(build_env(), "member")
       officer.platform.GetIdentityKey = function()
         return "Off-Realm"
       end
       assert.is_false(officer.comm:IsLedgerRelay())
-      for _, role in ipairs({ "gm", "cogm", "officer", "rl" }) do
+      for _, role in ipairs({ "gm", "cogm" }) do
         assert.is_true(populated(build_env(), role).comm:IsLedgerRelay(), role)
       end
-      for _, role in ipairs({ "roster", "member", "alter" }) do
+      for _, role in ipairs({ "officer", "rl", "roster", "member", "alter" }) do
         assert.is_false(populated(build_env(), role).comm:IsLedgerRelay(), role)
       end
     end)
@@ -2203,6 +2229,7 @@ describe("Comm PvP seasons", function()
       end
       relay.sent, relay.targets = {}, {}
       relay.queue.maxItems = 1000
+      assert.is_true(late.comm:RequestLedger())
       local ok, count = relay.comm:SendLedger("Late-Realm", { seasonId = "s1", count = 0, digest = "00000000" })
       assert.is_true(ok)
       assert.is_true(count >= 2)
@@ -2212,6 +2239,130 @@ describe("Comm PvP seasons", function()
         assert.is_true(late.comm:HandleMessage(text, "Lead-Realm", "WHISPER"))
       end
       assert.are.same(Sync.Summary(relay.pvpSeason, "s1"), Sync.Summary(late.pvpSeason, "s1"))
+    end)
+  end)
+
+  describe("progress summaries", function()
+    it("sends the own progress under one key, and refuses it during the lockdown", function()
+      local sender = populated(build_env(), "member")
+      assert.is_true(
+        sender.comm:SendPvPProgress({ seasonId = "s1", rows = { { missionId = "m1", count = 1, goal = 2 } } })
+      )
+      local message = Protocol.Validate(sender.codec:Decode(sender.sent[#sender.sent]))
+      assert.are.equal("PVP_PROGRESS", message.t)
+      assert.are.equal(1, message.p.rows[1].count)
+      sender.locked = true
+      local sentBefore = #sender.sent
+      assert.are.same({ false, "locked" }, { sender.comm:SendPvPProgress({ seasonId = "s1", rows = {} }) })
+      assert.are.equal(sentBefore, #sender.sent)
+    end)
+
+    it("stores the summary of a member on an approver, and not on a member", function()
+      local approver = populated(build_env(), "cogm")
+      assert.is_true(
+        guild(
+          approver,
+          "PVP_PROGRESS",
+          { seasonId = "s1", rows = { { missionId = "m1", count = 1, goal = 2 } } },
+          "Ann-Realm"
+        )
+      )
+      assert.are.equal(1, approver.pvpSeason.progress["Ann-Realm"].rows[1].count)
+      assert.is_truthy(approver.seasonChanges[#approver.seasonChanges])
+      local member = populated(build_env(), "member")
+      local ok, reason = guild(member, "PVP_PROGRESS", { seasonId = "s1", rows = {} }, "Ann-Realm")
+      assert.are.same({ false, "not_approver" }, { ok, reason })
+    end)
+
+    it("tells an approver's ledger request to include the queue, and a member's not to", function()
+      local approver = populated(build_env(), "cogm")
+      approver.clock = approver.clock + ns.Constants.PVP_LEDGER_REQUEST_COOLDOWN_SECONDS
+      assert.is_true(approver.comm:RequestLedger())
+      assert.is_true(Protocol.Validate(approver.codec:Decode(approver.sent[#approver.sent])).p.queue)
+      local member = populated(build_env(), "member")
+      member.clock = member.clock + ns.Constants.PVP_LEDGER_REQUEST_COOLDOWN_SECONDS
+      assert.is_true(member.comm:RequestLedger())
+      assert.is_nil(Protocol.Validate(member.codec:Decode(member.sent[#member.sent])).p.queue)
+    end)
+  end)
+
+  describe("pacing the pages of a catch-up", function()
+    local relay
+
+    before_each(function()
+      relay = populated(build_env(), "gm")
+      for index = 1, 600 do
+        local message = Protocol.Validate(Protocol.Build("PVP_GRANT", {
+          id = "bulk-" .. index,
+          seasonId = "s1",
+          player = "Player" .. (index % 50) .. "-Realm",
+          missionId = "m1",
+          points = 1 + index % 30,
+          at = T + index % 250,
+        }, "bulk"))
+        assert.is_true(Sync.Apply(relay.comm:PvPSeasonContext(), message, "Boss-Realm"))
+      end
+      relay.sent, relay.targets, relay.scheduled = {}, {}, {}
+    end)
+
+    local function free()
+      return relay.queue.maxItems - relay.queue:Pending()
+    end
+
+    local function pages_for_all()
+      relay.queue.maxItems = 1000
+      local _, count = relay.comm:SendLedger("Late-Realm", { seasonId = "s1", count = 0, digest = "00000000" })
+      relay.sent, relay.targets, relay.queue.items = {}, {}, {}
+      return count
+    end
+
+    it("leaves room in the queue for other traffic and sends the rest later", function()
+      local count = pages_for_all()
+      assert.is_true(count >= 2)
+      local constants = ns.Constants
+      -- Room for one page above the reserve, with the lockdown holding everything back.
+      relay.queue.maxItems = constants.QUEUE_RESERVED_ITEMS + 1
+      relay.locked = true
+      local ok, total, paced = relay.comm:SendLedger("Late-Realm", { seasonId = "s1", count = 0, digest = "00000000" })
+      assert.is_true(ok)
+      assert.are.equal(count, total)
+      assert.are.equal("paced", paced)
+      assert.are.equal(1, relay.queue:Pending())
+      assert.are.equal(constants.QUEUE_RESERVED_ITEMS, free())
+      assert.are.equal(constants.QUEUE_PACE_SECONDS, relay.scheduled[#relay.scheduled].delay)
+
+      -- The lockdown ends and the queue drains: the next batch goes out, until every page was sent.
+      relay.locked = false
+      relay.comm:Flush()
+      local guard = 0
+      while #relay.scheduled > 0 and guard < 50 do
+        guard = guard + 1
+        table.remove(relay.scheduled, 1).fn()
+      end
+      assert.are.equal(count, #relay.sent)
+      for index, text in ipairs(relay.sent) do
+        local message = Protocol.Validate(relay.codec:Decode(text, { encoded = ns.Constants.SYNC_MAX_ENCODED_BYTES }))
+        assert.are.equal(index, message.p.page)
+        assert.are.equal(count, message.p.pages)
+        assert.are.equal("Late-Realm", relay.targets[index])
+      end
+      assert.is_nil(relay.comm.lastError)
+    end)
+
+    it("gives up after its retries, and records which pages never went out", function()
+      pages_for_all()
+      relay.queue.maxItems = ns.Constants.QUEUE_RESERVED_ITEMS
+      relay.locked = true
+      assert.is_true(relay.comm:SendLedger("Late-Realm", { seasonId = "s1", count = 0, digest = "00000000" }))
+      local rounds = 0
+      while #relay.scheduled > 0 and rounds < 50 do
+        rounds = rounds + 1
+        table.remove(relay.scheduled, 1).fn()
+      end
+      assert.are.equal(ns.Constants.QUEUE_PACE_RETRIES, rounds)
+      assert.are.equal("ledger_pages", relay.comm.lastError.kind)
+      assert.is_truthy(relay.comm.lastError.detail:find("Late-Realm", 1, true))
+      assert.are.equal(1, relay.comm.errorCount)
     end)
   end)
 
@@ -2227,12 +2378,102 @@ describe("Comm PvP seasons", function()
       },
     }
 
-    it("is accepted from a raid leader and an admin, and applied as its author", function()
-      assert.is_true(env.comm:HandleMessage(page(items), "Lead-Realm", "WHISPER"))
+    it("is accepted from a gm or cogm and applied as its author", function()
+      env.roles["Co-Realm"] = "cogm"
+      assert.is_true(env.comm:HandleMessage(page(items), "Co-Realm", "WHISPER"))
       assert.is_truthy(env.pvpSeason.grants.s1["direct-9"])
       assert.are.equal("Boss-Realm", env.pvpSeason.grants.s1["direct-9"].by)
       assert.is_true(env.comm:HandleMessage(page({}, "p-2"), "Boss-Realm", "WHISPER"))
       assert.are.equal("forbidden", select(2, env.comm:HandleMessage(page({}, "p-3"), "Off-Realm", "WHISPER")))
+    end)
+
+    it("does not let an officer or rl name the guild master as the author of what it relays", function()
+      local forged = {
+        { t = "PVP_GRANT", p = items[1].p, by = "Boss-Realm" },
+        {
+          t = "PVP_FINAL",
+          by = "Boss-Realm",
+          p = {
+            seasonId = "s1",
+            name = "Season One",
+            startsAt = 1000,
+            endsAt = 100000,
+            closedAt = T,
+            standings = { { pos = 1, player = "Ann-Realm", points = 10, lastAt = T } },
+            prizes = {},
+          },
+        },
+      }
+      env.roles["Officer-Realm"] = "officer"
+      for _, relay in ipairs({ "Lead-Realm", "Officer-Realm" }) do
+        assert.is_true(env.comm:HandleMessage(page(forged, "forged-" .. relay), relay, "WHISPER"))
+        assert.are.equal(0, env.comm.lastLedger.applied, relay)
+        assert.are.equal(2, env.comm.lastLedger.forged, relay)
+      end
+      assert.is_nil(env.pvpSeason.grants.s1)
+      assert.is_nil(env.pvpSeason.finals.s1)
+    end)
+
+    it("is dropped, before it is decoded, when no ledger request of this client is outstanding", function()
+      local quiet = build_env()
+      quiet.roles["Boss-Realm"] = "gm"
+      local decoded = 0
+      local original = quiet.codec.Decode
+      quiet.codec.Decode = function(...)
+        decoded = decoded + 1
+        return original(...)
+      end
+      local text = quiet.wire("PVP_LEDGER_DATA", { seasonId = "s1", page = 1, pages = 1, items = items }, "p-1")
+      -- Unsolicited pages have the strict limit of a snapshot, and are never applied.
+      for index = 1, ns.Constants.SYNC_INBOX_MAX_PER_WINDOW do
+        local ok, reason = quiet.comm:HandleMessage(
+          quiet.wire("PVP_LEDGER_DATA", { seasonId = "s1", page = 1, pages = 1, items = items }, "u-" .. index),
+          "Boss-Realm",
+          "WHISPER"
+        )
+        assert.is_false(ok)
+        assert.are.equal("unsolicited", reason)
+      end
+      local ok, reason = quiet.comm:HandleMessage(text, "Boss-Realm", "WHISPER")
+      assert.is_false(ok)
+      assert.are.equal("rate_limited", reason)
+      assert.are.equal(ns.Constants.SYNC_INBOX_MAX_PER_WINDOW, decoded)
+      assert.is_nil(quiet.pvpSeason.grants.s1)
+
+      -- Once this client asks, pages are expected for a while; after that window they are unsolicited again.
+      assert.is_true(quiet.comm:RequestLedger())
+      quiet.clock = quiet.clock + 1
+      assert.is_true(
+        quiet.comm:HandleMessage(
+          quiet.wire("PVP_LEDGER_DATA", { seasonId = "s1", page = 1, pages = 1, items = {} }, "ok-1"),
+          "Boss-Realm",
+          "WHISPER"
+        )
+      )
+      quiet.clock = quiet.clock + ns.Constants.PVP_LEDGER_EXPECT_SECONDS + 1
+      assert.are.equal(
+        "unsolicited",
+        select(
+          2,
+          quiet.comm:HandleMessage(
+            quiet.wire("PVP_LEDGER_DATA", { seasonId = "s1", page = 1, pages = 1, items = {} }, "late-1"),
+            "Boss-Realm",
+            "WHISPER"
+          )
+        )
+      )
+    end)
+
+    it("still limits snapshots strictly while a catch-up is expected", function()
+      for index = 1, ns.Constants.SYNC_INBOX_MAX_PER_WINDOW do
+        assert.is_true(
+          env.comm:HandleMessage(env.wire("SYNC_DATA", { items = {} }, "snap-" .. index), "Boss-Realm", "WHISPER")
+        )
+      end
+      local ok, reason =
+        env.comm:HandleMessage(env.wire("SYNC_DATA", { items = {} }, "snap-next"), "Boss-Realm", "WHISPER")
+      assert.is_false(ok)
+      assert.are.equal("rate_limited", reason)
     end)
 
     it("is refused from a member before anything is decoded", function()

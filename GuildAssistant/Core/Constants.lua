@@ -2,7 +2,7 @@ local _, ns = ...
 
 ns.Constants = {
   ADDON_PREFIX = "GUILDASST",
-  SCHEMA_VERSION = 18,
+  SCHEMA_VERSION = 19,
 
   -- Free-text profile fields a player can declare by hand (source = "declared").
   MANUAL_FIELDS = { role = true, role2 = true, main = true, notes = true },
@@ -10,7 +10,7 @@ ns.Constants = {
 
   -- Wire protocol. Major mismatches are rejected; minor versions only add optional fields.
   PROTOCOL_MAJOR = 1,
-  PROTOCOL_MINOR = 10,
+  PROTOCOL_MINOR = 11,
   -- Bounds applied before anything is decoded or deserialized from the wire.
   MAX_ENCODED_BYTES = 4096,
   MAX_DECOMPRESSED_BYTES = 32768,
@@ -222,26 +222,61 @@ ns.Constants = {
   PVP_LEDGER_SERVE_COOLDOWN_SECONDS = 60,
   PVP_LEDGER_PAGE_ITEMS = 400,
   PVP_LEDGER_PAGES_MAX = 100,
+  -- A catch-up whisper is only expected for this long after the own request went out (it comes after a delay of up
+  -- to SYNC_RESPONSE_DELAY_MAX and, paced, in several batches).
+  PVP_LEDGER_EXPECT_SECONDS = 300,
   -- Prize tiers, best first: the keys of prizes.tiers and of a delivery. A position 1..10 maps to exactly one tier.
   PVP_PRIZE_TIERS = { "1", "2", "3", "4-6", "7-10" },
   -- Points are never spent; at least this many are needed to be ranked (and to get a prize).
   PVP_MIN_POINTS = 1,
 
   -- PvP missions: detection (docs/PVP_MISSIONS_PLAN.md, sections 2 and 5).
-  -- The own kill log of a character keeps at most PVP_MISSION_KILLS_MAX rows (oldest dropped first). A victim counts at
-  -- most PVP_VICTIM_DAILY_CAP times per server day across all missions. A battleground win is logged once per
-  -- instance; PVP_BG_WIN_DEDUPE_SECONDS covers a reload inside the same battleground.
-  PVP_MISSION_KILLS_MAX = 2000,
+  -- The own PvP log of a character (char.pvpLog.events: honour kills and battleground results) does not depend on
+  -- the season: it keeps the rows of the last PVP_LOG_RETENTION_DAYS days, at most PVP_LOG_EVENTS_MAX of them (oldest
+  -- dropped first). A victim counts at most PVP_VICTIM_DAILY_CAP times per server day across all missions that do not
+  -- set their own cap. A battleground result is logged once per instance (the record of the battleground is saved
+  -- with the log, so a reload does not log it again).
+  PVP_LOG_EVENTS_MAX = 3000,
+  PVP_LOG_RETENTION_DAYS = 45,
   PVP_VICTIM_DAILY_CAP = 3,
-  PVP_BG_WIN_DEDUPE_SECONDS = 1800,
+  -- The optional goal fields: at most PVP_MISSION_FILTER_MAX classes or races in a filter, a per-victim daily cap up to
+  -- PVP_MISSION_VICTIM_CAP_MAX (0 = no cap), at most PVP_MISSION_GUILD_GROUP_MAX guild members required in the group,
+  -- at most PVP_MISSION_COMPLETIONS_MAX completions per member in a season (0 = no limit).
+  PVP_MISSION_FILTER_MAX = 10,
+  PVP_MISSION_VICTIM_CAP_MAX = 20,
+  PVP_MISSION_GUILD_GROUP_MAX = 40,
+  PVP_MISSION_COMPLETIONS_MAX = 100,
+  -- A snapshot relays the record of another member: its `rev` may be at most this far above the one held (publishing
+  -- raises it by one at most once a minute), or below PVP_SNAPSHOT_REV_NEW_MAX for a member not held yet. The member's
+  -- own messages are not limited.
+  PVP_SNAPSHOT_REV_JUMP_MAX = 2000,
+  PVP_SNAPSHOT_REV_NEW_MAX = 100000,
+  -- Progress summaries (PVP_PROGRESS): a member shares how far they are in each mission at most once per
+  -- PVP_PROGRESS_INTERVAL_SECONDS, and only when something changed. An approver keeps the last summary of at most
+  -- PVP_PROGRESS_MEMBERS_MAX members. A claimant sends its pending claims again when it hears a gm or cogm (a HELLO),
+  -- at most once per PVP_CLAIM_HELLO_COOLDOWN_SECONDS.
+  PVP_PROGRESS_INTERVAL_SECONDS = 120,
+  PVP_PROGRESS_MEMBERS_MAX = 1000,
+  PVP_CLAIM_HELLO_COOLDOWN_SECONDS = 120,
   -- The unit cache (victim class and race) lives in memory only: at most PVP_UNIT_CACHE_MAX names, least recently
   -- seen dropped first, and an entry older than PVP_UNIT_CACHE_TTL seconds is ignored.
   PVP_UNIT_CACHE_MAX = 500,
   PVP_UNIT_CACHE_TTL = 3600,
-  -- The enemy sets of the distinct = "class" | "race" | "class_race" missions: the Horde side, as upper-case file
-  -- tokens (the second return of UnitClass / UnitRace, upper-cased). The guild is Alliance (plan, section 7).
-  PVP_ENEMY_CLASSES = { "DRUID", "HUNTER", "MAGE", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR" },
-  PVP_ENEMY_RACES = { "ORC", "SCOURGE", "TAUREN", "TROLL" },
+  -- The enemy sets of the distinct = "class" | "race" | "class_race" missions, keyed by the faction of the PLAYER (the
+  -- enemy sets of the other side), as upper-case file tokens (the second return of UnitClass / UnitRace, upper-cased).
+  -- Without a readable faction there is no set: nothing is assumed.
+  PVP_ENEMY_CLASSES_BY_FACTION = {
+    Alliance = { "DRUID", "HUNTER", "MAGE", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR" },
+    Horde = { "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "WARLOCK", "WARRIOR" },
+  },
+  PVP_ENEMY_RACES_BY_FACTION = {
+    Alliance = { "ORC", "SCOURGE", "TAUREN", "TROLL" },
+    Horde = { "DWARF", "GNOME", "HUMAN", "NIGHTELF" },
+  },
+  -- The battleground type by the map id of its instance (not measured on a live client yet), and how often the score
+  -- data is requested while the player is inside one (the winner comes with it).
+  PVP_BG_BY_MAP = { [489] = "wsg", [529] = "ab", [30] = "av" },
+  PVP_BG_SCORE_POLL_SECONDS = 30,
   -- The zones an admin can pick for a mission: uiMapIds of the capitals and contested zones, with the English name
   -- (a key for L()). The ids are from the Classic map tables and are TO BE MEASURED on Forever (plan, M1); a zone
   -- whose id turns out wrong is fixed here, nothing else depends on the list.
@@ -330,6 +365,11 @@ ns.Constants = {
 
   -- Outbound queue: bounded, expiring, and jittered when it drains after a lockdown.
   QUEUE_MAX_ITEMS = 100,
+  -- Room a paced multi-message send (the ledger pages) leaves free for other traffic, and how it paces itself when the
+  -- queue has no room: it tries again every QUEUE_PACE_SECONDS, at most QUEUE_PACE_RETRIES times.
+  QUEUE_RESERVED_ITEMS = 20,
+  QUEUE_PACE_SECONDS = 15,
+  QUEUE_PACE_RETRIES = 8,
   QUEUE_TTL_SECONDS = 120,
   QUEUE_MAX_JITTER_SECONDS = 5,
 

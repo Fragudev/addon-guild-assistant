@@ -82,6 +82,13 @@ function Comm.New(deps)
     helloReplyPending = false,
     onPeerSeen = deps.onPeerSeen,
     lastAskAt = nil,
+    -- Called with the sender of every HELLO from a gm or cogm (set by Init after the PvP missions exist).
+    onApproverHello = deps.onApproverHello,
+    -- Until when a catch-up whisper is expected: set by the own ledger request, a page outside it is unsolicited.
+    ledgerExpectedUntil = nil,
+    -- The last failure worth looking at, and how many there were.
+    lastError = nil,
+    errorCount = 0,
   }, Comm)
 end
 
@@ -176,6 +183,10 @@ function Comm:HandleHello(sender, payload)
   local known = self.peers[sender] ~= nil
   if not self:RememberPeer(sender, { version = payload.version }) then
     return false, "peers_full"
+  end
+  -- A gm or cogm is online: the claims that no approver has seen yet can be sent again (PvPMissionService decides).
+  if self.onApproverHello and ns.PermissionService.IsGlobal(self.roleOf(sender)) then
+    pcall(self.onApproverHello, sender)
   end
   if not known or payload.ask then
     self:MaybeReplyHello()
@@ -417,7 +428,10 @@ function Comm:HandleWhisper(text, sender)
   if not leader then
     return false, "forbidden"
   end
-  if not self.ledgerInbox:AllowRate(sender, self.now()) then
+  local now = self.now()
+  local expectingLedger = self.ledgerExpectedUntil ~= nil and now <= self.ledgerExpectedUntil
+  local limiter = expectingLedger and self.ledgerInbox or self.snapshotInbox
+  if not limiter:AllowRate(sender, now) then
     return false, "rate_limited"
   end
 
@@ -434,10 +448,13 @@ function Comm:HandleWhisper(text, sender)
     return false, reason
   end
   if message.t == "PVP_LEDGER_DATA" then
+    if not expectingLedger then
+      return false, "unsolicited"
+    end
     if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
       return false, "duplicate"
     end
-    return self:HandleLedgerData(sender, message.p)
+    return self:HandleLedgerData(sender, message.p, role)
   end
   if message.t ~= "SYNC_DATA" then
     return false, "wrong_channel"
@@ -446,7 +463,8 @@ function Comm:HandleWhisper(text, sender)
   if not leader then
     return false, "forbidden"
   end
-  if not self.snapshotInbox:AllowRate(sender, self.now()) then
+  -- Each snapshot costs a lot to decode: while the loose ledger limit applied above, the strict one still counts.
+  if expectingLedger and not self.snapshotInbox:AllowRate(sender, now) then
     return false, "rate_limited"
   end
   if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
@@ -657,13 +675,17 @@ function Comm:RequestLedger()
     return false, "cooldown"
   end
   self.lastLedgerRequestAt = now
-  return self:Send("PVP_LEDGER_REQ", ns.PvPSeasonSync.RequestPayload(self.pvpSeason, self.pvpSeason.activeId), "PLR")
+  -- The catch-up that answers this request is expected for a while, and only then.
+  self.ledgerExpectedUntil = now + ns.Constants.PVP_LEDGER_EXPECT_SECONDS
+  local payload = ns.PvPSeasonSync.RequestPayload(self.pvpSeason, self.pvpSeason.activeId, self:IsPvPApprover())
+  return self:Send("PVP_LEDGER_REQ", payload, "PLR")
 end
 
--- Can this client answer a ledger request? Only a leader (raid_manage): they are the ones a requester accepts a
--- catch-up from.
+-- Can this client answer a ledger request? Only a gm or cogm: every record of a catch-up is an admin record, and a
+-- requester only believes the author an item names when the relay is a gm or cogm (see PvPSeasonSync.ApplyItems), so
+-- the answer of anyone else would be thrown away.
 function Comm:IsLedgerRelay()
-  return ns.PermissionService.Can(self.ownRole and self.ownRole(), "raid_manage")
+  return ns.PermissionService.IsGlobal(self.ownRole and self.ownRole())
 end
 
 -- A ledger request from a late joiner: answered after a random delay, at most once a minute per requester, and only
@@ -714,12 +736,59 @@ function Comm:Fits(messageType, payload)
   return self.codec:Encode(message) ~= nil
 end
 
--- Whispers `target` the ledger the request is about, in pages that each fit the snapshot limit. Returns true plus the
--- number of pages, or false plus the first failure ("empty" when there is nothing to send).
+function Comm:RecordError(kind, detail)
+  self.lastError = { kind = kind, detail = tostring(detail):sub(1, 200), at = self.now() }
+  self.errorCount = self.errorCount + 1
+end
+
+-- Queues pages `from`..`count` of a catch-up for `target`, leaving QUEUE_RESERVED_ITEMS places of the queue free for
+-- other traffic. What does not fit is tried again every QUEUE_PACE_SECONDS, at most QUEUE_PACE_RETRIES times; the pages
+-- that never went out are recorded as an error. Returns the number of the first page that was not queued (count + 1
+-- when all were), and the first failure reason.
+function Comm:SendLedgerPages(target, seasonId, pages, from, attempt)
+  local constants = ns.Constants
+  local count = #pages
+  local number, first = from, nil
+  while number <= count do
+    if self.queue.maxItems - self.queue:Pending() <= constants.QUEUE_RESERVED_ITEMS then
+      break
+    end
+    local ok, reason = self:Send(
+      "PVP_LEDGER_DATA",
+      { seasonId = seasonId, page = number, pages = count, items = pages[number] },
+      ("PL:%s:%d"):format(target, number),
+      { target = target, maxBytes = constants.SYNC_MAX_ENCODED_BYTES }
+    )
+    if not ok and not first then
+      first = reason
+    end
+    number = number + 1
+  end
+  if first then
+    self:RecordError("ledger_page", first)
+  end
+  if number <= count then
+    if attempt >= constants.QUEUE_PACE_RETRIES then
+      self:RecordError(
+        "ledger_pages",
+        ("%d of %d page(s) not sent to %s: the queue was full"):format(count - number + 1, count, target)
+      )
+    else
+      self.schedule(constants.QUEUE_PACE_SECONDS, function()
+        self:SendLedgerPages(target, seasonId, pages, number, attempt + 1)
+      end)
+    end
+  end
+  return number, first
+end
+
+-- Whispers `target` the ledger the request is about, in pages that each fit the snapshot limit. The pages are paced:
+-- when the queue has no room for all of them the rest follows later (see SendLedgerPages). Returns true plus the number
+-- of pages (and "paced" when some wait), or false plus the first failure ("empty" when there is nothing to send).
 function Comm:SendLedger(target, request)
   local constants = ns.Constants
   local sync = ns.PvPSeasonSync
-  local items = sync.LedgerItems(self.pvpSeason, sync.ScopeFor(self.pvpSeason, request))
+  local items = sync.LedgerItems(self.pvpSeason, sync.ScopeFor(self.pvpSeason, request), request.queue == true)
   if #items == 0 then
     return false, "empty"
   end
@@ -730,29 +799,24 @@ function Comm:SendLedger(target, request)
   end
   local pages = sync.Paginate(items, fits, constants.PVP_LEDGER_PAGE_ITEMS)
   local count = math.min(#pages, constants.PVP_LEDGER_PAGES_MAX)
-  local first
-  for number = 1, count do
-    local ok, reason = self:Send(
-      "PVP_LEDGER_DATA",
-      { seasonId = request.seasonId, page = number, pages = count, items = pages[number] },
-      ("PL:%s:%d"):format(target, number),
-      { target = target, maxBytes = constants.SYNC_MAX_ENCODED_BYTES }
-    )
-    if not ok and not first then
-      first = reason
-    end
+  for number = #pages, count + 1, -1 do
+    pages[number] = nil
   end
+  local nextPage, first = self:SendLedgerPages(target, request.seasonId, pages, 1, 0)
   if first then
     return false, first
   end
-  return true, count
+  return true, count, nextPage <= count and "paced" or nil
 end
 
--- One page of a catch-up, already checked to come from a trusted relay: each item is applied as if its author had sent
--- it, through the same validation, authority and conflict rules.
-function Comm:HandleLedgerData(sender, payload)
-  local summary = ns.PvPSeasonSync.ApplyItems(self:PvPSeasonContext(), payload.items)
-  self.lastLedger = { from = sender, applied = summary.applied, total = summary.total, at = self.now() }
+-- One page of a catch-up, already checked to come from a leader: each item is applied as if its author had sent it,
+-- through the same validation, authority and conflict rules, but an author other than the relay itself is only
+-- believed when the relay is a gm or cogm.
+function Comm:HandleLedgerData(sender, payload, role)
+  local relay = { sender = sender, global = ns.PermissionService.IsGlobal(role) }
+  local summary = ns.PvPSeasonSync.ApplyItems(self:PvPSeasonContext(), payload.items, relay)
+  self.lastLedger =
+    { from = sender, applied = summary.applied, total = summary.total, forged = summary.forged, at = self.now() }
   if summary.applied > 0 and self.onPvPSeasonChange then
     self.onPvPSeasonChange("PVP_LEDGER_DATA")
   end
@@ -890,6 +954,15 @@ end
 -- The own counters. Keyed, so a newer message replaces one still waiting in the queue.
 function Comm:SendPvPStats(payload)
   return self:Send("PVP_STATS", payload, "pvp")
+end
+
+-- The own progress in the missions. Live only: refused during the lockdown instead of queued, because the next one
+-- carries the current numbers. Keyed, so it never piles up.
+function Comm:SendPvPProgress(payload)
+  if not self.queue.guard:CanSend() then
+    return false, "locked"
+  end
+  return self:Send("PVP_PROGRESS", payload, "PP")
 end
 
 -- A kill for the feed. Never queued: during the lockdown it is refused instead of waiting, because a kill that
