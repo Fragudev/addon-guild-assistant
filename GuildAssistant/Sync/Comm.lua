@@ -12,7 +12,8 @@ Comm.__index = Comm
 -- deps: platform, codec, inbox, queue, roster (table), events (table), tombstones (table),
 --       pvpStats (table), pvpResets (table), onPvPChange(), onPvPReset(rev) and onPvPKill(sender, payload)
 --       (all optional), blacklist (table) and onBlacklistChange(messageType) (optional),
---       layerDirectory, layerSwap and onLayerChange(messageType) (all optional),
+--       layerDirectory, layerSwap and onLayerChange(messageType), lfgService and onLfgChange(messageType) (all
+--       optional),
 --       rosters and members (tables: raid rosters, and the role and roster of each member) and
 --       onRosterChange(messageType) (optional), pvpSeason (the season ledger table, see PvPSeasonSync),
 --       onPvPSeasonChange(messageType) and onPvPSeasonClosed(seasonId) (optional), ledgerInbox (optional),
@@ -50,6 +51,9 @@ function Comm.New(deps)
     layerDirectory = deps.layerDirectory,
     layerSwap = deps.layerSwap,
     onLayerChange = deps.onLayerChange,
+    -- The Groups service is in memory and created after Comm (Init.StartLfg sets it).
+    lfgService = deps.lfgService,
+    onLfgChange = deps.onLfgChange,
     rosters = deps.rosters or {},
     members = deps.members or {},
     onRosterChange = deps.onRosterChange,
@@ -309,6 +313,9 @@ function Comm:HandleMessage(text, sender, channel)
   end
   if ns.LayerSync.IsLayerMessage(message.t) then
     return self:HandleLayer(sender, message)
+  end
+  if ns.LfgSync.IsLfgMessage(message.t) then
+    return self:HandleLfg(sender, message)
   end
   if ns.RosterSync.IsRosterMessage(message.t) then
     return self:HandleRoster(sender, message)
@@ -894,6 +901,16 @@ function Comm:HandleLayer(sender, message)
   return ok, reason
 end
 
+-- LFG_POST and LFG_APPLY: live only, nothing is saved. Same rules as the layer messages: the role comes from the local
+-- roster and the actor is always the sender.
+function Comm:HandleLfg(sender, message)
+  local ok, reason = ns.LfgSync.Apply({ service = self.lfgService }, message, sender, self.roleOf(sender))
+  if ok and self.onLfgChange then
+    self.onLfgChange(message.t)
+  end
+  return ok, reason
+end
+
 -- A kill for the guild feed: nothing is stored here. The killer is the sender (never a payload field); the
 -- sender must be a known guild member who may publish PvP data. The feed decides what to show.
 function Comm:HandlePvPKill(sender, payload)
@@ -989,6 +1006,22 @@ function Comm:SendLayerSwap(payload)
     return false, "locked"
   end
   return self:Send("LAYER_SWAP", payload)
+end
+
+-- The own Groups post (open, changed or closed) and a step of an application. Live only, like the layer swap: refused
+-- during the lockdown instead of queued, because the next republication carries the current post.
+function Comm:SendLfgPost(payload)
+  if not self.queue.guard:CanSend() then
+    return false, "locked"
+  end
+  return self:Send("LFG_POST", payload)
+end
+
+function Comm:SendLfgApply(payload)
+  if not self.queue.guard:CanSend() then
+    return false, "locked"
+  end
+  return self:Send("LFG_APPLY", payload)
 end
 
 -- Admin only: resets a member. The reset is applied here first (own messages are never received), then told to

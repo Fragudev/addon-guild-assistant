@@ -13,10 +13,11 @@ local MODULES = {
   { id = "loot", tabs = { "loot" }, steps = { "lootPopup", "votingFrame", "bossLoot" }, requires = { "raid" } },
   { id = "pvp", tabs = { "pvp", "pvpadmin" }, steps = { "pvp", "pvpSeason" }, requires = {} },
   { id = "layers", tabs = {}, steps = { "layer" }, requires = {} },
+  { id = "groups", tabs = { "groups" }, steps = { "lfg" }, requires = {} },
   { id = "map", tabs = {}, steps = { "position" }, requires = {} },
   { id = "blacklist", tabs = {}, steps = { "blacklist" }, requires = {} },
-  -- Later phases register their modules here, in the order of the Modules tab: intel (tab-less, needs pvp),
-  -- groups (tab "groups", step "lfg") and announcements (tab "announcements").
+  -- Later phases register their modules here, in the order of the Modules tab: intel (tab-less, needs pvp) and
+  -- announcements (tab "announcements").
 }
 
 -- The tabs and the activation steps that no module owns: they are always on.

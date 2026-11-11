@@ -1059,6 +1059,7 @@ ViewModel.TABS = ns.Locale.Table(function()
     { value = "ready", text = L("Raid check"), icon = "check-circle", group = "guild" },
     { value = "loot", text = L("Loot"), icon = "gem", group = "guild" },
     { value = "pvp", text = "PvP", icon = "swords", group = "guild" },
+    { value = "groups", text = L("Groups"), icon = "users", group = "guild" },
     { value = "modules", text = L("Modules"), icon = "gear", group = "guild" },
     { value = "raid", text = L("Raid"), icon = "calendar", group = "admin" },
     { value = "rules", text = L("Roster rules"), icon = "list", group = "admin" },
@@ -1309,9 +1310,18 @@ function ViewModel.RuleSummary(rule)
   return L("confirmed by the player")
 end
 
+-- The count on the Groups item of the sidebar: a text, or nil when there is nothing to count.
+function ViewModel.GroupsBadge(count)
+  if type(count) ~= "number" or count <= 0 then
+    return nil
+  end
+  return count > 99 and "99+" or tostring(math.floor(count))
+end
+
 -- The sidebar: the groups Guild and Admin, each with its { value, text, icon } items, for a player with `role` and the
--- roster `rosterId`. A group without items is left out.
-function ViewModel.NavGroups(role, rosterId)
+-- roster `rosterId`. A group without items is left out. `openGroups` (optional) is the number of open groups of the
+-- board: the Groups item gets it as `badge`.
+function ViewModel.NavGroups(role, rosterId, openGroups)
   local groups = {
     { label = L("Guild"), items = {} },
     { label = L("Admin"), items = {} },
@@ -1319,7 +1329,11 @@ function ViewModel.NavGroups(role, rosterId)
   local index = { guild = 1, admin = 2 }
   for _, tab in ipairs(ViewModel.TabsFor(role, rosterId)) do
     local group = groups[index[tab.group] or 1]
-    group.items[#group.items + 1] = { value = tab.value, text = tab.text, icon = tab.icon }
+    local item = { value = tab.value, text = tab.text, icon = tab.icon }
+    if tab.value == "groups" then
+      item.badge = ViewModel.GroupsBadge(openGroups)
+    end
+    group.items[#group.items + 1] = item
   end
   local result = {}
   for _, group in ipairs(groups) do

@@ -64,6 +64,9 @@ Domain\LayerTracker.lua
 Domain\LayerDirectory.lua
 Domain\LayerSwap.lua
 Domain\LayerPublisher.lua
+Domain\LfgModel.lua
+Domain\LfgBoard.lua
+Domain\LfgService.lua
 Domain\PositionModel.lua
 Domain\PositionPublisher.lua
 Domain\PositionDirectory.lua
@@ -83,6 +86,7 @@ Sync\RosterSync.lua
 Sync\PvPSeasonSync.lua
 Sync\RecipeSync.lua
 Sync\LayerSync.lua
+Sync\LfgSync.lua
 Sync\PositionSync.lua
 Sync\Transfer.lua
 Sync\Comm.lua
@@ -104,6 +108,7 @@ UI\ViewModelGuild.lua
 UI\ViewModelPvP.lua
 UI\ViewModelProfessions.lua
 UI\ViewModelLayers.lua
+UI\ViewModelGroups.lua
 UI\ViewModelRanks.lua
 UI\ViewModelInstalls.lua
 UI\ViewModelModules.lua
@@ -122,12 +127,14 @@ UI\Tabs\Blacklist.lua
 UI\Tabs\Rules.lua
 UI\Tabs\Professions.lua
 UI\Tabs\Layers.lua
+UI\Tabs\Groups.lua
 UI\PopupFrame.lua
 UI\Tabs\Ranks.lua
 UI\Tabs\Installs.lua
 UI\Tabs\Modules.lua
 UI\LootPopup.lua
 UI\LayerPopup.lua
+UI\LfgPopup.lua
 UI\VotingFrame.lua
 UI\MinimapButton.lua
 UI\MapPins.lua
