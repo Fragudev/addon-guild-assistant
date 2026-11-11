@@ -1,7 +1,9 @@
 local _, ns = ...
 
--- The guildmates on the minimap and the world map. This is the only file that touches HereBeDragons: it places a
--- pooled pin frame per guildmate through the library's icon calls, and does nothing when the library is missing.
+-- The guildmates and the enemy players on the minimap and the world map. This is the only file that touches
+-- HereBeDragons: it places a pooled pin frame per pin through the library's icon calls, and does nothing when the
+-- library is missing. The enemy pins (docs/USER_GUIDE.md) have a pool and a library key of their own, so redrawing
+-- one set never removes the other. An enemy pin wears a swords badge and a red border.
 -- A pin is a class icon inside a diamond: the diamond keeps it apart from the round pins Blizzard draws for the party
 -- and the raid, and its border carries the class colour. The pin is always fully opaque, except half transparent on
 -- another layer, so it stays readable over any map.
@@ -21,12 +23,53 @@ local DIAMOND_TEXTURE = "Interface\\AddOns\\GuildAssistant\\Media\\Icons\\pin-di
 local RING_WIDTH = 3
 local GREY = { 0.5, 0.5, 0.5 }
 local GREEN = { 0.3, 1, 0.3 }
+local RED = { 1, 0.35, 0.35 }
+local ICONS = "Interface\\AddOns\\GuildAssistant\\Media\\Icons\\"
+local BADGE_TEXTURE = ICONS .. "swords"
+local BADGE_BACK_TEXTURE = ICONS .. "disc"
+local BADGE_SHARE = 0.6
 
 -- What the tooltip says under the name: { text, green } rows, in order. A layer that is unknown is left out.
 function MapPins.TooltipLines(pin)
   local lines = {}
   if type(pin.level) == "number" then
     lines[#lines + 1] = { text = L("Level %d"):format(pin.level) }
+  end
+  if type(pin.layer) == "number" then
+    lines[#lines + 1] = {
+      text = L("Layer %s"):format(ns.LayerModel.Describe(nil, pin.layer)),
+      green = pin.sameLayer == true,
+    }
+  end
+  lines[#lines + 1] = { text = L("%d s ago"):format(math.floor(pin.age or 0)) }
+  return lines
+end
+
+-- What the tooltip of an enemy pin says under the name: { text, green, red } rows, in order. `pin` = a pin of
+-- IntelPins. The position is the reporter's, and the tooltip says who the reporter is.
+function MapPins.EnemyTooltipLines(pin)
+  local lines = {}
+  local detail = {}
+  if type(pin.level) == "number" then
+    detail[#detail + 1] = L("Level %d"):format(pin.level) .. (pin.levelEstimated and "?" or "")
+  end
+  local class = ns.IntelModel.ClassName(pin.class)
+  if class then
+    detail[#detail + 1] = class
+  end
+  if #detail > 0 then
+    lines[#lines + 1] = { text = table.concat(detail, " ") }
+  end
+  if pin.kos then
+    lines[#lines + 1] = { text = L("Kill on Sight"), red = true }
+  end
+  if pin.stealth then
+    lines[#lines + 1] = { text = L("Used a stealth ability") }
+  end
+  if pin.reporter then
+    lines[#lines + 1] = { text = L("Reported by %s"):format((pin.reporter:gsub("%-[^%-]*$", ""))) }
+  else
+    lines[#lines + 1] = { text = L("Seen by you") }
   end
   if type(pin.layer) == "number" then
     lines[#lines + 1] = {
@@ -66,6 +109,21 @@ function MapPins.DressPin(frame, pin)
   frame:SetAlpha(pin.sameLayer == false and 0.5 or 1)
 end
 
+-- Dresses a pin frame for an enemy: the class icon in a red diamond with a red swords badge (both grey when the
+-- reporter is on another layer), and a mark when the enemy is on a Kill on Sight list.
+function MapPins.DressEnemyPin(frame, pin)
+  MapPins.DressPin(frame, pin)
+  frame.enemy = true
+  local color = pin.sameLayer == false and GREY or RED
+  frame.border:SetVertexColor(color[1], color[2], color[3], 1)
+  if frame.badge then
+    frame.badge:SetVertexColor(color[1], color[2], color[3], 1)
+  end
+  if frame.mark then
+    frame.mark:SetText(pin.kos and "!" or "")
+  end
+end
+
 local function showTooltip(frame)
   local pin = frame.pin
   if not (pin and GameTooltip) then
@@ -74,8 +132,9 @@ local function showTooltip(frame)
   GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
   local color = classColor(pin.class)
   GameTooltip:AddLine(pin.name, color[1], color[2], color[3])
-  for _, line in ipairs(MapPins.TooltipLines(pin)) do
-    local tint = line.green and GREEN or { 1, 1, 1 }
+  local lines = frame.enemy and MapPins.EnemyTooltipLines(pin) or MapPins.TooltipLines(pin)
+  for _, line in ipairs(lines) do
+    local tint = (line.green and GREEN) or (line.red and RED) or { 1, 1, 1 }
     GameTooltip:AddLine(line.text, tint[1], tint[2], tint[3])
   end
   GameTooltip:Show()
@@ -110,11 +169,33 @@ function MapPins.BuildPin(kind)
   return frame
 end
 
+-- A new enemy pin frame: a pin with a swords badge on its bottom-right corner, on a dark disc so it reads over any map,
+-- and a mark for the Kill on Sight players. The badge sits in the empty corner of the diamond's square. Client only.
+function MapPins.BuildEnemyPin(kind)
+  local frame = MapPins.BuildPin(kind)
+  local badge = math.floor(frame:GetWidth() * BADGE_SHARE)
+  frame.badgeBack = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+  frame.badgeBack:SetTexture(BADGE_BACK_TEXTURE)
+  frame.badgeBack:SetVertexColor(0, 0, 0, 0.85)
+  frame.badgeBack:SetSize(badge, badge)
+  frame.badgeBack:SetPoint("CENTER", frame, "BOTTOMRIGHT", -2, 2)
+  frame.badge = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+  frame.badge:SetTexture(BADGE_TEXTURE)
+  frame.badge:SetSize(badge - 2, badge - 2)
+  frame.badge:SetPoint("CENTER", frame.badgeBack, "CENTER")
+  frame.mark = frame:CreateFontString(nil, "OVERLAY")
+  frame.mark:SetFontObject(ns.Kit.Theme.StyleFont("smallMedium"))
+  frame.mark:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", 3, -3)
+  ns.Kit.SetTextColor(frame.mark, "danger")
+  return frame
+end
+
 -- The decisions, apart from the frames so they can be tested with fakes.
 --   deps: hbd (HereBeDragons-Pins-2.0, or nil: then nothing is drawn), ref (the key the library files the icons under),
---         newPin(kind) -> frame, dress(frame, pin), worldFlag (what to pass for the world map display);
+--         newPin(kind) -> frame, dress(frame, pin), worldFlag (what to pass for the world map display), max (the most
+--         pins, default POSITION_DIRECTORY_MAX), follow(map) (optional: an open world map goes to this map);
 --         for Request: now() -> seconds, after(seconds, fn), pins() -> the pins to draw, settings() -> { minimap,
---         worldmap }
+--         worldmap, follow }
 local Controller = {}
 Controller.__index = Controller
 MapPins.Controller = Controller
@@ -136,22 +217,56 @@ local function acquire(self, kind, index)
   return pool[index]
 end
 
+-- What decides how the pins look and where they sit: when it is the same as last time, nothing has to be drawn again.
+-- The age and the level only show in the tooltip, which reads the pin of the frame.
+local function signature(pins, settings, max)
+  local parts = { tostring(settings.minimap ~= false), tostring(settings.worldmap ~= false) }
+  for index, pin in ipairs(pins) do
+    if index > max then
+      break
+    end
+    parts[#parts + 1] = table.concat({
+      tostring(pin.key or pin.name),
+      tostring(pin.map),
+      tostring(pin.x),
+      tostring(pin.y),
+      tostring(pin.class),
+      tostring(pin.sameLayer),
+      tostring(pin.kos),
+    }, ",")
+  end
+  return table.concat(parts, ";")
+end
+
 -- Draws `pins` again: every icon is removed and one is added per pin, only on the maps the settings enable. The pool
--- never holds more frames than Constants.POSITION_DIRECTORY_MAX. Returns the number of pins drawn, nil without the
--- library.
+-- never holds more frames than `deps.max` (default Constants.POSITION_DIRECTORY_MAX). When nothing that shows changed
+-- since the last draw, the frames only take the new pins (for the tooltip) and the library is not called. Returns the
+-- number of pins drawn, nil without the library.
 function Controller:Redraw(pins, settings)
   local deps = self.deps
   local hbd = deps.hbd
   if not hbd then
     return nil
   end
+  local max = deps.max or ns.Constants.POSITION_DIRECTORY_MAX
+  local drawn = math.min(#pins, max)
+  local current = signature(pins, settings, max)
+  if current == self.signature then
+    for index = 1, drawn do
+      for _, kind in ipairs({ "minimap", "worldmap" }) do
+        local frame = self.pools[kind][index]
+        if frame then
+          frame.pin = pins[index]
+        end
+      end
+    end
+    return drawn
+  end
+  self.signature = current
   hbd:RemoveAllMinimapIcons(deps.ref)
   hbd:RemoveAllWorldMapIcons(deps.ref)
-  local drawn = 0
-  for index, pin in ipairs(pins) do
-    if index > ns.Constants.POSITION_DIRECTORY_MAX then
-      break
-    end
+  for index = 1, drawn do
+    local pin = pins[index]
     if settings.minimap ~= false then
       local frame = acquire(self, "minimap", index)
       deps.dress(frame, pin)
@@ -162,9 +277,26 @@ function Controller:Redraw(pins, settings)
       deps.dress(frame, pin)
       hbd:AddWorldMapIconMap(deps.ref, frame, pin.map, pin.x, pin.y, deps.worldFlag)
     end
-    drawn = drawn + 1
   end
   return drawn
+end
+
+-- The world map goes to the map of the first pin (the Kill on Sight players first, then the newest), once for each new
+-- enemy and map: a map the player moved elsewhere is left alone until something new shows up. `deps.follow` decides
+-- whether the map is open.
+function Controller:Follow(pins)
+  local pin = pins[1]
+  if not pin then
+    self.followed = nil
+    return
+  end
+  local token = tostring(pin.key) .. ":" .. tostring(pin.map)
+  if token ~= self.followed then
+    self.followed = token
+    if self.deps.follow then
+      self.deps.follow(pin.map)
+    end
+  end
 end
 
 -- Asks for a redraw: at most one per Constants.POSITION_REDRAW_SECONDS, however many changes come.
@@ -180,7 +312,11 @@ function Controller:Request()
   self.deps.after(wait, function()
     self.pending = false
     self.lastAt = self.deps.now()
-    self:Redraw(self.deps.pins(), self.deps.settings())
+    local pins, settings = self.deps.pins(), self.deps.settings()
+    self:Redraw(pins, settings)
+    if settings.follow then
+      self:Follow(pins)
+    end
   end)
 end
 
@@ -203,5 +339,30 @@ function MapPins.Start(deps)
     settings = deps.settings,
   })
 end
+
+-- The controller of the enemy pins. `deps` = { now, after, pins, settings, follow, hbd }. Client only.
+function MapPins.StartEnemies(deps)
+  local hbd = deps.hbd
+  if hbd == nil and LibStub then
+    hbd = LibStub("HereBeDragons-Pins-2.0", true)
+  end
+  return Controller.New({
+    hbd = hbd or nil,
+    -- Its own key: the guild pins are not removed when these are drawn again.
+    ref = MapPins.EnemyPins,
+    newPin = MapPins.BuildEnemyPin,
+    dress = MapPins.DressEnemyPin,
+    worldFlag = HBD_PINS_WORLDMAP_SHOW_CONTINENT,
+    max = ns.Constants.INTEL_DIRECTORY_MAX,
+    now = deps.now,
+    after = deps.after,
+    pins = deps.pins,
+    settings = deps.settings,
+    follow = deps.follow,
+  })
+end
+
+-- The key the library files the enemy icons under.
+MapPins.EnemyPins = {}
 
 ns.MapPins = MapPins

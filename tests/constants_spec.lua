@@ -10,8 +10,8 @@ describe("Constants", function()
     assert.are.equal("GUILDASST", ns.Constants.ADDON_PREFIX)
   end)
 
-  it("is at schema version 20", function()
-    assert.are.equal(20, ns.Constants.SCHEMA_VERSION)
+  it("is at schema version 21", function()
+    assert.are.equal(21, ns.Constants.SCHEMA_VERSION)
   end)
 
   it("keeps a position message inside its size limit and the directory inside the rate limit", function()

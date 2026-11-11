@@ -14,7 +14,9 @@ local function PrintIdentity()
   print("  build: " .. tostring(select(4, GetBuildInfo())))
   print("  realm: " .. tostring(P.GetRealmName()))
   print("  guild: " .. tostring(P.GetGuildName()))
-  print("  clubId: " .. tostring(P.GetGuildClubId()))
+  -- The type is shown because a string and a number print alike here but never compare equal.
+  local clubId = P.GetGuildClubId()
+  print(("  clubId: %s (%s)"):format(tostring(clubId), type(clubId)))
   print("  faction: " .. tostring(P.GetFaction()))
   local identity = ns.GuildIdentity.Current(P)
   if identity then
@@ -98,11 +100,25 @@ local function PvPCommand(rest)
   end
 end
 
+-- The Intel commands (IntelCommands); `/ga spy` is the same command, for players coming from Spy.
+local function IntelCommand(rest)
+  if not (ns.active and ns.intelCommands) then
+    say(L("version %s (addon disabled, see the notice shown at login)"):format(ns.GetVersion()))
+    return
+  end
+  for _, line in ipairs(ns.intelCommands:Run(rest)) do
+    print(line)
+  end
+end
+
 local COMMANDS = {
   help = HelpCommand,
   pvp = PvPCommand,
+  intel = IntelCommand,
+  spy = IntelCommand,
   debug = function(rest)
     local sub, action = rest:match("^(%S*)%s*(%S*)")
+    sub, action = sub:lower(), action:lower()
     if sub == "identity" then
       PrintIdentity()
     elseif sub == "lockdown" then
@@ -152,7 +168,8 @@ SLASH_GUILDASSISTANT1 = "/guildassistant"
 SLASH_GUILDASSISTANT2 = "/ga"
 SlashCmdList.GUILDASSISTANT = function(msg)
   local command, rest = msg:match("^(%S*)%s*(.-)$")
-  local handler = COMMANDS[command]
+  -- Only the command word is case-insensitive here; the text after it keeps its case (names, titles).
+  local handler = COMMANDS[command:lower()]
   if handler then
     handler(rest)
   elseif command == "" then

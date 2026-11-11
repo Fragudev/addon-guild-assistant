@@ -7,6 +7,7 @@ local function load_addon()
     "Core/Locale",
     "Core/Validate",
     "Domain/PermissionService",
+    "Domain/IntelModel",
     "Domain/PvPSeasonModel",
     "Domain/PvPSeasonService",
     "Domain/PvPUnitCache",
@@ -18,7 +19,6 @@ local function load_addon()
   }) do
     assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
-  dofile("tests/support/intel_stub.lua")(ns)
   return ns
 end
 

@@ -10,6 +10,7 @@ local function load_view_model(locale)
     "Domain/PvPService",
     "Domain/PermissionService",
     "Domain/Settings",
+    "Domain/IntelModel",
     "Domain/PvPSeasonModel",
     "Domain/PvPMissionTracker",
     "Domain/RosterService",
@@ -38,7 +39,6 @@ local function load_view_model(locale)
       ns.Locale.Use(locale)
     end
   end
-  dofile("tests/support/intel_stub.lua")(ns)
   return ns.ViewModel, ns
 end
 
@@ -71,10 +71,10 @@ local function texts(items)
 end
 
 describe("ViewModel.PvPSubTabs", function()
-  it("has the five player sub-tabs and no Admin one, whoever asks", function()
-    assert.are.same({ "season", "missions", "stats", "feed", "history" }, values(ViewModel.PvPSubTabs()))
+  it("has the six player sub-tabs and no Admin one, whoever asks", function()
+    assert.are.same({ "season", "missions", "stats", "feed", "history", "intel" }, values(ViewModel.PvPSubTabs()))
     assert.are.same(
-      { "season", "missions", "stats", "feed", "history" },
+      { "season", "missions", "stats", "feed", "history", "intel" },
       values(ViewModel.PvPSubTabs({ admin = true }))
     )
   end)
@@ -103,7 +103,7 @@ describe("ViewModel.PvPSubTabs", function()
   it("speaks Spanish when the client does", function()
     local es = load_view_model("esES")
     assert.are.same(
-      { "Temporada", "Misiones", "Estadísticas", "Bajas recientes", "Histórico" },
+      { "Temporada", "Misiones", "Estadísticas", "Bajas recientes", "Histórico", "Intel" },
       texts(es.PvPSubTabs())
     )
     assert.are.equal("Aprobaciones (2)", es.PvPAdminSections({ manage = false, pending = 2 })[1].text)
@@ -815,17 +815,19 @@ describe("ViewModel mission options (Advanced section)", function()
     assert.is_true(values(hordeClasses)[4] == "PALADIN")
   end)
 
-  it("hides the bounty goal and template until the Kill On Sight list exists", function()
-    local saved = ns.IntelModel
-    ns.IntelModel = nil
-    assert.are.same({ "kills", "bg_wins", "manual", "bg_played" }, values(ViewModel.PvPGoalChoices(nil)))
+  it("offers the bounty goal and template", function()
+    assert.are.same({ "kills", "kos", "bg_wins", "manual", "bg_played" }, values(ViewModel.PvPGoalChoices(nil)))
     local ids = values(ViewModel.PvPPresetChoices())
-    assert.are.equal(4, #ids)
+    assert.are.equal(5, #ids)
+    local found = false
     for _, id in ipairs(ids) do
-      assert.are_not.equal("kos_bounty", id)
+      found = found or id == "kos_bounty"
     end
-    assert.are.same({}, ViewModel.PvPBountyKeys({ { active = true, goal = { kind = "kos", target = "Zed" } } }))
-    ns.IntelModel = saved
+    assert.is_true(found)
+    assert.are.same(
+      { zed = true },
+      ViewModel.PvPBountyKeys({ { active = true, goal = { kind = "kos", target = "Zed" } } })
+    )
   end)
 
   it("fills the form from each template with a mission the service accepts", function()

@@ -373,12 +373,12 @@ describe("Store migration to schema 13 (one table per guild)", function()
   local Store, Constants = load_store_current()
 
   it("is the current schema", function()
-    assert.are.equal(20, Constants.SCHEMA_VERSION)
+    assert.are.equal(21, Constants.SCHEMA_VERSION)
   end)
 
   it("builds the root layout from an empty database", function()
     local db = Store.Load(nil)
-    assert.are.equal(20, db.schemaVersion)
+    assert.are.equal(21, db.schemaVersion)
     assert.are.same({}, db.guilds)
     assert.are.same({ minimap = {}, pvp = {} }, db.settings)
     assert.are.same({}, db.chars)
@@ -393,12 +393,12 @@ describe("Store migration to schema 13 (one table per guild)", function()
     local db = Store.Load(raw)
     assert.are.equal(raw, db)
     assert.is_nil(db.global)
-    assert.are.equal(20, db.schemaVersion)
+    assert.are.equal(21, db.schemaVersion)
     assert.are.equal(60, db.chars["Me-Realm"].profile.level)
     db.settings.language = "es"
     local again = Store.Load(db)
     assert.are.equal("es", again.settings.language)
-    assert.are.equal(20, again.schemaVersion)
+    assert.are.equal(21, again.schemaVersion)
   end)
 
   it("refuses data from a newer schema", function()
@@ -472,7 +472,7 @@ describe("Store.View", function()
     assert.are.equal(db.settings, view.settings)
     assert.are.equal(db.chars, view.chars)
     assert.are.equal(db, view.root)
-    assert.are.equal(20, view.schemaVersion)
+    assert.are.equal(21, view.schemaVersion)
     for _, value in pairs(db) do
       assert.are_not.equal(view, value)
     end
@@ -696,7 +696,7 @@ describe("Store migration 18 (installs per guild)", function()
     local db = Store.Load(raw)
     assert.are.same({}, db.guilds["club:1"].installs)
     assert.are.same({ Ann = { version = "1.0.0", seenAt = 5 } }, db.guilds["club:2"].installs)
-    assert.are.equal(20, db.schemaVersion)
+    assert.are.equal(21, db.schemaVersion)
 
     db.guilds["club:1"].installs.Bob = { seenAt = 9 }
     local again = Store.Load(db)
@@ -824,7 +824,7 @@ describe("Store migration 20 (announcements per guild)", function()
       },
     })
     local db = Store.Load(raw)
-    assert.are.equal(20, db.schemaVersion)
+    assert.are.equal(21, db.schemaVersion)
     assert.are.same({ items = {}, tombstones = {} }, db.guilds["club:1"].announcements)
     assert.are.same({}, db.guilds["club:1"].announcementsSeen)
     assert.are.same({ a = { id = "a" } }, db.guilds["club:2"].announcements.items)
@@ -854,5 +854,47 @@ describe("Store migration 20 (announcements per guild)", function()
     Store.ForGuild(db, "club:1").announcementsSeen.a = 1
     assert.are.same({ items = {}, tombstones = {} }, Store.ForGuild(db, "club:2").announcements)
     assert.are.same({}, Store.ForGuild(db, "club:2").announcementsSeen)
+  end)
+end)
+
+-- Schema 21: Intel. Every guild gets its own enemy records and its own guild Kill On Sight list.
+describe("Store migration 21 (intel and guildKos per guild)", function()
+  local Store = load_store_current()
+
+  local function at19(guilds)
+    return { schemaVersion = 19, guilds = guilds, settings = { minimap = {}, pvp = {} }, chars = {} }
+  end
+
+  it("creates the tables inside every guild, keeps what is there and is idempotent", function()
+    local raw = at19({
+      ["club:1"] = { roster = {} },
+      ["club:2"] = {
+        intel = { players = { ann = { name = "Ann" } }, kos = "damaged" },
+        guildKos = { bob = { name = "Bob" } },
+      },
+    })
+    local db = Store.Load(raw)
+    assert.are.equal(21, db.schemaVersion)
+    assert.are.same({ players = {}, kos = {}, ignore = {}, zones = {} }, db.guilds["club:1"].intel)
+    assert.are.same({}, db.guilds["club:1"].guildKos)
+    assert.are.equal("Ann", db.guilds["club:2"].intel.players.ann.name)
+    assert.are.same({}, db.guilds["club:2"].intel.kos)
+    assert.are.same({}, db.guilds["club:2"].intel.ignore)
+    assert.are.same({}, db.guilds["club:2"].intel.zones)
+    assert.are.equal("Bob", db.guilds["club:2"].guildKos.bob.name)
+
+    db.guilds["club:1"].guildKos.eve = { name = "Eve" }
+    db.schemaVersion = 19
+    local again = Store.Load(db)
+    assert.are.equal("Eve", again.guilds["club:1"].guildKos.eve.name)
+    assert.are.equal("Ann", again.guilds["club:2"].intel.players.ann.name)
+  end)
+
+  it("keeps the lists of two guilds apart, in fresh guilds too", function()
+    local db = Store.Load(nil)
+    Store.ForGuild(db, "club:1").guildKos.bob = { name = "Bob" }
+    Store.ForGuild(db, "club:1").intel.ignore.eve = { name = "Eve" }
+    assert.are.same({}, Store.ForGuild(db, "club:2").guildKos)
+    assert.are.same({ players = {}, kos = {}, ignore = {}, zones = {} }, Store.ForGuild(db, "club:2").intel)
   end)
 end)

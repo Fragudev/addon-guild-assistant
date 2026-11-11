@@ -8,6 +8,7 @@ local function load_protocol()
   assert(loadfile("GuildAssistant/Domain/BlacklistService.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/ReadinessRules.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/LootModel.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/IntelModel.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/PvPSeasonModel.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/LfgModel.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/AnnouncementModel.lua"))("GuildAssistant", ns)
@@ -678,6 +679,82 @@ describe("Protocol.Validate PVP_KILL", function()
 
   it("is at protocol minor version 15", function()
     assert.are.equal(15, Constants.PROTOCOL_MINOR)
+  end)
+end)
+
+describe("Protocol.Validate KOS_UPSERT and KOS_DELETE", function()
+  local function upsert(overrides)
+    local payload = {
+      key = "yonemongg",
+      name = "Yonemon Gg",
+      category = "gank",
+      reason = "ninja",
+      rev = 1,
+      updatedAt = 1000,
+    }
+    for k, v in pairs(overrides or {}) do
+      payload[k] = v
+    end
+    return payload
+  end
+
+  local function validate_upsert(payload)
+    return Protocol.Validate(Protocol.Build("KOS_UPSERT", payload, "id-1"))
+  end
+
+  local function validate_delete(payload)
+    return Protocol.Validate(Protocol.Build("KOS_DELETE", payload, "id-1"))
+  end
+
+  it("keeps the fields of an upsert and drops everything else, such as an author", function()
+    assert.are.same(upsert(), validate_upsert(upsert()).p)
+    local clean = validate_upsert(upsert({ addedBy = "Boss-Realm", updatedBy = "Boss-Realm", addedAt = 5, extra = 1 }))
+    assert.are.same(upsert(), clean.p)
+  end)
+
+  it("accepts an upsert without a reason, and the limits of the name and the reason", function()
+    local without = upsert()
+    without.reason = nil
+    assert.is_truthy(validate_upsert(without))
+    local name = ("n"):rep(Constants.INTEL_NAME_MAX)
+    local reason = ("r"):rep(Constants.INTEL_REASON_MAX)
+    assert.is_truthy(validate_upsert(upsert({ key = name, name = name, reason = reason })))
+  end)
+
+  it("rejects a name or a key that is empty, too long, not text, or carries separators", function()
+    local long = ("n"):rep(Constants.INTEL_NAME_MAX + 1)
+    for _, bad in ipairs({ "", long, 5, true, "A|cffff0000B", "A:B" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ name = bad }))), tostring(bad))
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ key = bad }))), tostring(bad))
+      assert.are.equal("bad_payload", select(2, validate_delete({ key = bad, rev = 1 })), tostring(bad))
+    end
+  end)
+
+  it("rejects a name that is not the one the list would keep, a bad category and a bad reason", function()
+    for _, bad in ipairs({ " Ann", "Ann ", "Ann-Realm" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ name = bad }))), bad)
+    end
+    for _, bad in ipairs({ "", "robbery", 5 }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ category = bad }))), tostring(bad))
+    end
+    local long = ("r"):rep(Constants.INTEL_REASON_MAX + 1)
+    for _, bad in ipairs({ long, 5, " padded ", "a|cffff0000b" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ reason = bad }))), tostring(bad))
+    end
+  end)
+
+  it("rejects a revision or a time out of range or not a whole number", function()
+    for _, bad in ipairs({ 0, -1, 1.5, 2147483648, "1", true }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ rev = bad }))), tostring(bad))
+      assert.are.equal("bad_payload", select(2, validate_delete({ key = "ann", rev = bad })), tostring(bad))
+    end
+    for _, bad in ipairs({ -1, 4102444801, 1.5, "1" }) do
+      assert.are.equal("bad_payload", select(2, validate_upsert(upsert({ updatedAt = bad }))), tostring(bad))
+    end
+  end)
+
+  it("keeps the key and the revision of a delete and drops the rest", function()
+    assert.are.same({ key = "yonemongg", rev = 2 }, validate_delete({ key = "yonemongg", rev = 2, by = "x" }).p)
   end)
 end)
 

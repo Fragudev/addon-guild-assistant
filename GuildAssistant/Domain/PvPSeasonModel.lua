@@ -364,9 +364,9 @@ local function validateGoal(goal)
   end
   local clean = { kind = goal.kind, count = count, zones = zones, place = place, distinct = distinct }
   -- A bounty ("kos") may name one victim. The name is cleaned with IntelModel (loaded after this file, so it is looked
-  -- up at call time; a client without it refuses a target rather than keep one unchecked). Any other kind drops it.
+  -- up at call time). Any other kind drops it.
   if goal.kind == "kos" and goal.target ~= nil then
-    local target = ns.IntelModel and ns.IntelModel.CleanName(goal.target) or nil
+    local target = ns.IntelModel.CleanName(goal.target)
     if not target then
       return nil
     end

@@ -16,7 +16,9 @@ local _, ns = ...
 --                               deliveries } (see PvPSeasonSync),
 --                 installs = { [name] = { version, incompatible, seenAt } } (see InstallDirectory),
 --                 announcements = { items, tombstones, openedAt } and announcementsSeen = { [id] = popupRev }
---                 (see AnnouncementService) }
+--                 (see AnnouncementService),
+--                 intel = { players, kos, ignore, zones } (see IntelService), guildKos = { [key] = entry } (see
+--                 GuildKosService; its removals are tombstones "K:<key>") }
 --   db.chars[identityKey] = { profile = {}, readiness = {}, publish = {}, pvp = {}, recipes = {},
 --                             pvpSync = { rev }, pvpLog = { events = {}, version }, pvpClaims = { [seasonId] = {
 --                             [claimId] = { claim, state } } } }
@@ -301,6 +303,19 @@ local MIGRATIONS = {
       ensureTable(guild, "announcementsSeen")
     end)
   end,
+  -- v21: Intel: the enemy player records with the personal Kill On Sight and Ignore lists (guild.intel) and the guild
+  -- Kill On Sight list (guild.guildKos, whose removals are tombstones "K:<key>"). Both live inside every guild's data.
+  -- The notice that sharing sightings is on by default is left by Settings.Intel when it first creates the account
+  -- settings of Intel; nothing else is touched, so running this again changes nothing.
+  [21] = function(db)
+    forEachGuild(db, function(guild)
+      local intel = ensureTable(guild, "intel")
+      for _, name in ipairs({ "players", "kos", "ignore", "zones" }) do
+        ensureTable(intel, name)
+      end
+      ensureTable(guild, "guildKos")
+    end)
+  end,
 }
 
 local function versionOf(db)
@@ -352,12 +367,17 @@ function Store.ForGuild(db, guildKey)
     "recipes",
     "installs",
     "announcementsSeen",
+    "guildKos",
   }) do
     ensureTable(guild, name)
   end
   local announcements = ensureTable(guild, "announcements")
   ensureTable(announcements, "items")
   ensureTable(announcements, "tombstones")
+  local intel = ensureTable(guild, "intel")
+  for _, name in ipairs({ "players", "kos", "ignore", "zones" }) do
+    ensureTable(intel, name)
+  end
   local sync = ensureTable(guild, "sync")
   ensureTable(sync, "seen")
   ensureTable(sync, "tombstones")

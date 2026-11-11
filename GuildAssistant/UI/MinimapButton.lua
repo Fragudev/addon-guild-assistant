@@ -102,6 +102,12 @@ local function showTooltip(self)
       GameTooltip:AddLine(line, 1, 0.4, 0.3)
     end
   end
+  -- The enemies nearby, from Intel.
+  if ns.active and ns.intel and ns.IntelNearby then
+    for _, line in ipairs(ns.ViewModel.IntelMinimapLines(ns.IntelNearby())) do
+      GameTooltip:AddLine(line, 1, 0.5, 0.5)
+    end
+  end
   GameTooltip:AddLine(L("Left click: open the window"), 0.6, 0.6, 0.6)
   GameTooltip:AddLine(L("Right click: shortcuts"), 0.6, 0.6, 0.6)
   GameTooltip:AddLine(L("Drag: move this button"), 0.6, 0.6, 0.6)
@@ -109,7 +115,7 @@ local function showTooltip(self)
 end
 
 -- Right-click menu: the popover menu of the kit (dark, closes on a click outside or Escape) with the tabs the role can
--- open, like the sidebar, and the settings.
+-- open, like the sidebar, the Intel window toggle, and the settings.
 local function showMenu()
   if not (ns.active and ns.character) then
     return
@@ -125,6 +131,12 @@ local function showMenu()
     local entry = byValue[value]
     if entry and entry.action == "tab" then
       ns.UI.OpenTab(entry.value)
+    elseif entry and entry.action == "intel" then
+      if ns.IntelWindow and ns.IntelWindow.IsShown() then
+        ns.UI.IntelHide()
+      else
+        ns.UI.IntelShow()
+      end
     elseif entry and entry.action == "settings" then
       ns.UI.OpenSettings()
     end
@@ -188,6 +200,77 @@ function MinimapButton.Create()
   end)
 
   MinimapButton.Refresh()
+end
+
+-- The tooltip of the minimap lists the players under the cursor. This adds the level and class of the enemies Intel
+-- knows and, with the setting, feeds them to Nearby (docs/USER_GUIDE.md). The lines are read as plain
+-- text; a line that is secret or unreadable makes the whole pass do nothing. deps = { service, settings = function() ->
+-- Settings.Intel, feed = function(details) }. Runs once; returns true when the hook was installed. Not measured yet
+-- (M11).
+local tooltipHooked = false
+local addingLines = false
+
+-- A plain copy of text from the client, or nil.
+local function plain(value)
+  local ok, copy = pcall(function()
+    if type(value) == "string" then
+      return value .. ""
+    end
+    return nil
+  end)
+  return ok and copy or nil
+end
+
+local function tooltipLines()
+  local lines = {}
+  for index = 1, math.min(GameTooltip:NumLines() or 0, 40) do
+    local left = _G["GameTooltipTextLeft" .. index]
+    local text = left and plain(left:GetText())
+    if text then
+      local r, g, b = left:GetTextColor()
+      lines[#lines + 1] = { text = text, r = r, g = g, b = b, index = index }
+    end
+  end
+  return lines
+end
+
+local function annotate(deps)
+  local owner = GameTooltip:GetOwner()
+  if addingLines or owner == nil or not (owner == Minimap or owner == MinimapCluster) or not ns.active then
+    return
+  end
+  local settings = deps.settings()
+  if not (settings.minimapTooltip or settings.minimapFeed) then
+    return
+  end
+  local names = ns.IntelMinimapTooltip.Parse(tooltipLines())
+  local plan = ns.IntelMinimapTooltip.Plan(names, deps.service, settings)
+  for _, details in ipairs(plan.feed) do
+    deps.feed(details)
+  end
+  if #plan.extras > 0 then
+    addingLines = true
+    for _, extra in ipairs(plan.extras) do
+      GameTooltip:AddLine(extra.name .. ": " .. extra.text, 0.8, 0.8, 0.8)
+    end
+    -- Showing again makes the tooltip grow to the new lines.
+    GameTooltip:Show()
+    addingLines = false
+  end
+end
+
+function MinimapButton.HookTooltip(deps)
+  if tooltipHooked or not (GameTooltip and GameTooltip.HookScript) then
+    return false
+  end
+  tooltipHooked = true
+  GameTooltip:HookScript("OnShow", function()
+    -- Whatever goes wrong here must never reach the game's own tooltip.
+    if not pcall(annotate, deps) then
+      addingLines = false
+    end
+  end)
+  return true
 end
 
 -- Shows the button only while the addon is active and the player has not hidden it.
