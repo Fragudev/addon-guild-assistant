@@ -89,6 +89,9 @@ local function make_region(kind, parent)
   function methods.SetTexture(self, path)
     self.texture = path
   end
+  function methods.SetTexCoord(self, ...)
+    self.texcoord = { ... }
+  end
   function methods.SetRotation(self, radians)
     self.rotation = radians
   end

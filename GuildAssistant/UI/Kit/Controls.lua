@@ -98,6 +98,9 @@ Kit.Define("Button", {
       end
     end)
     function obj:refresh()
+      if not self.opts then
+        return
+      end
       local variant = self.opts.variant or "secondary"
       self.wash:SetColorTexture(1, 1, 1, (self.pressed and 0.1) or (self.hovered and 0.06) or 0)
       self.frame:SetAlpha(self.opts.disabled and 0.4 or 1)
@@ -166,6 +169,9 @@ Kit.Define("IconButton", {
       end
     end)
     function obj:refresh()
+      if not self.opts then
+        return
+      end
       local variant = self.opts.variant or "ghost"
       local base = variant == "secondary" and 1 or 0
       self.bg:SetColorTexture(1, 1, 1, (self.pressed and 0.12) or (self.hovered and 0.08) or (base * 0.05))
@@ -192,6 +198,109 @@ Kit.Define("IconButton", {
   end,
 })
 
+-- The seats of a party: a class icon framed in the class color for each member, with a small mark of the role when it
+-- is known, and the mark of the role still needed, dim, for each free seat. opts: seats = { { class (file token),
+-- role (tank | heal | dps), filled (boolean) } } (up to SEATS_MAX), size (default 18), tooltip (the same as text).
+-- A filled seat without a known class shows a person; a free seat that no role needs is an empty frame.
+local SEATS_MAX = 8
+local SEAT_GAP = 4
+local CLASS_TEXTURE = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
+-- How much of each side of a class cell is cut away, so the square frame baked into the atlas does not show.
+local CLASS_CROP = 0.08
+local ROLE_COLORS = { tank = "accent", heal = "success", dps = "danger" }
+
+local function dressSeat(seat, data, size)
+  local coords = data.filled and data.class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[data.class]
+  local inset
+  seat.edge:Show()
+  seat.icon:SetTexCoord(0, 1, 0, 1)
+  if coords then
+    local color = Theme.ClassColor(data.class) or { Theme.Color("muted") }
+    seat.edge:SetColorTexture(color[1], color[2], color[3], 1)
+    local h = (coords[2] - coords[1]) * CLASS_CROP
+    local v = (coords[4] - coords[3]) * CLASS_CROP
+    seat.icon:SetTexture(CLASS_TEXTURE)
+    seat.icon:SetTexCoord(coords[1] + h, coords[2] - h, coords[3] + v, coords[4] - v)
+    seat.icon:SetVertexColor(1, 1, 1, 1)
+    seat.icon:Show()
+    inset = 1
+  elseif data.filled then
+    seat.edge:SetColorTexture(Theme.Color("accent", 0.25))
+    Icons.Apply(seat.icon, "user", "accent")
+    inset = 2
+  elseif data.role and ROLE_COLORS[data.role] then
+    seat.edge:SetColorTexture(Theme.Color("muted", 0.12))
+    Icons.Apply(seat.icon, "role-" .. data.role, "muted", 0.6)
+    inset = math.floor(size / 4)
+  else
+    seat.edge:SetColorTexture(Theme.Color("muted", 0.08))
+    seat.icon:Hide()
+    inset = 0
+  end
+  seat.icon:ClearAllPoints()
+  seat.icon:SetPoint("TOPLEFT", seat.edge, "TOPLEFT", inset, -inset)
+  seat.icon:SetPoint("BOTTOMRIGHT", seat.edge, "BOTTOMRIGHT", -inset, inset)
+
+  local badgeSize = math.max(8, math.floor(size * 0.55 + 0.5))
+  if data.filled and data.role and ROLE_COLORS[data.role] then
+    seat.badgeBack:SetSize(badgeSize + 2, badgeSize + 2)
+    seat.badgeBack:ClearAllPoints()
+    seat.badgeBack:SetPoint("CENTER", seat.edge, "BOTTOMRIGHT", -1, 1)
+    Icons.Apply(seat.badgeBack, "disc", "panel")
+    seat.badge:SetSize(badgeSize - 2, badgeSize - 2)
+    seat.badge:ClearAllPoints()
+    seat.badge:SetPoint("CENTER", seat.badgeBack, "CENTER", 0, 0)
+    Icons.Apply(seat.badge, "role-" .. data.role, ROLE_COLORS[data.role])
+  else
+    seat.badgeBack:Hide()
+    seat.badge:Hide()
+  end
+end
+
+Kit.Define("Seats", {
+  create = function(obj)
+    obj.frame:EnableMouse(true)
+    obj.seats = {}
+    for index = 1, SEATS_MAX do
+      obj.seats[index] = {
+        edge = obj.frame:CreateTexture(nil, "BACKGROUND"),
+        icon = obj.frame:CreateTexture(nil, "ARTWORK"),
+        badgeBack = obj.frame:CreateTexture(nil, "OVERLAY", nil, 1),
+        badge = obj.frame:CreateTexture(nil, "OVERLAY", nil, 2),
+      }
+    end
+    tooltipOn(obj)
+  end,
+  apply = function(obj, opts)
+    obj.size = opts.size or 18
+    local data = opts.seats or {}
+    obj.total = math.min(SEATS_MAX, #data)
+    for index, seat in ipairs(obj.seats) do
+      if index <= obj.total then
+        seat.edge:SetSize(obj.size, obj.size)
+        seat.edge:ClearAllPoints()
+        seat.edge:SetPoint("LEFT", obj.frame, "LEFT", (index - 1) * (obj.size + SEAT_GAP), 0)
+        dressSeat(seat, data[index], obj.size)
+      else
+        seat.edge:Hide()
+        seat.icon:Hide()
+        seat.badgeBack:Hide()
+        seat.badge:Hide()
+      end
+    end
+  end,
+  layout = function(obj)
+    -- The role mark sticks out of the bottom-right corner by a few pixels.
+    return obj.size + 4
+  end,
+  natural = function(obj)
+    if obj.total == 0 then
+      return 0
+    end
+    return obj.total * obj.size + (obj.total - 1) * SEAT_GAP + 4
+  end,
+})
+
 -- A switch: a 34x18 track and a 14px knob; with `label` it is a settings row (label left, switch right).
 -- opts: label, description, checked, onChange(checked), disabled.
 Kit.Define("Switch", {
@@ -205,8 +314,11 @@ Kit.Define("Switch", {
     obj.knob = obj.frame:CreateTexture(nil, "OVERLAY")
     obj.knob:SetSize(m.knob, m.knob)
     obj.text = obj.frame:CreateFontString(nil, "OVERLAY")
-    obj.text:SetPoint("LEFT")
     obj.text:SetJustifyH("LEFT")
+    obj.desc = obj.frame:CreateFontString(nil, "OVERLAY")
+    obj.desc:SetJustifyH("LEFT")
+    obj.desc:SetJustifyV("TOP")
+    obj.desc:SetWordWrap(true)
     obj.frame:SetScript("OnClick", function()
       if obj.opts and not obj.opts.disabled then
         obj:SetChecked(not obj.checked)
@@ -218,11 +330,30 @@ Kit.Define("Switch", {
     obj.text:SetFontObject(Theme.StyleFont("body"))
     setColor(obj.text, "text")
     obj.text:SetText(opts.label or "")
+    obj.desc:SetFontObject(Theme.StyleFont("small"))
+    setColor(obj.desc, "dim")
+    obj.desc:SetText(opts.description or "")
+    obj.desc:SetShown(opts.description ~= nil and opts.description ~= "")
     obj.frame:SetAlpha(opts.disabled and 0.4 or 1)
     obj:SetChecked(opts.checked)
   end,
-  layout = function()
-    return 36
+  -- A description goes under the label, left of the track, and makes the row taller.
+  layout = function(obj, width)
+    obj.text:ClearAllPoints()
+    obj.desc:ClearAllPoints()
+    local description = obj.opts.description
+    if not description or description == "" then
+      obj.text:SetWidth(0)
+      obj.text:SetPoint("LEFT")
+      return 36
+    end
+    local textWidth = math.max(0, width - Theme.metrics.switch.width - 12)
+    obj.text:SetWidth(textWidth)
+    obj.desc:SetWidth(textWidth)
+    obj.text:SetPoint("TOPLEFT", obj.frame, "TOPLEFT", 0, -4)
+    obj.desc:SetPoint("TOPLEFT", obj.frame, "TOPLEFT", 0, -(4 + Theme.LineHeight("body") + 2))
+    local measured = math.ceil(obj.desc:GetStringHeight() or 0)
+    return math.max(36, 4 + Theme.LineHeight("body") + 2 + math.max(Theme.LineHeight("small"), measured) + 4)
   end,
   reset = function(obj)
     obj.frame:SetAlpha(1)
@@ -316,6 +447,9 @@ Kit.Define("Chip", {
       end
     end)
     function obj:refresh()
+      if not self.opts then
+        return
+      end
       local token = self.opts.color or "accent"
       if self.opts.active then
         self.bg:SetColorTexture(Theme.Color(token, 0.18))
@@ -443,6 +577,9 @@ Kit.Define("TabStrip", {
 -- A single-line text box. opts: text, placeholder, maxLetters, numeric, disabled, error (boolean), onChange(text,
 -- userInput), onEnter(text), onCommit(text): Enter or losing the focus with a changed text (Escape restores the text
 -- that was there). The kit never saves anything: the callbacks do.
+-- The edit box that has the keyboard, if any.
+local focusedEdit
+
 Kit.Define("EditBox", {
   frameType = "EditBox",
   create = function(obj)
@@ -477,12 +614,16 @@ Kit.Define("EditBox", {
     frame:SetScript("OnEditFocusGained", function()
       obj.focused = true
       obj.escaped = false
+      focusedEdit = obj
       obj:refresh()
     end)
     frame:SetScript("OnEditFocusLost", function()
       obj.focused = false
+      if focusedEdit == obj then
+        focusedEdit = nil
+      end
       obj:refresh()
-      if not obj.escaped and obj.opts then
+      if not obj.escaped and obj.opts and not obj.released then
         commit()
       end
       obj.escaped = false
@@ -492,8 +633,10 @@ Kit.Define("EditBox", {
       callback(obj, "onChange", frame:GetText(), userInput == true)
     end)
     function obj:refresh()
-      local border = (self.opts.error and "danger") or (self.focused and "accent") or "border"
-      self.border:SetColor(border)
+      if not self.opts then
+        return
+      end
+      self.border:SetColor(Kit.FieldBorder(self.opts.error, self.focused))
       local empty = frame:GetText() == ""
       if empty and not self.focused and self.opts.placeholder then
         self.hint:Show()
@@ -524,9 +667,35 @@ Kit.Define("EditBox", {
   end,
   reset = function(obj)
     obj.frame:ClearFocus()
+    if focusedEdit == obj then
+      focusedEdit = nil
+    end
     obj.frame:SetAlpha(1)
   end,
 })
+
+-- Is the player typing in a kit edit box? (The chat box does not count.)
+function Kit.HasEditFocus()
+  return focusedEdit ~= nil
+end
+
+-- Takes the focus away from the box being typed in, which commits its text. A release drops what was not committed,
+-- and a button does not take the focus away by itself, so whatever redraws a page calls this first.
+function Kit.CommitEdit()
+  if focusedEdit then
+    focusedEdit.frame:ClearFocus()
+  end
+end
+
+-- Like Escape in the box being typed in: its text goes back to what it was and nothing is committed.
+function Kit.DiscardEdit()
+  local edit = focusedEdit
+  if edit then
+    edit.escaped = true
+    edit.frame:SetText(edit.stored or "")
+    edit.frame:ClearFocus()
+  end
+end
 
 function Widget:GetText()
   if self.frame and self.kind == "EditBox" then
@@ -567,8 +736,8 @@ function Widget:SetError(flag)
   end
 end
 
--- A multi-line text area inside a scroll frame (the export and import boxes). opts: text, readOnly, onChange(text),
--- height. The box takes the keyboard focus on demand (Widget:Focus) and can select all its text.
+-- A multi-line text area inside a scroll frame (the export and import boxes). opts: text, readOnly, error (boolean),
+-- onChange(text), height. The box takes the keyboard focus on demand (Widget:Focus) and can select all its text.
 Kit.Define("TextArea", {
   create = function(obj)
     obj.bg = obj.frame:CreateTexture(nil, "BACKGROUND")
@@ -586,26 +755,50 @@ Kit.Define("TextArea", {
       obj.edit:ClearFocus()
     end)
     obj.edit:SetScript("OnTextChanged", function(_, userInput)
-      if userInput then
-        callback(obj, "onChange", obj.edit:GetText())
+      if not userInput then
+        return
       end
+      -- A read-only box (the export) takes the focus and selects its text but never keeps a typed change.
+      if obj.readOnly then
+        if obj.edit:GetText() ~= obj.shownText then
+          obj.edit:SetText(obj.shownText or "")
+          obj.edit:HighlightText()
+        end
+        return
+      end
+      callback(obj, "onChange", obj.edit:GetText())
     end)
     obj.edit:SetScript("OnEditFocusGained", function()
+      obj.focused = true
+      obj:refresh()
       if obj.opts and obj.opts.readOnly then
         obj.edit:HighlightText()
       end
     end)
+    obj.edit:SetScript("OnEditFocusLost", function()
+      obj.focused = false
+      obj:refresh()
+    end)
+    function obj:refresh()
+      if not self.opts then
+        return
+      end
+      self.border:SetColor(Kit.FieldBorder(self.opts.error, self.focused))
+    end
     obj.scroll:SetScript("OnMouseWheel", function(_, delta)
       local current = obj.scroll:GetVerticalScroll()
       obj.scroll:SetVerticalScroll(math.max(0, current - delta * 30))
     end)
   end,
   apply = function(obj, opts)
+    obj.focused = false
     obj.bg:SetColorTexture(Theme.Color("input"))
+    obj:refresh()
     setColor(obj.edit, "text")
-    obj.edit:SetText(opts.text or "")
-    obj.edit:SetCursorPosition(0)
     obj.readOnly = opts.readOnly == true
+    obj.shownText = opts.text or ""
+    obj.edit:SetText(obj.shownText)
+    obj.edit:SetCursorPosition(0)
     obj.edit:EnableMouse(true)
   end,
   layout = function(obj, width)
@@ -632,7 +825,7 @@ function Widget:GetValueText()
 end
 
 -- A button that opens a menu of choices. opts: items = { { value, text, color, disabled } ... }, value, placeholder,
--- onChange(value), disabled.
+-- onChange(value), disabled, error (boolean).
 Kit.Define("Dropdown", {
   frameType = "Button",
   create = function(obj)
@@ -660,6 +853,10 @@ Kit.Define("Dropdown", {
       end
     end)
     function obj:refresh()
+      if not self.opts then
+        return
+      end
+      self.border:SetColor(Kit.FieldBorder(self.opts.error, false))
       self.wash:SetColorTexture(1, 1, 1, self.hovered and 0.06 or 0)
       self.frame:SetAlpha(self.opts.disabled and 0.4 or 1)
     end
