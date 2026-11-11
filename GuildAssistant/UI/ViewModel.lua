@@ -1064,6 +1064,7 @@ ViewModel.TABS = ns.Locale.Table(function()
     { value = "roster", text = L("Members"), icon = "users", group = "admin" },
     { value = "pvpadmin", text = "PvP", icon = "swords", group = "admin" },
     { value = "ranks", text = L("Ranks"), icon = "diamond", group = "admin" },
+    { value = "installs", text = L("Installed check"), icon = "check", group = "admin" },
   }
 end)
 
@@ -1078,6 +1079,8 @@ local TAB_ACTIONS = {
   pvpadmin = "pvp_admin",
   -- Every Admin rank reads the mapping of guild ranks to roles; ranks_manage (gm and cogm) edits it.
   ranks = "admin_view",
+  -- Who runs the addon and which version: gm and cogm only.
+  installs = "install_check",
 }
 
 -- Does a player with `role` and the roster `rosterId` (nil without one) see `tab` (an entry of TABS)?

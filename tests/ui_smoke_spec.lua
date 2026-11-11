@@ -540,8 +540,20 @@ describe("Window smoke test", function()
   end
 
   it("builds the sidebar from the rank and the roster: Guild for everyone, Admin from rl and officer up", function()
-    local all =
-      { "home", "professions", "events", "ready", "loot", "pvp", "raid", "rules", "roster", "pvpadmin", "ranks" }
+    local all = {
+      "home",
+      "professions",
+      "events",
+      "ready",
+      "loot",
+      "pvp",
+      "raid",
+      "rules",
+      "roster",
+      "pvpadmin",
+      "ranks",
+      "installs",
+    }
     local officer = { "home", "professions", "events", "ready", "loot", "pvp", "raid", "rules", "roster", "ranks" }
     local expected = {
       GM = all,

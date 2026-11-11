@@ -41,6 +41,7 @@ The **Admin** group appears from the Officer and Raid Leader ranks up:
   otherwise.
 - **Roster rules** and **Members** (Officer and RL, GM and CoGM).
 - **Ranks**: the role of each guild rank (every Admin rank reads it; GM and CoGM change it).
+- **Installed check**: who in the guild runs the addon and which version (GM and CoGM only, see below).
 - **PvP** holds the season admin: approvals, missions, season, prizes and deliveries (GM and CoGM only).
 
 A tab you cannot see, or one that no longer exists in the sidebar (Profile, Layers and Blacklist are hidden for now),
@@ -102,6 +103,16 @@ is a Member until the guild master (or a Co-GM, once one exists) saves one.
 
 The PvP officer flag is gone: approving claims, marking deliveries and the rest of the PvP administration are for the
 Guild Master and the Co-GM only. Rosters themselves can only be changed by them for now.
+
+### The Installed check tab
+
+The **Installed check** tab of the Admin group lists every member of the guild with whether they run the addon and
+which version. A member is heard from when it logs in (it announces itself) or sends anything, and the version it
+announced is saved with the time it was last heard. An offline member therefore shows the last version seen. The
+status says whether a member is up to date, outdated (an older version than the newest one seen), incompatible
+(another protocol version), installed without a readable version, not installed (online, never heard from) or never
+seen (offline, never heard from). The search box, the status chips, the version dropdown and **Online only** filter
+the table. "Never seen" may only mean the member has not logged in since the saved list started.
 
 ### The Ranks tab
 
