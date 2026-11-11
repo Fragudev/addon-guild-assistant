@@ -105,6 +105,7 @@ UI\ViewModelProfessions.lua
 UI\ViewModelLayers.lua
 UI\ViewModelRanks.lua
 UI\ViewModelInstalls.lua
+UI\ViewModelModules.lua
 UI\Main.lua
 UI\Cards.lua
 UI\Tabs\Home.lua
@@ -123,6 +124,7 @@ UI\Tabs\Layers.lua
 UI\PopupFrame.lua
 UI\Tabs\Ranks.lua
 UI\Tabs\Installs.lua
+UI\Tabs\Modules.lua
 UI\LootPopup.lua
 UI\LayerPopup.lua
 UI\VotingFrame.lua

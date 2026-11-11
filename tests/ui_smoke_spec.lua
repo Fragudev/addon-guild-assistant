@@ -5,7 +5,8 @@ local FakeFrames = dofile("tests/support/fake_frames.lua")
 local FakeKit = dofile("tests/support/fake_kit.lua")
 local Roles = dofile("tests/support/roles.lua")
 
-local ALL_TABS = { "home", "professions", "events", "ready", "loot", "pvp", "raid", "rules", "roster", "pvpadmin" }
+local ALL_TABS =
+  { "home", "professions", "events", "ready", "loot", "pvp", "modules", "raid", "rules", "roster", "pvpadmin" }
 -- Tabs that left the sidebar but stay registered: the specs of their views open them
 -- anyway.
 local HIDDEN_TABS = { profile = true, layers = true, blacklist = true, broken = true }
@@ -19,6 +20,8 @@ local function load_window(locale)
     "Locales/esES",
     "Core/Validate",
     "Domain/Settings",
+    "Domain/ModuleRegistry",
+    "Domain/ModuleService",
     "Domain/Throttle",
     "Domain/PvPService",
     "Domain/PvPFeed",
@@ -58,6 +61,7 @@ local function load_window(locale)
     "UI/ViewModelProfessions",
     "UI/ViewModelLayers",
     "UI/ViewModelRanks",
+    "UI/ViewModelModules",
     "UI/MinimapButton",
     "Commands/RaidCommands",
     "Commands/LootCommands",
@@ -80,6 +84,7 @@ local function load_window(locale)
     "UI/Tabs/Professions",
     "UI/Tabs/Layers",
     "UI/Tabs/Ranks",
+    "UI/Tabs/Modules",
   }) do
     if path == "UI/ViewModel" then
       ns.Kit = FakeKit.new(ns.Kit)
@@ -547,6 +552,7 @@ describe("Window smoke test", function()
       "ready",
       "loot",
       "pvp",
+      "modules",
       "raid",
       "rules",
       "roster",
@@ -554,16 +560,17 @@ describe("Window smoke test", function()
       "ranks",
       "installs",
     }
-    local officer = { "home", "professions", "events", "ready", "loot", "pvp", "raid", "rules", "roster", "ranks" }
+    local officer =
+      { "home", "professions", "events", "ready", "loot", "pvp", "modules", "raid", "rules", "roster", "ranks" }
     local expected = {
       GM = all,
       CoGM = all,
       Council = officer,
       RL = officer,
-      Roster = { "home", "professions", "events", "ready", "loot", "pvp" },
-      Member = { "home", "professions", "pvp" },
-      Alter = { "home", "professions", "pvp" },
-      NoRoster = { "home", "professions", "pvp" },
+      Roster = { "home", "professions", "events", "ready", "loot", "pvp", "modules" },
+      Member = { "home", "professions", "pvp", "modules" },
+      Alter = { "home", "professions", "pvp", "modules" },
+      NoRoster = { "home", "professions", "pvp", "modules" },
     }
     for rank, values in pairs(expected) do
       env = build(rank)

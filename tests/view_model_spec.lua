@@ -151,6 +151,7 @@ describe("ViewModel misc", function()
       rules = true,
       roster = true,
       pvpadmin = true,
+      modules = true,
       ranks = true,
       installs = true,
     }, values)
@@ -170,6 +171,7 @@ describe("ViewModel misc", function()
       "ready",
       "loot",
       "pvp",
+      "modules",
       "raid",
       "rules",
       "roster",
@@ -177,7 +179,7 @@ describe("ViewModel misc", function()
       "ranks",
       "installs",
     }, order)
-    for _, value in ipairs({ "home", "professions", "events", "ready", "loot", "pvp" }) do
+    for _, value in ipairs({ "home", "professions", "events", "ready", "loot", "pvp", "modules" }) do
       assert.are.equal("guild", groups[value], value)
     end
     for _, value in ipairs({ "raid", "rules", "roster", "pvpadmin", "ranks", "installs" }) do
@@ -200,6 +202,7 @@ describe("ViewModel misc", function()
       ready = "Raid check",
       loot = "Loot",
       pvp = "PvP",
+      modules = "Modules",
       raid = "Raid",
       rules = "Roster rules",
       roster = "Members",
@@ -1747,7 +1750,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
     return labels, values
   end
 
-  local GUILD_ALL = { "home", "professions", "events", "ready", "loot", "pvp" }
+  local GUILD_ALL = { "home", "professions", "events", "ready", "loot", "pvp", "modules" }
 
   it("groups the tabs in Guild and Admin, with no unlabeled group", function()
     local labels, values = navValues("gm")
@@ -1765,8 +1768,8 @@ describe("ViewModel sidebar, user card and sync pill", function()
       officer = { GUILD_ALL, { "raid", "rules", "roster", "ranks" } },
       rl = { GUILD_ALL, { "raid", "rules", "roster", "ranks" } },
       roster = { GUILD_ALL },
-      member = { { "home", "professions", "pvp" } },
-      alter = { { "home", "professions", "pvp" } },
+      member = { { "home", "professions", "pvp", "modules" } },
+      alter = { { "home", "professions", "pvp", "modules" } },
     }
     for role, groups in pairs(expected) do
       local _, values = navValues(role, "r1")
@@ -1775,7 +1778,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
   end)
 
   it("shows the ranks that depend on a roster nothing but the Guild basics without one", function()
-    local basics = { { "home", "professions", "pvp" } }
+    local basics = { { "home", "professions", "pvp", "modules" } }
     for _, role in ipairs({ "roster", "member", "alter" }) do
       local labels, values = navValues(role, nil)
       assert.are.same({ "Guild" }, labels, role)
@@ -1784,12 +1787,12 @@ describe("ViewModel sidebar, user card and sync pill", function()
     -- The Admin group opens with admin_view, but its tabs follow their own scope: rl without a roster only reads the
     -- Ranks tab.
     local _, rl = navValues("rl", nil)
-    assert.are.same({ { "home", "professions", "pvp" }, { "ranks" } }, { rl[1], rl[2] or {} })
+    assert.are.same({ { "home", "professions", "pvp", "modules" }, { "ranks" } }, { rl[1], rl[2] or {} })
     -- gm, cogm and officer reach every roster, so a missing roster of their own changes nothing for them.
     local _, gm = navValues("gm", nil)
     assert.are.same({ GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks", "installs" } }, gm)
     local _, officer = navValues("officer", nil)
-    assert.are.same({ { "home", "professions", "pvp" }, { "rules", "roster", "ranks" } }, officer)
+    assert.are.same({ { "home", "professions", "pvp", "modules" }, { "rules", "roster", "ranks" } }, officer)
   end)
 
   it("keeps the Admin group away from roster, member and alter, and from a player without a rank", function()
@@ -1854,7 +1857,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
     ns.Locale.UsePreference("es", "enUS")
     assert.are.equal("Inicio", vm.TABS[1].text)
     assert.are.equal("Inicio", vm.NavGroups("member")[1].items[1].text)
-    assert.are.equal("Reglas del roster", vm.TABS[8].text)
+    assert.are.equal("Reglas del roster", vm.TABS[9].text)
     assert.are.equal("cumplido", vm.Word("met"))
     ns.Locale.UsePreference("auto", "enUS")
     assert.are.equal("Home", vm.TABS[1].text)
