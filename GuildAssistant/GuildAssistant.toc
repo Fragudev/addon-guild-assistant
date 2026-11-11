@@ -80,6 +80,7 @@ Sync\Transfer.lua
 Sync\Comm.lua
 UI\Kit\Theme.lua
 UI\Kit\Pixel.lua
+UI\Kit\Shape.lua
 UI\Kit\Util.lua
 UI\Kit\Calendar.lua
 UI\Kit\Icons.lua
@@ -96,6 +97,7 @@ UI\ViewModelPvP.lua
 UI\ViewModelProfessions.lua
 UI\ViewModelLayers.lua
 UI\Main.lua
+UI\Cards.lua
 UI\Tabs\Home.lua
 UI\Tabs\Profile.lua
 UI\Tabs\Readiness.lua
@@ -107,6 +109,7 @@ UI\Tabs\Blacklist.lua
 UI\Tabs\Rules.lua
 UI\Tabs\Professions.lua
 UI\Tabs\Layers.lua
+UI\PopupFrame.lua
 UI\LootPopup.lua
 UI\LayerPopup.lua
 UI\VotingFrame.lua
