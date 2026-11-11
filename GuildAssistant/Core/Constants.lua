@@ -2,7 +2,7 @@ local _, ns = ...
 
 ns.Constants = {
   ADDON_PREFIX = "GUILDASST",
-  SCHEMA_VERSION = 17,
+  SCHEMA_VERSION = 18,
 
   -- Free-text profile fields a player can declare by hand (source = "declared").
   MANUAL_FIELDS = { role = true, role2 = true, main = true, notes = true },
@@ -314,6 +314,9 @@ ns.Constants = {
   -- A received profile older than this is shown as stale, never as current.
   ROSTER_STALE_SECONDS = 7 * 24 * 3600,
   PEERS_MAX_ENTRIES = 200,
+  -- The saved record of who runs the addon (InstallDirectory) is sized to the guild limit too; when it is full, the
+  -- member heard from longest ago goes.
+  INSTALLS_MAX_ENTRIES = 1000,
 
   -- HELLO: sent shortly after login, and once more (jittered, rate limited) when a new peer shows up.
   HELLO_LOGIN_DELAY_MIN = 2,

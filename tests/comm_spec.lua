@@ -167,6 +167,10 @@ local function build_env()
     random = function(low)
       return low
     end,
+    onPeerSeen = function(sender, info)
+      env.seenPeers = env.seenPeers or {}
+      env.seenPeers[#env.seenPeers + 1] = { sender = sender, info = info }
+    end,
   })
 
   function env.wire(messageType, payload, id)
@@ -2288,5 +2292,42 @@ describe("Comm PvP seasons", function()
       noise[index] = string.char(33 + seed % 90)
     end
     assert.is_false(env.comm:Fits("PVP_SEASON", { name = table.concat(noise) }))
+  end)
+end)
+
+describe("Comm peer recording (Installed check)", function()
+  local env
+
+  before_each(function()
+    env = build_env()
+  end)
+
+  it("tells onPeerSeen the version of a HELLO, and only the presence for any other message", function()
+    env.comm:HandleMessage(env.wire("HELLO", { version = "0.2.0" }, "a"), "A-Realm", "GUILD")
+    env.comm:HandleMessage(env.wire("PROFILE", profile(1), "b"), "B-Realm", "GUILD")
+    assert.are.same({ sender = "A-Realm", info = { version = "0.2.0" } }, env.seenPeers[1])
+    assert.are.same({ sender = "B-Realm", info = {} }, env.seenPeers[2])
+  end)
+
+  it("tells onPeerSeen about a member on another protocol version", function()
+    local message = Protocol.Build("HELLO", { version = "9.0.0" }, "id-1")
+    message.v = ns.Constants.PROTOCOL_MAJOR + 1
+    env.comm:HandleMessage(env.codec:Encode(message), "Future-Realm", "GUILD")
+    assert.are.same({ sender = "Future-Realm", info = { incompatible = true } }, env.seenPeers[1])
+  end)
+
+  it("does not tell onPeerSeen about its own messages or a duplicate", function()
+    env.comm:HandleMessage(env.wire("HELLO", { version = "0.1.0" }, "a"), "Me-Realm", "GUILD")
+    env.comm:HandleMessage(env.wire("HELLO", { version = "0.1.0" }, "b"), "A-Realm", "GUILD")
+    env.comm:HandleMessage(env.wire("HELLO", { version = "0.1.0" }, "b"), "A-Realm", "GUILD")
+    assert.are.equal(1, #env.seenPeers)
+  end)
+
+  it("keeps the message when onPeerSeen fails", function()
+    env.comm.onPeerSeen = function()
+      error("disk full")
+    end
+    assert.is_true(env.comm:HandleMessage(env.wire("HELLO", { version = "0.1.0" }, "a"), "A-Realm", "GUILD"))
+    assert.are.equal("0.1.0", env.comm.peers["A-Realm"].version)
   end)
 end)

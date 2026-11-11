@@ -13,7 +13,8 @@ local _, ns = ...
 --                 recipes = { [memberKey] = { [professionId] = { name, ids, rev, receivedAt } } },
 --                 rankMap = { rev, updatedAt, by, ranks } (absent until a gm or cogm saves one, see RankMapModel),
 --                 pvpSeason = { seasons, activeId, missions, prizes, officers, grants, voids, rejects, queue, finals,
---                               deliveries } (see PvPSeasonSync) }
+--                               deliveries } (see PvPSeasonSync),
+--                 installs = { [name] = { version, incompatible, seenAt } } (see InstallDirectory) }
 --   db.chars[identityKey] = { profile = {}, readiness = {}, publish = {}, pvp = {}, recipes = {},
 --                             pvpSync = { rev }, pvpMissions = { seasonId, kills = {}, claims = {} } }
 local Store = {}
@@ -225,6 +226,13 @@ local MIGRATIONS = {
       end
     end)
   end,
+  -- v18: who in each guild runs the addon and which version (installs, see InstallDirectory), for the Installed check
+  -- tab. Nothing else is touched.
+  [18] = function(db)
+    forEachGuild(db, function(guild)
+      ensureTable(guild, "installs")
+    end)
+  end,
 }
 
 local function versionOf(db)
@@ -274,6 +282,7 @@ function Store.ForGuild(db, guildKey)
     "rosters",
     "members",
     "recipes",
+    "installs",
   }) do
     ensureTable(guild, name)
   end

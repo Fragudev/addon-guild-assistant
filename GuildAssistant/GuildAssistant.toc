@@ -33,6 +33,7 @@ Domain\AutoPublisher.lua
 Domain\Throttle.lua
 Domain\GuildRoster.lua
 Domain\PermissionService.lua
+Domain\InstallDirectory.lua
 Domain\RankMapModel.lua
 Domain\RankMapService.lua
 Domain\RosterService.lua

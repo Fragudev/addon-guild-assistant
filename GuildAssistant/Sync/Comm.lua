@@ -18,7 +18,8 @@ Comm.__index = Comm
 --       onPvPSeasonChange(messageType) and onPvPSeasonClosed(seasonId) (optional), ledgerInbox (optional),
 --       roleOf(sender) -> role or nil, ownRole() -> role or nil,
 --       snapshotInbox (optional), version (string), now() -> seconds, schedule(delaySeconds, fn),
---       random(low, high) -> number
+--       random(low, high) -> number, onPeerSeen(sender, info) (optional: every valid message from a member, info as
+--       InstallDirectory.Note takes it)
 function Comm.New(deps)
   return setmetatable({
     platform = deps.platform,
@@ -79,6 +80,7 @@ function Comm.New(deps)
     counter = 0,
     lastHelloAt = nil,
     helloReplyPending = false,
+    onPeerSeen = deps.onPeerSeen,
   }, Comm)
 end
 
@@ -124,6 +126,13 @@ function Comm:RememberPeer(sender, info)
   info.seenAt = self.now()
   self.peers[sender] = info
   return true
+end
+
+-- Tells onPeerSeen that `sender` runs the addon. A failing listener must not drop the message.
+function Comm:NotePeer(sender, info)
+  if self.onPeerSeen then
+    pcall(self.onPeerSeen, sender, info)
+  end
 end
 
 -- A new peer probably has not seen our HELLO: answer once, jittered and rate limited, so a
@@ -231,6 +240,7 @@ function Comm:HandleMessage(text, sender, channel)
   if not message then
     if reason == "incompatible_version" then
       self:RememberPeer(sender, { incompatible = true })
+      self:NotePeer(sender, { incompatible = true })
     end
     return false, reason
   end
@@ -238,6 +248,7 @@ function Comm:HandleMessage(text, sender, channel)
   if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
     return false, "duplicate"
   end
+  self:NotePeer(sender, message.t == "HELLO" and { version = message.p.version } or {})
 
   if message.t == "HELLO" then
     return self:HandleHello(sender, message.p)
@@ -1243,6 +1254,14 @@ function Comm.Start()
       end
     end,
     version = ns.GetVersion(),
+    -- Who runs the addon, saved for the Installed check tab.
+    onPeerSeen = function(sender, info)
+      if ns.InstallDirectory.Note(ns.db.global.installs, sender, info, platform.ServerTime()) and ns.UI then
+        if ns.UI.InstallsChanged then
+          ns.UI.InstallsChanged()
+        end
+      end
+    end,
     now = platform.Now,
     schedule = C_Timer.After,
     random = math.random,
