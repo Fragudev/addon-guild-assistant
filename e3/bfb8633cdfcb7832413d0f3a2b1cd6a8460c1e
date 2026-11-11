@@ -1,0 +1,73 @@
+GuildAssistant/GuildAssistant.toc
+  s_32978aaf7efee9::t_627a0e8b89a05e 101,108,111,116
+GuildAssistant/Locales/esES.lua
+  s_32978aaf7efee9::t_0b2ea8f6dc7815 54-55,104-108,205,210-213,226,320,401,421-422,429-430,516,549-556,572-573,591-594,871,1014-1037
+GuildAssistant/UI/LootPopup.lua
+  s_32978aaf7efee9::t_7233926aa8ec85 138-140,144-151,361
+GuildAssistant/UI/Main.lua
+  s_32978aaf7efee9::t_dd2006ae6ea058 57-100,242-243,245,248-252,279-284,366-367,369,400,577-579,584-585,587
+GuildAssistant/UI/MinimapButton.lua
+  s_32978aaf7efee9::t_f3557eea6cd7d1 84-85,118
+GuildAssistant/UI/Tabs/Events.lua
+  s_32978aaf7efee9::t_fbee2bd7f7ef90 1-77
+GuildAssistant/UI/Tabs/Home.lua
+  s_32978aaf7efee9::t_dc2747a94031bb 80-82
+GuildAssistant/UI/Tabs/Loot.lua
+  s_32978aaf7efee9::t_2fc684cb856512 3-7,380-386,405-408,421-422,442-443
+GuildAssistant/UI/Tabs/Members.lua
+  s_32978aaf7efee9::t_f6a451580f950a 3-7,180,193,197,201,222,224-225,235,245,292,305,348-349,352,354-355,361,363
+GuildAssistant/UI/Tabs/PvP.lua
+  s_32978aaf7efee9::t_ddb69c21782a69 4-7,375,639-647,654
+GuildAssistant/UI/Tabs/PvPAdmin.lua
+  s_32978aaf7efee9::t_b56e062a00e38a 1-989
+GuildAssistant/UI/Tabs/Raid.lua
+  s_32978aaf7efee9::t_d3089b70b15556 108,294,355,364,371-389,694-699,713-715
+GuildAssistant/UI/Tabs/Ranks.lua
+  s_32978aaf7efee9::t_442a22f0ac565c 1-171
+GuildAssistant/UI/Tabs/Readiness.lua
+  s_32978aaf7efee9::t_200b489ba07116 21-24,29-30,33-41
+GuildAssistant/UI/Tabs/Rules.lua
+  s_32978aaf7efee9::t_aaec2a7e79b543 3-9,16-19,54,77,100,119,148,161,171,188,198,208,227,238,250,274,287-305,308-318,321-322,326-329,332-336,338-348,354,358,371
+GuildAssistant/UI/ViewModel.lua
+  s_32978aaf7efee9::t_cf35d816b0823e 36-42,511-513,564-581,583-586,755,757,792-793,795,798-808,1051-1053,1056-1059,1062-1066,1070-1081,1083-1087,1089-1100,1105-1114,1157,1297-1299,1304-1306,1318-1389
+GuildAssistant/UI/ViewModelHome.lua
+  s_32978aaf7efee9::t_ef3c9a2093300c 349,361,387-388,425-427,461-462,483-484,487-488,492,496,521-532,534-535
+GuildAssistant/UI/ViewModelPvP.lua
+  s_32978aaf7efee9::t_d92ff121eb8300 21-22,49
+GuildAssistant/UI/ViewModelRaid.lua
+  s_32978aaf7efee9::t_9e45d8c5d65b31 182-183,191,202-218
+GuildAssistant/UI/ViewModelRanks.lua
+  s_32978aaf7efee9::t_a97900e68610fc 1-157
+GuildAssistant/UI/VotingFrame.lua
+  s_32978aaf7efee9::t_4dc5280e30989e 3,115-119,327-328,416
+docs/USER_GUIDE.md
+  s_32978aaf7efee9::t_46316be64aca93 26-47,83-110,112-113,115-117,160-162,166,170,174,177,244-247,255-256,312,327,329,339,348,370,395-396
+tests/loot_popup_spec.lua
+  s_32978aaf7efee9::t_86a5ada6b8a5da 5,212-294
+tests/secondary_frames_spec.lua
+  s_32978aaf7efee9::t_5140f9fec8b4c5 105
+tests/ui_smoke_spec.lua
+  s_32978aaf7efee9::t_decc2badbf3f23 8-11,26,59,72,75,80,90,94-95,101-106,124-127,212,218-222,264,269-270,274,281,304,445-450,452,454,487-488,493-502,504,506-523,525,530-563,619,651,741,758,761,764-812,818,828-849,851-852,854-882,885-886,907,919,974-1061,1063,1065,1092,1102-1103,1142-1145,1169,1186-1187,1218-1247,1308,1327,1334-1502,1554-1555,1558-1564,1569,1572-1588,1646,1652,1657-1673,1677-1682,1684-1685,1779,1824,1886,1932,1950-1955,1980-1982,1989-1995,1997-1998,2015,2019-2021,2147,2318,2403-2412,2414-2415,2546-2594,2596,2598-2623,2647,2670,2674,2686,2689,2693,2696,2711,2724-2725,2730,2735,2739,2741,2790,2802,2805,2808,2835,2883,3241-3245
+tests/view_model_pvp_spec.lua
+  s_32978aaf7efee9::t_6ba674736816d3 70-71,94,103-104
+tests/view_model_ranks_spec.lua
+  s_32978aaf7efee9::t_acaba452282300 1-219
+tests/view_model_spec.lua
+  s_32978aaf7efee9::t_ce97205c1a3549 40,144-145,149-150,152-153,157-158,161-162,164-182,184-196,367-369,371-373,462-467,469-488,687-691,731,742,749-776,1500-1506,1508-1511,1513,1615-1617,1711-1722,1724-1787,1791,1830,1841,1843,2162-2165,2180,2219-2221,2232,2234-2236,2239-2242,2266-2268,2289,2291,2299-2334,2345-2346,2798,3021-3131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e3bfb8633cdfcb7832413d0f3a2b1cd6a8460c1e",
+  "prompts": {},
+  "sessions": {
+    "s_32978aaf7efee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e5c844-e38a-4f46-ba40-0ea2890d9363",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
