@@ -224,6 +224,12 @@ function M.new(real)
       return popups[layer]
     end,
   }
+  -- The edit focus helpers: nobody is typing in the fake, so there is nothing to commit.
+  Kit.CommitEdit = function() end
+  Kit.DiscardEdit = function() end
+  Kit.HasEditFocus = function()
+    return false
+  end
   Kit.CloseAllPopups = function()
     for _, popup in pairs(popups) do
       popup.open = false

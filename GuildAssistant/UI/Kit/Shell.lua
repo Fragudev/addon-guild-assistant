@@ -250,10 +250,16 @@ local function buildModal()
   overlay.title:SetFontObject(Theme.StyleFont("window"))
   setColor(overlay.title, "text")
   overlay:Hide()
+  -- Every way out (the close button, Escape through UISpecialFrames, another Hide) ends here, so onClose runs once.
   overlay:SetScript("OnHide", function()
     if modalFrame and modalFrame.stack then
       modalFrame.stack:Release()
       modalFrame.stack = nil
+    end
+    local onClose = overlay.onClose
+    overlay.onClose = nil
+    if onClose then
+      onClose()
     end
   end)
   table.insert(UISpecialFrames, "GuildAssistantModal")
@@ -295,11 +301,6 @@ end
 function Modal.Close()
   if modalFrame and modalFrame:IsShown() then
     modalFrame:Hide()
-    local onClose = modalFrame.onClose
-    modalFrame.onClose = nil
-    if onClose then
-      onClose()
-    end
   end
 end
 
@@ -347,8 +348,8 @@ DEFAULT_MONTHS[8], DEFAULT_MONTHS[9], DEFAULT_MONTHS[10] = "August", "September"
 DEFAULT_MONTHS[11], DEFAULT_MONTHS[12] = "November", "December"
 local DEFAULT_WEEKDAYS = { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" }
 
--- opts: value (timestamp or nil), format(timestamp) -> text, placeholder, onChange(timestamp), onError(reason),
--- monthName(month), weekdayName(index 1..7, Monday first), now() -> timestamp, clock (for tests).
+-- opts: value (timestamp or nil), format(timestamp) -> text, placeholder, error (boolean), onChange(timestamp),
+-- onError(reason), monthName(month), weekdayName(index 1..7, Monday first), now() -> timestamp, clock (for tests).
 Kit.Define("DateField", {
   frameType = "Button",
   create = function(obj)
@@ -368,9 +369,16 @@ Kit.Define("DateField", {
         obj:OpenCalendar()
       end
     end)
+    function obj:refresh()
+      if not self.opts then
+        return
+      end
+      self.border:SetColor(Kit.FieldBorder(self.opts.error, false))
+    end
   end,
   apply = function(obj, opts)
     obj.bg:SetColorTexture(Theme.Color("control"))
+    obj:refresh()
     obj.label:SetFontObject(Theme.StyleFont("body"))
     Icons.Apply(obj.icon, "calendar", "dim")
     obj.value = opts.value
@@ -545,6 +553,8 @@ end
 -- ---------------------------------------------------------------------------------------------------------------
 -- Sidebar: navigation rows grouped under small labels, with a user card pinned at the bottom.
 
+local NAV_BADGE_ROOM = 26 -- units kept free on the right of a row that has a badge
+
 Kit.Define("NavRow", {
   frameType = "Button",
   create = function(obj)
@@ -564,6 +574,9 @@ Kit.Define("NavRow", {
     obj.label:SetPoint("RIGHT", -8, 0)
     obj.label:SetJustifyH("LEFT")
     obj.label:SetWordWrap(false)
+    obj.badge = obj.frame:CreateFontString(nil, "OVERLAY")
+    obj.badge:SetPoint("RIGHT", -12, 0)
+    obj.badge:SetJustifyH("RIGHT")
     obj.frame:SetScript("OnEnter", function()
       obj.hovered = true
       obj:refresh()
@@ -577,7 +590,23 @@ Kit.Define("NavRow", {
         obj.opts.onClick(obj.opts.value)
       end
     end)
+    -- The optional count on the right (`opts.badge`, a text). Without one the label keeps all its width, so a row
+    -- without a badge looks as it always did. Called again to change the count without building the row again.
+    function obj:SetBadge(text)
+      if self.opts then
+        self.opts.badge = text
+      end
+      local has = type(text) == "string" and text ~= ""
+      self.label:ClearAllPoints()
+      self.label:SetPoint("LEFT", 16 + size + Theme.metrics.navGap, 0)
+      self.label:SetPoint("RIGHT", has and -(NAV_BADGE_ROOM + 8) or -8, 0)
+      self.badge:SetText(has and text or "")
+      self.badge:SetShown(has)
+    end
     function obj:refresh()
+      if not self.opts then
+        return
+      end
       local selected = self.opts.selected
       if selected then
         self.wash:SetColorTexture(Theme.Color("selected"))
@@ -596,6 +625,9 @@ Kit.Define("NavRow", {
     obj.hovered = false
     obj.label:SetFontObject(Theme.StyleFont("nav"))
     obj.label:SetText(opts.text or "")
+    obj.badge:SetFontObject(Theme.StyleFont("tiny"))
+    setColor(obj.badge, "accent")
+    obj:SetBadge(opts.badge)
     obj:refresh()
   end,
   layout = function()
@@ -629,7 +661,7 @@ Kit.Define("UserCard", {
     Icons.Apply(obj.avatar, "disc", "accent", 0.18)
     obj.initial:SetFontObject(Theme.StyleFont("value"))
     setColor(obj.initial, "accent")
-    obj.initial:SetText((opts.name or "?"):sub(1, 1):upper())
+    obj.initial:SetText(Util.Upper(Util.Chars(opts.name or "?", 1)))
     obj.name:SetFontObject(Theme.StyleFont("smallMedium"))
     setColor(obj.name, "text")
     obj.name:SetText(opts.name or "")
@@ -644,7 +676,8 @@ Kit.Define("UserCard", {
   end,
 })
 
--- opts: groups = { { label, items = { { value, text, icon } } } }, value, onSelect(value), user = { name, detail }.
+-- opts: groups = { { label, items = { { value, text, icon, badge } } } }, value, onSelect(value),
+-- user = { name, detail }, scroll (the offset of the rows, kept when the sidebar is built again).
 Kit.Define("Sidebar", {
   create = function(obj)
     obj.bg = obj.frame:CreateTexture(nil, "BACKGROUND")
@@ -652,10 +685,14 @@ Kit.Define("Sidebar", {
   end,
   apply = function(obj, opts)
     obj.bg:SetColorTexture(Theme.Color("side"))
-    obj.nav = Kit.Stack(
-      obj,
-      { gap = 2, pad = { Theme.metrics.sidebarPadX, Theme.metrics.sidebarPadY, Theme.metrics.sidebarPadX, 0 } }
-    )
+    -- The rows scroll when the window is too short for all of them; the user card stays pinned under them.
+    obj.nav = Kit.ScrollArea(obj, {
+      gap = 2,
+      pad = { Theme.metrics.sidebarPadX, Theme.metrics.sidebarPadY, Theme.metrics.sidebarPadX, 0 },
+      autoGutter = true,
+    })
+    obj.nav.offset = opts.scroll or 0
+    obj.rows = {}
     for index, group in ipairs(opts.groups or {}) do
       if group.label then
         Kit.Label(obj.nav, {
@@ -666,10 +703,11 @@ Kit.Define("Sidebar", {
         })
       end
       for _, item in ipairs(group.items) do
-        Kit.NavRow(obj.nav, {
+        obj.rows[item.value] = Kit.NavRow(obj.nav, {
           value = item.value,
           text = item.text,
           icon = item.icon,
+          badge = item.badge,
           selected = item.value == opts.value,
           onClick = opts.onSelect,
         })
@@ -680,17 +718,26 @@ Kit.Define("Sidebar", {
     end
   end,
   layout = function(obj, width, height)
-    obj.nav:Layout(width)
-    Kit.Place(obj.nav, obj.frame, 0, 0)
+    local cardHeight = 0
     if obj.card then
-      local h = obj.card:Layout(width)
+      cardHeight = obj.card:Layout(width)
       obj.card.frame:ClearAllPoints()
       obj.card.frame:SetPoint("BOTTOMLEFT", obj.frame, "BOTTOMLEFT", 0, 0)
-      return height or h
     end
-    return height or 0
+    obj.nav:Layout(width, math.max(0, (height or 0) - cardHeight))
+    Kit.Place(obj.nav, obj.frame, 0, 0)
+    return height or cardHeight
   end,
 })
+
+-- Changes the badge of the item `value` (a text, or nil for none) without building the sidebar again. An item that is
+-- not there is left alone.
+function Widget:SetItemBadge(value, text)
+  local row = self.rows and self.rows[value]
+  if row and not row.released then
+    row:SetBadge(text)
+  end
+end
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- Window: the frame with its header (logo, title, version, sync pill, buttons), the body below it, dragging and
@@ -784,7 +831,7 @@ function Window.New(opts)
   self.grip = grip
 
   frame:SetScript("OnSizeChanged", function()
-    self:NotifyResize()
+    self:ScheduleResize()
   end)
   frame:SetScript("OnHide", function()
     Kit.CloseAllPopups()
@@ -883,7 +930,30 @@ function Window:SetPill(text, status)
   self.pill:Show()
 end
 
+-- A drag fires a size event every frame and each full layout is expensive, so the layout waits RESIZE_DELAY and runs
+-- once for the latest size. Letting go of the grip (and Show) call NotifyResize, which also cancels the wait.
+local RESIZE_DELAY = 0.05
+
+function Window:ScheduleResize()
+  if not (C_Timer and C_Timer.After) then
+    self:NotifyResize()
+    return
+  end
+  if self.resizePending then
+    return
+  end
+  self.resizePending = true
+  local generation = self.resizeGeneration or 0
+  C_Timer.After(RESIZE_DELAY, function()
+    if self.resizePending and (self.resizeGeneration or 0) == generation then
+      self:NotifyResize()
+    end
+  end)
+end
+
 function Window:NotifyResize()
+  self.resizePending = false
+  self.resizeGeneration = (self.resizeGeneration or 0) + 1
   local opts = self.opts
   if opts.onResize then
     local m = Theme.metrics

@@ -213,3 +213,35 @@ function Util.Thumb(view, content, scroll, track, minimum)
   local top = math.floor((track - height) * Util.Clamp(scroll, 0, range) / range)
   return top, height
 end
+
+-- The inverse of Util.Thumb: the scroll offset (0..content - view) for a thumb whose top is at `top` units of the
+-- track. Used while the thumb is dragged; a top past either end gives the first or the last offset.
+function Util.ThumbOffset(top, view, content, track, minimum)
+  if content <= view or content <= 0 then
+    return 0
+  end
+  local _, height = Util.Thumb(view, content, 0, track, minimum)
+  local travel = track - height
+  local range = content - view
+  if travel <= 0 then
+    return 0
+  end
+  return Util.Clamp(math.floor(top * range / travel + 0.5), 0, range)
+end
+
+-- The first `count` UTF-8 characters of `text` (never half of a multi-byte one: "sáb" -> "sá" for 2).
+function Util.Chars(text, count)
+  text = tostring(text or "")
+  local last, seen = 0, 0
+  for index = 1, #text do
+    local byte = text:byte(index)
+    if byte < 128 or byte >= 192 then
+      if seen == count then
+        break
+      end
+      seen = seen + 1
+    end
+    last = index
+  end
+  return text:sub(1, last)
+end

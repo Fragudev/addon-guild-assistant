@@ -13,10 +13,26 @@ local L = ns.L
 -- refresh function; UI.LootChanged calls them all.
 UI.lootListeners = {}
 
+local LOOT_REDRAW_SECONDS = 0.25
+local lootThrottle
+
+-- Loot changed here or on a received message (a council opening a session sends a burst): the listeners run at most
+-- once per LOOT_REDRAW_SECONDS.
 function UI.LootChanged()
-  for _, listener in ipairs(UI.lootListeners) do
-    listener()
-  end
+  lootThrottle = lootThrottle
+    or ns.Throttle.New({
+      run = function()
+        for _, listener in ipairs(UI.lootListeners) do
+          listener()
+        end
+      end,
+      now = function()
+        return ns.Platform.Now()
+      end,
+      schedule = C_Timer.After,
+      interval = LOOT_REDRAW_SECONDS,
+    })
+  lootThrottle:Call()
 end
 
 local SIDEBAR_WIDTH = 200
@@ -125,11 +141,19 @@ end
 -- ---------------------------------------------------------------------------------------------------------------
 -- Drawing
 
+-- Closes the menus and pickers opened from the page (a dropdown, a date picker): drawing the page again recycles the
+-- widgets they were opened for, so a pick would land on another row. The settings popover and the modal belong to the
+-- window, not to the page, and stay. Set below, next to the settings.
+local closePagePopups
+
 -- Draws the banner and the tab into the page again, keeping the scroll position.
 function UI.Redraw()
   if not (UI.IsOpen() and page) then
     return
   end
+  closePagePopups()
+  -- Before the page goes: a text being typed is committed, not lost. Its commit may redraw too, which is harmless.
+  Kit.CommitEdit()
   local offset = page:GetScroll()
   -- What these views show is read from the character again each time they are drawn.
   if ns.character and (currentTab == "profile" or currentTab == "ready" or currentTab == "home") then
@@ -174,6 +198,28 @@ end
 -- ---------------------------------------------------------------------------------------------------------------
 -- Redraws that follow what arrives from the guild: bursts count once per interval.
 
+-- A redraw that follows what arrived from the guild. While an edit box has the keyboard (a search or reason box being
+-- typed in) it would destroy that box mid-typing, so it waits and runs once the focus is gone. A redraw the player
+-- asked for with a click goes through UI.Redraw directly and is not held back.
+local FOCUS_RETRY_SECONDS = 1
+local focusWaiting = false
+
+local function syncRedraw()
+  if Kit.HasEditFocus() then
+    if not focusWaiting then
+      focusWaiting = true
+      C_Timer.After(FOCUS_RETRY_SECONDS, function()
+        focusWaiting = false
+        if UI.IsOpen() then
+          syncRedraw()
+        end
+      end)
+    end
+    return
+  end
+  UI.Redraw()
+end
+
 local function throttledRedraw(shown, seconds)
   local throttle
   return function()
@@ -182,9 +228,7 @@ local function throttledRedraw(shown, seconds)
     end
     throttle = throttle
       or ns.Throttle.New({
-        run = function()
-          UI.Redraw()
-        end,
+        run = syncRedraw,
         now = function()
           return ns.Platform.Now()
         end,
@@ -206,7 +250,7 @@ end, ns.Constants.PVP_REDRAW_SECONDS)
 function UI.PvPSeasonChanged(messageType)
   UI.PvPChanged()
   if messageType == "PVP_OFFICER" and currentTab == "roster" then
-    UI.Redraw()
+    syncRedraw()
   end
 end
 
@@ -230,7 +274,7 @@ end, 1)
 -- The guild's readiness rules changed: rare (one message per change), so no throttling.
 function UI.RulesChanged()
   if UI.IsOpen() and (currentTab == "ready" or currentTab == "rules" or currentTab == "home") then
-    UI.Redraw()
+    syncRedraw()
   end
 end
 
@@ -260,7 +304,7 @@ function UI.ReadinessChanged()
       run = function()
         if UI.IsOpen() and ReadinessIsShown() and ns.character then
           ns.ProfileService.Refresh(ns.Platform, ns.character.profile)
-          UI.Redraw()
+          syncRedraw()
         end
       end,
       now = function()
@@ -304,7 +348,10 @@ function UI.BuildSidebar()
   if not window then
     return
   end
+  -- The scroll of the rows survives the rebuild, so picking a tab low in a short window does not jump to the top.
+  local navScroll = 0
   if sidebar then
+    navScroll = sidebar.nav and sidebar.nav:GetScroll() or 0
     sidebar:Release()
   end
   local role = UI.Role()
@@ -315,6 +362,7 @@ function UI.BuildSidebar()
       UI.SelectTab(value)
     end,
     user = ns.ViewModel.UserCard(ns.Platform.GetIdentityKey(), ns.Platform.GetOwnGuildRank(), role),
+    scroll = navScroll,
   })
   sidebar:Layout(SIDEBAR_WIDTH, contentHeight)
   Kit.Place(sidebar, window.body, 0, 0)
@@ -427,6 +475,14 @@ local function buildSettings(stack)
   })
 end
 
+closePagePopups = function()
+  Kit.Menu.Close()
+  local popover = Kit.Popup.Get(1)
+  if popover:IsOpen() and popover.build ~= buildSettings then
+    popover:Close()
+  end
+end
+
 function UI.ToggleSettings()
   if not (window and ns.db) then
     return
@@ -461,6 +517,21 @@ local function windowTitle()
   return "Guild Assistant"
 end
 
+local pillTicker
+
+-- The window closed (its button, Escape or the toggle): nothing it armed or reported outlives it, and nothing keeps
+-- running for it.
+function UI.WindowClosed()
+  Kit.CloseAllPopups()
+  UI.WatchReadiness(false)
+  banner = nil
+  armed = nil
+  if pillTicker then
+    pillTicker:Cancel()
+    pillTicker = nil
+  end
+end
+
 local function buildWindow()
   window = Kit.Window.New({
     name = "GuildAssistantWindow",
@@ -478,8 +549,7 @@ local function buildWindow()
     },
     onResize = onResize,
     onClose = function()
-      Kit.CloseAllPopups()
-      UI.WatchReadiness(false)
+      UI.WindowClosed()
     end,
   })
   UI.ApplyWindowStatus(window, "mainWindow", 1000, 640)
@@ -488,8 +558,12 @@ local function buildWindow()
   content:SetPoint("BOTTOMRIGHT", window.body, "BOTTOMRIGHT", 0, 0)
   page = Kit.ScrollArea(content, { gap = Kit.Theme.metrics.blockGap, pad = PAGE_PAD })
   Kit.Place(page, content, 0, 0)
-  if C_Timer.NewTicker then
-    C_Timer.NewTicker(2, function()
+end
+
+-- The sync pill follows the sync status while the window is open.
+local function startPillTicker()
+  if not pillTicker and C_Timer.NewTicker then
+    pillTicker = C_Timer.NewTicker(2, function()
       if UI.IsOpen() then
         UI.UpdatePill()
       end
@@ -503,13 +577,14 @@ function UI.Toggle()
   end
   if window and window:IsShown() then
     window:Hide()
-    UI.WatchReadiness(false)
+    UI.WindowClosed()
     return
   end
   if not window then
     buildWindow()
   end
   window:Show()
+  startPillTicker()
   UI.WatchReadiness(ReadinessIsShown())
   UI.BuildSidebar()
   UI.UpdatePill()

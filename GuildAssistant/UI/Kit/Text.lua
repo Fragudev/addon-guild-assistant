@@ -281,8 +281,22 @@ Kit.Define("StatusChip", {
 })
 
 -- A thin bar. opts: value (0..1), color (token), height.
+-- A thin bar. opts: value (0..1), color (token), height. bar:SetValue(value) moves the fill in place (clamped to
+-- 0..1) without laying out the parent; before the first layout there is no width yet, so the value waits for it.
+local function paintBar(obj, width)
+  local filled = math.floor(width * obj.value)
+  obj.fill:SetWidth(math.max(filled, 0.001))
+  obj.fill:SetShown(filled > 0)
+end
+
 Kit.Define("ProgressBar", {
   create = function(obj)
+    obj.SetValue = function(self, value)
+      self.value = Util.Clamp(value or 0, 0, 1)
+      if self.width then
+        paintBar(self, self.width)
+      end
+    end
     obj.track = obj.frame:CreateTexture(nil, "BACKGROUND")
     obj.track:SetAllPoints(obj.frame)
     obj.fill = obj.frame:CreateTexture(nil, "ARTWORK")
@@ -292,17 +306,13 @@ Kit.Define("ProgressBar", {
   apply = function(obj, opts)
     obj.value = Util.Clamp(opts.value or 0, 0, 1)
     obj.barHeight = opts.height or 6
+    obj.width = nil
     obj.track:SetColorTexture(Theme.Color("text", 0.08))
     obj.fill:SetColorTexture(Theme.Color(opts.color or "accent"))
   end,
   layout = function(obj, width)
-    local filled = math.floor(width * obj.value)
-    obj.fill:SetWidth(math.max(filled, 0.001))
-    if filled <= 0 then
-      obj.fill:Hide()
-    else
-      obj.fill:Show()
-    end
+    obj.width = width
+    paintBar(obj, width)
     return obj.barHeight
   end,
 })
@@ -357,9 +367,6 @@ Kit.Define("Banner", {
     obj.fs:SetWidth(math.max(0, width - 40 - 40))
     local textHeight = math.ceil(obj.fs:GetStringHeight() or 16)
     return math.max(40, textHeight + 22)
-  end,
-  reset = function(obj)
-    obj.close:SetScript("OnClick", nil)
   end,
 })
 

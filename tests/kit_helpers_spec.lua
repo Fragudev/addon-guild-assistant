@@ -194,6 +194,30 @@ describe("Kit.Util", function()
     assert.are.same({ 75, 25 }, { top, height })
     assert.are.equal(20, select(2, Util.Thumb(10, 1000, 0, 100, 20)))
   end)
+
+  it("turns a dragged thumb position back into a scroll offset", function()
+    -- view 100, content 400, track 100: the thumb is 25 high and travels 75 units for a range of 300.
+    assert.are.equal(0, Util.ThumbOffset(0, 100, 400, 100, 20))
+    assert.are.equal(300, Util.ThumbOffset(75, 100, 400, 100, 20))
+    assert.are.equal(120, Util.ThumbOffset(30, 100, 400, 100, 20))
+    -- Past either end it stays inside the range.
+    assert.are.equal(0, Util.ThumbOffset(-40, 100, 400, 100, 20))
+    assert.are.equal(300, Util.ThumbOffset(500, 100, 400, 100, 20))
+    -- It is the inverse of Util.Thumb for the positions the thumb can take.
+    local top = Util.Thumb(100, 400, 180, 100, 20)
+    assert.are.equal(180, Util.ThumbOffset(top, 100, 400, 100, 20))
+    -- Nothing to scroll: always 0.
+    assert.are.equal(0, Util.ThumbOffset(50, 100, 80, 100, 20))
+  end)
+
+  it("cuts UTF-8 text by characters, never in the middle of one", function()
+    assert.are.equal("s\195\161", Util.Chars("s\195\161b", 2))
+    assert.are.equal("s\195\161b", Util.Chars("s\195\161b", 3))
+    assert.are.equal("s\195\161b", Util.Chars("s\195\161b", 9))
+    assert.are.equal("ab", Util.Chars("abc", 2))
+    assert.are.equal("", Util.Chars("abc", 0))
+    assert.are.equal("", Util.Chars(nil, 2))
+  end)
 end)
 
 describe("Kit.Pixel", function()
