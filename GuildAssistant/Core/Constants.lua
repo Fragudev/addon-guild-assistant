@@ -2,7 +2,7 @@ local _, ns = ...
 
 ns.Constants = {
   ADDON_PREFIX = "GUILDASST",
-  SCHEMA_VERSION = 19,
+  SCHEMA_VERSION = 20,
 
   -- Free-text profile fields a player can declare by hand (source = "declared").
   MANUAL_FIELDS = { role = true, role2 = true, main = true, notes = true },
@@ -10,7 +10,7 @@ ns.Constants = {
 
   -- Wire protocol. Major mismatches are rejected; minor versions only add optional fields.
   PROTOCOL_MAJOR = 1,
-  PROTOCOL_MINOR = 14,
+  PROTOCOL_MINOR = 15,
   -- Bounds applied before anything is decoded or deserialized from the wire.
   MAX_ENCODED_BYTES = 4096,
   MAX_DECOMPRESSED_BYTES = 32768,
@@ -377,6 +377,27 @@ ns.Constants = {
   -- A received profile older than this is shown as stale, never as current.
   ROSTER_STALE_SECONDS = 7 * 24 * 3600,
   PEERS_MAX_ENTRIES = 200,
+  -- Announcements (docs/PROTOCOL.md, ANN and ANN_DEL). The limits count characters, not bytes. An announcement is kept
+  -- until its expiry; its removal leaves a tombstone for ANNOUNCE_TOMBSTONE_TTL_SECONDS. A popup is only worth showing
+  -- for an announcement touched in the last ANNOUNCE_POPUP_MAX_AGE_SECONDS, and at most ANNOUNCE_POPUP_QUEUE_MAX wait
+  -- for the player. A gm or cogm sends the own announcements again some time after login.
+  ANNOUNCE_MAX = 30,
+  ANNOUNCE_TITLE_MAX = 60,
+  ANNOUNCE_BODY_MAX = 600,
+  ANNOUNCE_EXPIRY_CHOICES = { "never", "1d", "7d", "30d" },
+  ANNOUNCE_EXPIRY_SECONDS = { ["1d"] = 24 * 3600, ["7d"] = 7 * 24 * 3600, ["30d"] = 30 * 24 * 3600 },
+  ANNOUNCE_TOMBSTONE_TTL_SECONDS = 30 * 24 * 3600,
+  ANNOUNCE_TOMBSTONE_MAX = 200,
+  ANNOUNCE_POPUP_MAX_AGE_SECONDS = 7 * 24 * 3600,
+  ANNOUNCE_POPUP_QUEUE_MAX = 3,
+  ANNOUNCE_POPUP_RETRY_SECONDS = 5,
+  ANNOUNCE_SNAPSHOT_MAX = 30,
+  ANNOUNCE_RESEND_DELAY_MIN = 5,
+  ANNOUNCE_RESEND_DELAY_MAX = 40,
+  ANNOUNCE_REDRAW_SECONDS = 1,
+  -- The popups still due for stored announcements are asked for this long after the activation.
+  ANNOUNCE_LOGIN_POPUP_DELAY = 8,
+
   -- The saved record of who runs the addon (InstallDirectory) is sized to the guild limit too; when it is full, the
   -- member heard from longest ago goes.
   INSTALLS_MAX_ENTRIES = 1000,
