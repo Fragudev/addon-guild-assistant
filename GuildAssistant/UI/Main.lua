@@ -320,6 +320,12 @@ UI.RecipesChanged = throttledRedraw(function()
   return currentTab == "professions" or currentTab == "profile"
 end, 1)
 
+-- A member was heard from (Domain/InstallDirectory): the Installed check tab follows, once per interval (a guild
+-- logging in announces itself all at once, and every message counts).
+UI.InstallsChanged = throttledRedraw(function()
+  return currentTab == "installs"
+end, 2)
+
 -- The rank map changed (saved here or received): the role of this player may have changed, so the sidebar is built
 -- again, and the Ranks tab, or any tab the role no longer reaches, is drawn again.
 function UI.RanksChanged()

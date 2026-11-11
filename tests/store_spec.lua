@@ -371,12 +371,12 @@ describe("Store migration to schema 13 (one table per guild)", function()
   local Store, Constants = load_store_current()
 
   it("is the current schema", function()
-    assert.are.equal(17, Constants.SCHEMA_VERSION)
+    assert.are.equal(18, Constants.SCHEMA_VERSION)
   end)
 
   it("builds the root layout from an empty database", function()
     local db = Store.Load(nil)
-    assert.are.equal(17, db.schemaVersion)
+    assert.are.equal(18, db.schemaVersion)
     assert.are.same({}, db.guilds)
     assert.are.same({ minimap = {}, pvp = {} }, db.settings)
     assert.are.same({}, db.chars)
@@ -391,12 +391,12 @@ describe("Store migration to schema 13 (one table per guild)", function()
     local db = Store.Load(raw)
     assert.are.equal(raw, db)
     assert.is_nil(db.global)
-    assert.are.equal(17, db.schemaVersion)
+    assert.are.equal(18, db.schemaVersion)
     assert.are.equal(60, db.chars["Me-Realm"].profile.level)
     db.settings.language = "es"
     local again = Store.Load(db)
     assert.are.equal("es", again.settings.language)
-    assert.are.equal(17, again.schemaVersion)
+    assert.are.equal(18, again.schemaVersion)
   end)
 
   it("refuses data from a newer schema", function()
@@ -470,7 +470,7 @@ describe("Store.View", function()
     assert.are.equal(db.settings, view.settings)
     assert.are.equal(db.chars, view.chars)
     assert.are.equal(db, view.root)
-    assert.are.equal(17, view.schemaVersion)
+    assert.are.equal(18, view.schemaVersion)
     for _, value in pairs(db) do
       assert.are_not.equal(view, value)
     end
@@ -676,5 +676,35 @@ describe("Store migrations 14 to 17", function()
       Store.ForGuild(db, "club:1").rankMap = { rev = 1, ranks = {} }
       assert.is_nil(Store.ForGuild(db, "club:2").rankMap)
     end)
+  end)
+end)
+
+describe("Store migration 18 (installs per guild)", function()
+  local Store = load_store_current()
+
+  local function at17(guilds)
+    return { schemaVersion = 17, guilds = guilds, settings = { minimap = {}, pvp = {} }, chars = {} }
+  end
+
+  it("gives every guild its own installs table and is idempotent", function()
+    local raw = at17({
+      ["club:1"] = { installs = nil, roster = {} },
+      ["club:2"] = { installs = { Ann = { version = "1.0.0", seenAt = 5 } } },
+    })
+    local db = Store.Load(raw)
+    assert.are.same({}, db.guilds["club:1"].installs)
+    assert.are.same({ Ann = { version = "1.0.0", seenAt = 5 } }, db.guilds["club:2"].installs)
+    assert.are.equal(18, db.schemaVersion)
+
+    db.guilds["club:1"].installs.Bob = { seenAt = 9 }
+    local again = Store.Load(db)
+    assert.are.same({ Bob = { seenAt = 9 } }, again.guilds["club:1"].installs)
+    assert.are.same({ Ann = { version = "1.0.0", seenAt = 5 } }, again.guilds["club:2"].installs)
+  end)
+
+  it("keeps the installs of two guilds apart in a fresh guild too", function()
+    local db = Store.Load(nil)
+    Store.ForGuild(db, "club:1").installs.Ann = { seenAt = 1 }
+    assert.are.same({}, Store.ForGuild(db, "club:2").installs)
   end)
 end)

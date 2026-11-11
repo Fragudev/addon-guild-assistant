@@ -152,6 +152,7 @@ describe("ViewModel misc", function()
       roster = true,
       pvpadmin = true,
       ranks = true,
+      installs = true,
     }, values)
   end)
 
@@ -162,14 +163,24 @@ describe("ViewModel misc", function()
       groups[tab.value] = tab.group
       assert.is_truthy(tab.icon, tab.value)
     end
-    assert.are.same(
-      { "home", "professions", "events", "ready", "loot", "pvp", "raid", "rules", "roster", "pvpadmin", "ranks" },
-      order
-    )
+    assert.are.same({
+      "home",
+      "professions",
+      "events",
+      "ready",
+      "loot",
+      "pvp",
+      "raid",
+      "rules",
+      "roster",
+      "pvpadmin",
+      "ranks",
+      "installs",
+    }, order)
     for _, value in ipairs({ "home", "professions", "events", "ready", "loot", "pvp" }) do
       assert.are.equal("guild", groups[value], value)
     end
-    for _, value in ipairs({ "raid", "rules", "roster", "pvpadmin", "ranks" }) do
+    for _, value in ipairs({ "raid", "rules", "roster", "pvpadmin", "ranks", "installs" }) do
       assert.are.equal("admin", groups[value], value)
     end
     for _, value in ipairs({ "profile", "layers", "blacklist", "me" }) do
@@ -194,6 +205,7 @@ describe("ViewModel misc", function()
       roster = "Members",
       pvpadmin = "PvP",
       ranks = "Ranks",
+      installs = "Installed check",
     }, texts)
   end)
 
@@ -692,7 +704,8 @@ describe("ViewModel minimap helpers", function()
       assert.are_not.equal("sync", entry.action)
     end
     local admin = ViewModel.MinimapMenu("gm")
-    assert.are.equal("ranks", admin[#admin - 1].value)
+    assert.are.equal("installs", admin[#admin - 1].value)
+    assert.are.equal("ranks", admin[#admin - 2].value)
     local roster = ViewModel.MinimapMenu("roster", "r1")
     assert.are.equal("ready", roster[4].value)
     assert.are.equal(#ViewModel.TabsFor("roster", "r1") + 1, #roster)
@@ -1740,15 +1753,15 @@ describe("ViewModel sidebar, user card and sync pill", function()
     local labels, values = navValues("gm")
     assert.are.same({ "Guild", "Admin" }, labels)
     assert.are.same(GUILD_ALL, values[1])
-    assert.are.same({ "raid", "rules", "roster", "pvpadmin", "ranks" }, values[2])
+    assert.are.same({ "raid", "rules", "roster", "pvpadmin", "ranks", "installs" }, values[2])
     assert.are.equal("Raid", ViewModel.NavGroups("gm")[2].items[1].text)
     assert.is_truthy(ViewModel.NavGroups("gm")[2].items[1].icon)
   end)
 
   it("shows each rank the tabs of the matrix, with a roster", function()
     local expected = {
-      gm = { GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks" } },
-      cogm = { GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks" } },
+      gm = { GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks", "installs" } },
+      cogm = { GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks", "installs" } },
       officer = { GUILD_ALL, { "raid", "rules", "roster", "ranks" } },
       rl = { GUILD_ALL, { "raid", "rules", "roster", "ranks" } },
       roster = { GUILD_ALL },
@@ -1774,7 +1787,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
     assert.are.same({ { "home", "professions", "pvp" }, { "ranks" } }, { rl[1], rl[2] or {} })
     -- gm, cogm and officer reach every roster, so a missing roster of their own changes nothing for them.
     local _, gm = navValues("gm", nil)
-    assert.are.same({ GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks" } }, gm)
+    assert.are.same({ GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks", "installs" } }, gm)
     local _, officer = navValues("officer", nil)
     assert.are.same({ { "home", "professions", "pvp" }, { "rules", "roster", "ranks" } }, officer)
   end)

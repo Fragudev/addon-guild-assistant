@@ -18,7 +18,8 @@ Comm.__index = Comm
 --       onPvPSeasonChange(messageType) and onPvPSeasonClosed(seasonId) (optional), ledgerInbox (optional),
 --       roleOf(sender) -> role or nil, ownRole() -> role or nil,
 --       snapshotInbox (optional), version (string), now() -> seconds, schedule(delaySeconds, fn),
---       random(low, high) -> number
+--       random(low, high) -> number, onPeerSeen(sender, info) (optional: every valid message from a member, info as
+--       InstallDirectory.Note takes it)
 function Comm.New(deps)
   return setmetatable({
     platform = deps.platform,
@@ -79,6 +80,8 @@ function Comm.New(deps)
     counter = 0,
     lastHelloAt = nil,
     helloReplyPending = false,
+    onPeerSeen = deps.onPeerSeen,
+    lastAskAt = nil,
   }, Comm)
 end
 
@@ -113,6 +116,24 @@ function Comm:SendHello()
   return self:Send("HELLO", { version = self.version }, "HELLO")
 end
 
+-- Asks every member online for its version: a HELLO with `ask`, which each one answers like a new peer (delayed and
+-- rate limited on its side). At most once every INSTALL_ASK_COOLDOWN_SECONDS here. Returns true, or false plus
+-- "cooldown" (and the seconds left) or what Send reported.
+function Comm:AskVersions()
+  local now = self.now()
+  local cooldown = ns.Constants.INSTALL_ASK_COOLDOWN_SECONDS
+  if self.lastAskAt and now - self.lastAskAt < cooldown then
+    return false, "cooldown", math.ceil(cooldown - (now - self.lastAskAt))
+  end
+  local ok, reason = self:Send("HELLO", { version = self.version, ask = true }, "HELLO")
+  if not ok then
+    return false, reason
+  end
+  self.lastAskAt = now
+  self.lastHelloAt = now
+  return true
+end
+
 function Comm:RememberPeer(sender, info)
   local peer = self.peers[sender]
   if not peer then
@@ -124,6 +145,13 @@ function Comm:RememberPeer(sender, info)
   info.seenAt = self.now()
   self.peers[sender] = info
   return true
+end
+
+-- Tells onPeerSeen that `sender` runs the addon. A failing listener must not drop the message.
+function Comm:NotePeer(sender, info)
+  if self.onPeerSeen then
+    pcall(self.onPeerSeen, sender, info)
+  end
 end
 
 -- A new peer probably has not seen our HELLO: answer once, jittered and rate limited, so a
@@ -149,7 +177,7 @@ function Comm:HandleHello(sender, payload)
   if not self:RememberPeer(sender, { version = payload.version }) then
     return false, "peers_full"
   end
-  if not known then
+  if not known or payload.ask then
     self:MaybeReplyHello()
   end
   return true
@@ -231,6 +259,7 @@ function Comm:HandleMessage(text, sender, channel)
   if not message then
     if reason == "incompatible_version" then
       self:RememberPeer(sender, { incompatible = true })
+      self:NotePeer(sender, { incompatible = true })
     end
     return false, reason
   end
@@ -238,6 +267,7 @@ function Comm:HandleMessage(text, sender, channel)
   if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
     return false, "duplicate"
   end
+  self:NotePeer(sender, message.t == "HELLO" and { version = message.p.version } or {})
 
   if message.t == "HELLO" then
     return self:HandleHello(sender, message.p)
@@ -1243,6 +1273,14 @@ function Comm.Start()
       end
     end,
     version = ns.GetVersion(),
+    -- Who runs the addon, saved for the Installed check tab.
+    onPeerSeen = function(sender, info)
+      if ns.InstallDirectory.Note(ns.db.global.installs, sender, info, platform.ServerTime()) and ns.UI then
+        if ns.UI.InstallsChanged then
+          ns.UI.InstallsChanged()
+        end
+      end
+    end,
     now = platform.Now,
     schedule = C_Timer.After,
     random = math.random,

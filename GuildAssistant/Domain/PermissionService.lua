@@ -47,6 +47,8 @@ local ACTIONS = {
   pvp_admin = GLOBAL_ONLY,
   -- The Ranks tab (rank mapping): the Admin group reads it, only gm and cogm change it (RankMapSync adds the guards).
   ranks_manage = GLOBAL_ONLY,
+  -- The Installed check tab: who runs the addon and which version. Only gm and cogm see it.
+  install_check = GLOBAL_ONLY,
 
   edit_own_profile = EVERYONE,
   -- Sharing the own layer and taking part in a layer swap.
