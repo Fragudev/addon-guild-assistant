@@ -1,0 +1,43 @@
+GuildAssistant/GuildAssistant.toc
+  s_32978aaf7efee9::t_38e37bbc60f400 108,127
+GuildAssistant/UI/Tabs/Modules.lua
+  s_32978aaf7efee9::t_f290b7c658056a 1-73
+GuildAssistant/UI/ViewModel.lua
+  s_32978aaf7efee9::t_b69f416600a461 1062,1087-1093,1096-1098
+GuildAssistant/UI/ViewModelModules.lua
+  s_32978aaf7efee9::t_fcbcc5c692cb1b 1-116
+docs/USER_GUIDE.md
+  s_32978aaf7efee9::t_229fe9a3acb2b5 48,466-477
+tests/ui_smoke_spec.lua
+  s_32978aaf7efee9::t_513cfd8d41b5c6 8-9,23-24,64,87,548-560,562-564,570-573
+tests/view_model_modules_spec.lua
+  s_32978aaf7efee9::t_a7ec950eb9029f 1-135
+tests/view_model_spec.lua
+  s_32978aaf7efee9::t_1ee0a6d6b4008b 154,167-179,181-182,205,1753,1771-1772,1781,1790,1795,1860
+GuildAssistant/Locales/esES.lua
+  s_15495fd4aad53d::t_a8c5bb2ff3632d 1060-1079
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "201951861d1f29a545f843ef32e81a82a9127c3f",
+  "prompts": {},
+  "sessions": {
+    "s_15495fd4aad53d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a674cfb526cbd63df",
+        "model": "unknown"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    },
+    "s_32978aaf7efee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e5c844-e38a-4f46-ba40-0ea2890d9363",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
