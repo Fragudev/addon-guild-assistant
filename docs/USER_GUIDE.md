@@ -91,7 +91,7 @@ and of the rank map.
 
 | Role | Can (so far) |
 |---|---|
-| Guild Master (always rank 0) and Co-GM | everything, for every roster: events, loot, rosters and members, the readiness rules, the rank mapping, moderation, removing players from the blacklist and all of the PvP seasons |
+| Guild Master (always rank 0) and Co-GM | everything, for every roster: events, loot, rosters and members, the readiness rules, the rank mapping, moderation, removing players from the blacklist, all of the PvP seasons and the guild announcements |
 | Officer | events and loot of their own roster, plus everything a member can; reads the rules, the members and the rank mapping |
 | Raid Leader | events and loot of their own roster, moving members into and out of their own roster, the readiness rules of their own roster, plus everything a member can |
 | Roster | sign up for events and put yourself forward for loot (in your roster), plus everything a member can |
@@ -525,10 +525,29 @@ nothing about it. Whether the game does this has not been checked yet.
 cannot request a layer swap or answer one, and the Layers tab says why. While a swap runs, Groups refuses to post or
 to apply.
 
+## Announcements
+
+News from the guild leaders, in two places:
+
+- **Announcements** (Guild group, every member): the board. Pinned announcements come first, then the newest; the
+  expired ones are not shown. The number next to the item in the sidebar counts what is new since you last opened the
+  board, and a pinned announcement also shows as a line on **Home** with a button to the board.
+- **Announcements** (Admin group, Guild Master and Co-GM only): the editor. Write a title (up to 60 characters) and a
+  text (up to 600), choose whether members get a popup, whether to pin it and when it expires (never, 1, 7 or 30 days),
+  then **Publish**. Each announcement in the list can be edited, deleted (two clicks) or sent again with **Send popup
+  again**, which shows the popup once more to members who closed it. The board holds 30 announcements.
+
+When an announcement with a popup reaches you, a card shows its title, author and text with **Got it** and **Open
+board**; several at once are shown one at a time. It never appears during combat or an encounter: it waits and shows
+when that is over. Only a Guild Master or Co-GM can publish: every client checks the sender against its own copy of
+the guild roster and the rank map, so nobody else can post one. The **Announcements** module (Modules tab) hides the
+board and the popup for you; announcements keep arriving while it is off and the editor stays available to those who
+can publish.
+
 ## Modules
 
 The **Modules** tab (Guild group) switches the parts of the addon on or off for your own character: Professions,
-Raid, Loot, PvP, Layers, Groups, Map pins and Blacklist. Every member can use it. Nothing is shared, so the others never see
+Raid, Loot, PvP, Layers, Groups, Map pins, Blacklist and Announcements. Every member can use it. Nothing is shared, so the others never see
 your choice, and turning a module off never deletes its data.
 
 - Turning a module off hides its tabs at once. Its features keep running until the next `/reload`, and they do not

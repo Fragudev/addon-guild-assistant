@@ -24,7 +24,7 @@ describe("ModuleRegistry", function()
 
   it("lists the toggleable modules in the order of the Modules tab", function()
     assert.are.same(
-      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist" },
+      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist", "announcements" },
       ids(Registry.List())
     )
   end)
@@ -51,6 +51,12 @@ describe("ModuleRegistry", function()
     assert.is_true(Registry.IsCoreTab("modules"))
     assert.is_true(Registry.IsCoreTab("ranks"))
     assert.is_true(Registry.IsCoreTab("installs"))
+    assert.is_true(Registry.IsCoreTab("announceadmin"))
+    assert.is_false(Registry.IsCoreTab("announcements"))
+    assert.are.equal("announcements", Registry.ForTab("announcements"))
+    assert.is_nil(Registry.ForTab("announceadmin"))
+    assert.is_true(Registry.IsCoreStep("announcements"))
+    assert.is_nil(Registry.ForStep("announcements"))
     assert.is_false(Registry.IsCoreTab("pvp"))
     assert.is_true(Registry.IsCoreStep("comm"))
     assert.is_true(Registry.IsCoreStep("selfTest"))

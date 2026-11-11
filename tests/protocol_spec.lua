@@ -10,6 +10,7 @@ local function load_protocol()
   assert(loadfile("GuildAssistant/Domain/LootModel.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/PvPSeasonModel.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/LfgModel.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Domain/AnnouncementModel.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Sync/Protocol.lua"))("GuildAssistant", ns)
   return ns.Protocol, ns.Constants
 end
@@ -675,8 +676,8 @@ describe("Protocol.Validate PVP_KILL", function()
     assert.are.equal("bad_payload", reason)
   end)
 
-  it("is at protocol minor version 14", function()
-    assert.are.equal(14, Constants.PROTOCOL_MINOR)
+  it("is at protocol minor version 15", function()
+    assert.are.equal(15, Constants.PROTOCOL_MINOR)
   end)
 end)
 
@@ -1296,5 +1297,73 @@ describe("Protocol RANK_MAP", function()
       many[index] = { i = index, r = "alter", n = "N" }
     end
     assert.is_nil(rank_map({ rev = 1, updatedAt = 1, ranks = many }))
+  end)
+end)
+
+describe("Protocol ANN and ANN_DEL", function()
+  local function validate(messageType, p)
+    return Protocol.Validate(Protocol.Build(messageType, p, "id-1"))
+  end
+
+  local function payload(overrides)
+    local p = {
+      id = "a-1",
+      title = "Raid night",
+      body = "Bring flasks",
+      createdAt = 9000,
+      updatedAt = 9000,
+      rev = 1,
+      popup = true,
+      popupRev = 1,
+      pinned = false,
+    }
+    for key, value in pairs(overrides or {}) do
+      p[key] = value
+    end
+    return p
+  end
+
+  it("accepts a whole announcement and drops unknown fields and the author", function()
+    local clean = assert(validate("ANN", payload({ junk = 1, author = "Forged-Realm" })))
+    assert.is_nil(clean.p.junk)
+    assert.is_nil(clean.p.author)
+    assert.are.equal("Raid night", clean.p.title)
+  end)
+
+  it("takes an announcement without a body", function()
+    local p = payload()
+    p.body = nil
+    assert.are.equal("", assert(validate("ANN", p)).p.body)
+  end)
+
+  it("rejects what is out of bounds", function()
+    for _, bad in ipairs({
+      { title = "" },
+      { title = ("x"):rep(61) },
+      { body = ("x"):rep(601) },
+      { body = "a|cffff0000b" },
+      { id = "no spaces" },
+      { rev = 0 },
+      { rev = 2 ^ 40 },
+      { popup = "yes" },
+      { popupRev = 0 },
+      { pinned = 1 },
+      { createdAt = -5 },
+      { expiresAt = "never" },
+    }) do
+      assert.is_nil(validate("ANN", payload(bad)), next(bad))
+    end
+  end)
+
+  it("validates ANN_DEL strictly", function()
+    assert.is_truthy(validate("ANN_DEL", { id = "a-1", rev = 2, updatedAt = 5 }))
+    assert.is_nil(validate("ANN_DEL", { id = "a-1", rev = 0, updatedAt = 5 }))
+    assert.is_nil(validate("ANN_DEL", { id = "a 1", rev = 2, updatedAt = 5 }))
+    assert.is_nil(validate("ANN_DEL", { id = "a-1", rev = 2 }))
+  end)
+
+  it("accepts the longest title and body in two-byte characters", function()
+    local worst = payload({ title = ("\195\177"):rep(60), body = ("\195\177"):rep(600), expiresAt = 10000 })
+    assert.is_truthy(validate("ANN", worst))
   end)
 end)

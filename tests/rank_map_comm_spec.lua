@@ -15,6 +15,8 @@ local function load_addon()
     "Domain/PvPSeasonModel",
     "Domain/RecipeService",
     "Domain/EventModel",
+    "Domain/AnnouncementModel",
+    "Domain/AnnouncementService",
     "Domain/EventService",
     "Domain/LootModel",
     "Domain/LootService",
@@ -37,6 +39,7 @@ local function load_addon()
     "Domain/LfgModel",
     "Sync/LfgSync",
     "Sync/RankMapSync",
+    "Sync/AnnouncementSync",
     "Sync/Transfer",
     "Sync/Comm",
   }) do

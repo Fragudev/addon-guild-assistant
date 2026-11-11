@@ -17,6 +17,8 @@ Comm.__index = Comm
 --       rosters and members (tables: raid rosters, and the role and roster of each member) and
 --       onRosterChange(messageType) (optional), pvpSeason (the season ledger table, see PvPSeasonSync),
 --       onPvPSeasonChange(messageType) and onPvPSeasonClosed(seasonId) (optional), ledgerInbox (optional),
+--       announcements (the announcements store, see AnnouncementSync), onAnnouncement(announcement) (each stored one)
+--       and onAnnouncementChange(messageType) (all optional),
 --       roleOf(sender) -> role or nil, ownRole() -> role or nil,
 --       snapshotInbox (optional), version (string), now() -> seconds, schedule(delaySeconds, fn),
 --       random(low, high) -> number, onPeerSeen(sender, info) (optional: every valid message from a member, info as
@@ -41,6 +43,9 @@ function Comm.New(deps)
     onPvPKill = deps.onPvPKill,
     blacklist = deps.blacklist or {},
     onBlacklistChange = deps.onBlacklistChange,
+    announcements = deps.announcements or { items = {}, tombstones = {} },
+    onAnnouncement = deps.onAnnouncement,
+    onAnnouncementChange = deps.onAnnouncementChange,
     readinessRules = deps.readinessRules or {},
     onRulesChange = deps.onRulesChange,
     -- The data set of the guild, where the rank map is kept (rankMap), and the roster entry of a name.
@@ -308,6 +313,9 @@ function Comm:HandleMessage(text, sender, channel)
   if ns.RankMapSync.IsRankMapMessage(message.t) then
     return self:HandleRankMap(sender, message)
   end
+  if ns.AnnouncementSync.IsAnnouncementMessage(message.t) then
+    return self:HandleAnnouncement(sender, message)
+  end
   if ns.BlacklistSync.IsBlacklistMessage(message.t) then
     return self:HandleBlacklist(sender, message)
   end
@@ -393,7 +401,11 @@ function Comm:SendSnapshot(target)
       math.floor(constants.ROSTERS_MAX * count / constants.SYNC_MAX_EVENTS),
       -- The rank map goes along only from somebody who may author it: a receiver applies it under the rank of the
       -- sender of the snapshot.
-      self:AuthoredRankMap()
+      self:AuthoredRankMap(),
+      -- Only a gm or cogm snapshot carries announcements: the receiver applies them under the role of the sender.
+      ns.PermissionService.Can(self.ownRole and self.ownRole(), "announce_manage") and self.announcements or nil,
+      math.floor(constants.ANNOUNCE_SNAPSHOT_MAX * count / constants.SYNC_MAX_EVENTS),
+      self.platform.ServerTime()
     )
     if #items == 0 then
       return false, "empty"
@@ -481,6 +493,8 @@ function Comm:HandleWhisper(text, sender)
   local ctx = self:PvPContext()
   ctx.events, ctx.tombstones = self.events, self.tombstones
   ctx.blacklist = self.blacklist
+  ctx.announcements = self.announcements
+  ctx.onAnnouncement = self.onAnnouncement
   ctx.readinessRules = self.readinessRules
   ctx.rosters, ctx.members = self.rosters, self.members
   ctx.roleOf = self.roleOf
@@ -495,6 +509,9 @@ function Comm:HandleWhisper(text, sender)
   end
   if summary.blacklist > 0 and self.onBlacklistChange then
     self.onBlacklistChange("SYNC_DATA")
+  end
+  if summary.announcements > 0 and self.onAnnouncementChange then
+    self.onAnnouncementChange("SYNC_DATA")
   end
   if summary.rules > 0 and self.onRulesChange then
     self.onRulesChange("SYNC_DATA")
@@ -890,6 +907,17 @@ function Comm:HandleRankMap(sender, message)
   return ok, reason
 end
 
+-- ANN and ANN_DEL: the sender's role is read from the local guild roster; only a role with announce_manage is heard,
+-- and the author is the sender, never a payload field.
+function Comm:HandleAnnouncement(sender, message)
+  local ctx = { store = self.announcements, now = self.platform.ServerTime, onApplied = self.onAnnouncement }
+  local ok, reason = ns.AnnouncementSync.Apply(ctx, message, sender, self.roleOf(sender))
+  if ok and self.onAnnouncementChange then
+    self.onAnnouncementChange(message.t)
+  end
+  return ok, reason
+end
+
 -- LAYER_STATE and LAYER_SWAP: live only, nothing is saved. The sender's role is read from the local guild roster and
 -- the actor is always the sender, never a payload field.
 function Comm:HandleLayer(sender, message)
@@ -1176,6 +1204,44 @@ function Comm:SetRankMap(ranks)
   return true, payload.rev, (self:SendRankMap())
 end
 
+-- An announcement published or changed here, or the removal of one (its tombstone is already in place). Keyed by id,
+-- so a newer edit replaces one still waiting in the queue.
+function Comm:SendAnnouncement(announcement)
+  return self:Send("ANN", ns.AnnouncementSync.UpsertPayload(announcement), "ANN:" .. announcement.id)
+end
+
+function Comm:SendAnnouncementDelete(id)
+  local payload = ns.AnnouncementSync.DeletePayload(self.announcements, id)
+  if not payload then
+    return false, "no_tombstone"
+  end
+  return self:Send("ANN_DEL", payload, "ANN:" .. id)
+end
+
+-- A gm or cogm tells the guild their own live announcements once after login, each at a random moment, for the members
+-- who were not there when they were published (a snapshot only comes from a leader who happens to be online).
+function Comm:SendOwnAnnouncements()
+  local constants = ns.Constants
+  local own = self.platform.GetIdentityKey()
+  if not ns.PermissionService.Can(self.ownRole and self.ownRole(), "announce_manage") then
+    return 0
+  end
+  local now, count = self.platform.ServerTime(), 0
+  for _, announcement in pairs(self.announcements.items) do
+    if announcement.author == own and not ns.AnnouncementModel.IsExpired(announcement, now) then
+      count = count + 1
+      self.schedule(self.random(constants.ANNOUNCE_RESEND_DELAY_MIN, constants.ANNOUNCE_RESEND_DELAY_MAX), function()
+        -- Sent as it is then: it may have been edited or deleted meanwhile.
+        local current = self.announcements.items[announcement.id]
+        if current and current.author == own then
+          self:SendAnnouncement(current)
+        end
+      end)
+    end
+  end
+  return count
+end
+
 -- Local roster changes -> wire. Keyed, so a newer edit replaces one still waiting in the queue.
 function Comm:SendRoster(roster)
   return self:Send("ROSTER_UPSERT", ns.RosterSync.RosterPayload(roster), "RO:" .. roster.id)
@@ -1338,6 +1404,18 @@ function Comm.Start()
         ns.BlacklistChanged()
       end
     end,
+    announcements = ns.db.global.announcements,
+    -- Init wires these: each stored announcement may be due a popup, and the board and the badge follow what arrives.
+    onAnnouncement = function(announcement)
+      if ns.AnnouncementReceived then
+        ns.AnnouncementReceived(announcement)
+      end
+    end,
+    onAnnouncementChange = function()
+      if ns.UI and ns.UI.AnnouncementsChanged then
+        ns.UI.AnnouncementsChanged()
+      end
+    end,
     readinessRules = ns.db.global.readinessRulesByRoster,
     onRulesChange = function()
       if ns.UI and ns.UI.RulesChanged then
@@ -1427,6 +1505,8 @@ function Comm.Start()
       comm:SendAuthoredReadinessRules()
       -- And the rank map, if this client saved the one in force.
       comm:SendAuthoredRankMap()
+      -- And a gm or cogm repeats their live announcements.
+      comm:SendOwnAnnouncements()
       -- And the roster definitions (the assignments of the members travel in the snapshot an admin answers).
       if ns.PermissionService.CanAll(comm.ownRole(), "members_manage") then
         for _, roster in ipairs(ns.RosterService.List(comm.rosters)) do

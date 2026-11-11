@@ -16,6 +16,8 @@ local function load_addon()
     "Domain/PvPSeasonModel",
     "Domain/RecipeService",
     "Domain/EventModel",
+    "Domain/AnnouncementModel",
+    "Domain/AnnouncementService",
     "Domain/EventService",
     "Domain/LootModel",
     "Domain/LootService",
@@ -38,6 +40,7 @@ local function load_addon()
     "Sync/LayerSync",
     "Domain/LfgModel",
     "Sync/LfgSync",
+    "Sync/AnnouncementSync",
     "Sync/Transfer",
     "Sync/Comm",
     "Commands/RosterCommands",
@@ -79,9 +82,9 @@ local function deliver(receiver, messageType, payload, sender, role)
 end
 
 describe("Protocol roster messages", function()
-  it("is at protocol 1.14", function()
+  it("is at protocol 1.15", function()
     assert.are.equal(1, Constants.PROTOCOL_MAJOR)
-    assert.are.equal(14, Constants.PROTOCOL_MINOR)
+    assert.are.equal(15, Constants.PROTOCOL_MINOR)
   end)
 
   it("accepts a clean roster upsert and delete, and drops unknown fields", function()

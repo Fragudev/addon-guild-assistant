@@ -49,6 +49,9 @@ local ACTIONS = {
   ranks_manage = GLOBAL_ONLY,
   -- The Installed check tab: who runs the addon and which version. Only gm and cogm see it.
   install_check = GLOBAL_ONLY,
+  -- Publishing, editing and deleting guild announcements. The receiver applies an announcement only from a sender
+  -- who has this action (AnnouncementSync).
+  announce_manage = GLOBAL_ONLY,
 
   edit_own_profile = EVERYONE,
   -- Sharing the own layer and taking part in a layer swap.

@@ -14,7 +14,9 @@ local _, ns = ...
 --                 rankMap = { rev, updatedAt, by, ranks } (absent until a gm or cogm saves one, see RankMapModel),
 --                 pvpSeason = { seasons, activeId, missions, prizes, officers, grants, voids, rejects, queue, finals,
 --                               deliveries } (see PvPSeasonSync),
---                 installs = { [name] = { version, incompatible, seenAt } } (see InstallDirectory) }
+--                 installs = { [name] = { version, incompatible, seenAt } } (see InstallDirectory),
+--                 announcements = { items, tombstones, openedAt } and announcementsSeen = { [id] = popupRev }
+--                 (see AnnouncementService) }
 --   db.chars[identityKey] = { profile = {}, readiness = {}, publish = {}, pvp = {}, recipes = {},
 --                             pvpSync = { rev }, pvpLog = { events = {}, version }, pvpClaims = { [seasonId] = {
 --                             [claimId] = { claim, state } } } }
@@ -288,6 +290,17 @@ local MIGRATIONS = {
       end
     end
   end,
+  -- v20: the announcements of each guild (announcements = { items, tombstones, openedAt }, see AnnouncementService)
+  -- and the popups this account has already seen in that guild (announcementsSeen[id] = popupRev). Announcement ids
+  -- are only unique inside a guild, so both live in the guild data. Nothing else is touched.
+  [20] = function(db)
+    forEachGuild(db, function(guild)
+      local announcements = ensureTable(guild, "announcements")
+      ensureTable(announcements, "items")
+      ensureTable(announcements, "tombstones")
+      ensureTable(guild, "announcementsSeen")
+    end)
+  end,
 }
 
 local function versionOf(db)
@@ -338,9 +351,13 @@ function Store.ForGuild(db, guildKey)
     "members",
     "recipes",
     "installs",
+    "announcementsSeen",
   }) do
     ensureTable(guild, name)
   end
+  local announcements = ensureTable(guild, "announcements")
+  ensureTable(announcements, "items")
+  ensureTable(announcements, "tombstones")
   local sync = ensureTable(guild, "sync")
   ensureTable(sync, "seen")
   ensureTable(sync, "tombstones")
