@@ -113,10 +113,14 @@ function RecipeService.Index(own, received, known)
     for _, id in ipairs(record.ids or {}) do
       local entry = index.recipes[id]
       if not entry then
-        entry = { professionId = professionId, crafters = {} }
+        entry = { professionId = professionId, crafters = {}, seen = {} }
         index.recipes[id] = entry
       end
-      entry.crafters[#entry.crafters + 1] = name
+      -- A crafter is listed once per recipe, even when the same recipe is in two of their professions.
+      if not entry.seen[name] then
+        entry.seen[name] = true
+        entry.crafters[#entry.crafters + 1] = name
+      end
     end
   end
   local names = {}
