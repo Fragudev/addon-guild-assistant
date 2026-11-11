@@ -1,6 +1,7 @@
 local function load_store_current()
   local ns = {}
   assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
+  assert(loadfile("GuildAssistant/Core/Validate.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Core/Store.lua"))("GuildAssistant", ns)
   return ns.Store, ns.Constants
 end
@@ -366,16 +367,16 @@ describe("Store migration to schema 12", function()
   end)
 end)
 
-describe("Store migration to schema 13", function()
+describe("Store migration to schema 13 (one table per guild)", function()
   local Store, Constants = load_store_current()
 
   it("is the current schema", function()
-    assert.are.equal(13, Constants.SCHEMA_VERSION)
+    assert.are.equal(17, Constants.SCHEMA_VERSION)
   end)
 
   it("builds the root layout from an empty database", function()
     local db = Store.Load(nil)
-    assert.are.equal(13, db.schemaVersion)
+    assert.are.equal(17, db.schemaVersion)
     assert.are.same({}, db.guilds)
     assert.are.same({ minimap = {}, pvp = {} }, db.settings)
     assert.are.same({}, db.chars)
@@ -390,12 +391,12 @@ describe("Store migration to schema 13", function()
     local db = Store.Load(raw)
     assert.are.equal(raw, db)
     assert.is_nil(db.global)
-    assert.are.equal(13, db.schemaVersion)
+    assert.are.equal(17, db.schemaVersion)
     assert.are.equal(60, db.chars["Me-Realm"].profile.level)
     db.settings.language = "es"
     local again = Store.Load(db)
     assert.are.equal("es", again.settings.language)
-    assert.are.equal(13, again.schemaVersion)
+    assert.are.equal(17, again.schemaVersion)
   end)
 
   it("refuses data from a newer schema", function()
@@ -469,7 +470,7 @@ describe("Store.View", function()
     assert.are.equal(db.settings, view.settings)
     assert.are.equal(db.chars, view.chars)
     assert.are.equal(db, view.root)
-    assert.are.equal(13, view.schemaVersion)
+    assert.are.equal(17, view.schemaVersion)
     for _, value in pairs(db) do
       assert.are_not.equal(view, value)
     end
@@ -532,5 +533,148 @@ describe("Store.ResolveGuildKey", function()
     Store.View(db, "club:7", club)
     Store.View(db, "club:7", { key = "club:7", source = "club" })
     assert.are.same({ name = "G", realm = "R" }, db.guilds["club:7"].meta)
+  end)
+end)
+
+-- From schema 14 on the migrations work inside every guilds[key], and the account-wide settings at the root.
+describe("Store migrations 14 to 17", function()
+  local Store, Constants = load_store_current()
+
+  local function at13(guilds, extra)
+    local raw = { schemaVersion = 13, guilds = guilds, settings = { minimap = {}, pvp = {} }, chars = {} }
+    for key, value in pairs(extra or {}) do
+      raw[key] = value
+    end
+    return raw
+  end
+
+  local function rosters()
+    return { r1 = { id = "r1", name = "A" }, r2 = { id = "r2", name = "B" } }
+  end
+
+  describe("v14 readiness rules per roster", function()
+    it("copies the guild rules into every roster of every guild and leaves the old key alone", function()
+      local old =
+        { rev = 4, updatedAt = 90, updatedBy = "Boss-Realm", rules = { { id = "level", check = "level", min = 60 } } }
+      local db = Store.Load(at13({
+        ["club:1"] = { rosters = rosters(), readinessRules = old },
+        ["club:2"] = { rosters = { r9 = { id = "r9", name = "Z" } } },
+      }))
+      assert.are.equal(Constants.SCHEMA_VERSION, db.schemaVersion)
+      local first = db.guilds["club:1"].readinessRulesByRoster
+      for _, id in ipairs({ "r1", "r2" }) do
+        assert.are.same({ 4, 90, "Boss-Realm" }, { first[id].rev, first[id].updatedAt, first[id].updatedBy })
+        assert.are.same(old.rules, first[id].rules)
+      end
+      assert.are_not.equal(first.r1.rules, first.r2.rules)
+      assert.are.equal(old, db.guilds["club:1"].readinessRules)
+      -- The other guild never sees the rules of the first, and starts from the starting list.
+      local second = db.guilds["club:2"].readinessRulesByRoster
+      assert.are.same(Constants.DEFAULT_RULES, second.r9.rules)
+      assert.are.equal(0, second.r9.rev)
+      assert.is_nil(second.r1)
+    end)
+
+    it("adds an empty table to a guild without rosters", function()
+      local db = Store.Load(at13({ ["club:1"] = {} }))
+      assert.are.same({}, db.guilds["club:1"].readinessRulesByRoster)
+    end)
+
+    it("is idempotent and keeps a record that was already there", function()
+      local mine = { rev = 9, rules = { { id = "x" } } }
+      local db = Store.Load(at13({ ["club:1"] = { rosters = rosters(), readinessRulesByRoster = { r1 = mine } } }))
+      assert.are.equal(mine, db.guilds["club:1"].readinessRulesByRoster.r1)
+      assert.is_table(db.guilds["club:1"].readinessRulesByRoster.r2)
+      db.schemaVersion = 13
+      assert.are.equal(mine, Store.Load(db).guilds["club:1"].readinessRulesByRoster.r1)
+    end)
+
+    it("gives a new guild the table through ForGuild", function()
+      local db = Store.Load(nil)
+      assert.are.same({}, Store.ForGuild(db, "club:5").readinessRulesByRoster)
+    end)
+  end)
+
+  describe("v15 position sharing on by default", function()
+    it("turns sharing on once for an existing account and leaves a notice", function()
+      local db = Store.Load(at13({}, { settings = { position = { share = false } } }))
+      assert.is_true(db.settings.position.share)
+      assert.is_true(db.settings.positionShareNotice)
+    end)
+
+    it("leaves no notice when sharing was on or never saved", function()
+      local on = Store.Load(at13({}, { settings = { position = { share = true } } }))
+      assert.is_nil(on.settings.positionShareNotice)
+      assert.is_nil(Store.Load(nil).settings.positionShareNotice)
+    end)
+
+    it("does not turn it on again after the player turned it off", function()
+      local db = Store.Load(at13({}, { settings = { position = { share = false } } }))
+      db.settings.position.share = false
+      db.settings.positionShareNotice = nil
+      db.schemaVersion = 15
+      local again = Store.Load(db)
+      assert.is_false(again.settings.position.share)
+      assert.is_nil(again.settings.positionShareNotice)
+    end)
+  end)
+
+  describe("v16 accented capitals in blacklist keys", function()
+    local A_ACUTE_UPPER, A_ACUTE = "\195\129", "\195\161"
+
+    it("rebuilds a key saved with an accented capital and its removal mark, in every guild", function()
+      local function guild()
+        return {
+          blacklist = {
+            [A_ACUTE_UPPER .. "ngel"] = { name = A_ACUTE_UPPER .. "ngel", rev = 2 },
+            plain = { name = "Plain", rev = 1 },
+          },
+          sync = { tombstones = { ["B:" .. A_ACUTE_UPPER .. "lex"] = { rev = 3 }, ["L:x"] = { rev = 1 } } },
+        }
+      end
+      local db = Store.Load(at13({ ["club:1"] = guild(), ["club:2"] = guild() }, { schemaVersion = 15 }))
+      for _, key in ipairs({ "club:1", "club:2" }) do
+        local blacklist = db.guilds[key].blacklist
+        assert.is_nil(blacklist[A_ACUTE_UPPER .. "ngel"])
+        assert.are.equal(A_ACUTE_UPPER .. "ngel", blacklist[A_ACUTE .. "ngel"].name)
+        assert.is_table(blacklist.plain)
+        local tombstones = db.guilds[key].sync.tombstones
+        assert.is_nil(tombstones["B:" .. A_ACUTE_UPPER .. "lex"])
+        assert.are.equal(3, tombstones["B:" .. A_ACUTE .. "lex"].rev)
+        assert.are.equal(1, tombstones["L:x"].rev)
+      end
+    end)
+
+    it("keeps the higher revision when both keys exist", function()
+      local db = Store.Load(at13({
+        ["club:1"] = {
+          blacklist = {
+            [A_ACUTE_UPPER .. "ngel"] = { name = "old", rev = 5 },
+            [A_ACUTE .. "ngel"] = { name = "new", rev = 2 },
+          },
+        },
+      }, { schemaVersion = 15 }))
+      assert.are.equal("old", db.guilds["club:1"].blacklist[A_ACUTE .. "ngel"].name)
+    end)
+  end)
+
+  describe("v17 rank map", function()
+    it("leaves a guild without a rank map as it is and keeps the one already saved", function()
+      local saved = { rev = 2, updatedAt = 5, by = "Boss-Realm", ranks = { [1] = { role = "cogm", name = "Two" } } }
+      local db = Store.Load(at13({ ["club:1"] = {}, ["club:2"] = { rankMap = saved } }, { schemaVersion = 16 }))
+      assert.is_nil(db.guilds["club:1"].rankMap)
+      assert.are.same(saved, db.guilds["club:2"].rankMap)
+    end)
+
+    it("drops a damaged rank map without raising", function()
+      local db = Store.Load(at13({ ["club:1"] = { rankMap = "oops" } }, { schemaVersion = 16 }))
+      assert.is_nil(db.guilds["club:1"].rankMap)
+    end)
+
+    it("keeps the maps of two guilds apart", function()
+      local db = Store.Load(nil)
+      Store.ForGuild(db, "club:1").rankMap = { rev = 1, ranks = {} }
+      assert.is_nil(Store.ForGuild(db, "club:2").rankMap)
+    end)
   end)
 end)

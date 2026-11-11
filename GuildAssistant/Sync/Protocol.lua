@@ -139,6 +139,22 @@ local function validateAttendanceUpsert(payload)
   }
 end
 
+local function validateSignupUpsert(payload)
+  if not (isId(payload.eventId) and validateRevision(payload)) then
+    return nil
+  end
+  if not (ns.EventModel.IsCharacterKey(payload.characterKey) and ns.EventModel.IsSignupStatus(payload.status)) then
+    return nil
+  end
+  return {
+    eventId = payload.eventId,
+    characterKey = payload.characterKey,
+    status = payload.status,
+    rev = payload.rev,
+    updatedAt = payload.updatedAt,
+  }
+end
+
 local function validateAssignUpsert(payload)
   if not (isId(payload.eventId) and isId(payload.assignmentId) and validateRevision(payload)) then
     return nil
@@ -398,20 +414,26 @@ local function validateLayerSwap(payload)
   return clean
 end
 
--- The guild's readiness rules: the whole set, validated rule by rule (ReadinessRules.Validate).
-local function validateReadinessRules(payload)
-  if not validateRevision(payload) then
+-- The readiness rules of one roster: the whole set, validated rule by rule (ReadinessRules.Validate).
+local function validateRosterRules(payload)
+  if not (isId(payload.rosterId) and validateRevision(payload)) then
     return nil
   end
   local rules = ns.ReadinessRules.Validate(payload.rules)
   if not rules then
     return nil
   end
-  return { rev = payload.rev, updatedAt = payload.updatedAt, rules = rules }
+  return { rosterId = payload.rosterId, rev = payload.rev, updatedAt = payload.updatedAt, rules = rules }
 end
 
--- Raid rosters and the roles the guild master assigns (protocol 1.5). Who may send them is decided by the receiver
--- from its own guild roster (RosterSync); `admin` is not a role that can be assigned, so it does not validate.
+-- The rank map of the guild (protocol 1.10): the whole map, validated row by row in RankMapModel; who may send it is
+-- decided by the receiver (RankMapSync).
+local function validateRankMap(payload)
+  return (ns.RankMapModel.ValidateWire(payload))
+end
+
+-- Raid rosters and the roster assignments (protocol 1.5). Who may send them is decided by the receiver from its own
+-- guild roster (RosterSync).
 local function validateRosterUpsert(payload)
   if not (isId(payload.rosterId) and validateRevision(payload)) then
     return nil
@@ -434,10 +456,11 @@ local function validateMemberUpsert(payload)
   if not (ns.RosterService.IsMemberKey(payload.key) and validateRevision(payload)) then
     return nil
   end
-  if not ns.RosterService.IsAssignableRole(payload.role) then
+  -- Older clients also sent the addon role they assigned. The role is the guild rank now: it is tolerated, not kept.
+  if payload.role ~= nil and not ns.Validate.Text(payload.role, 16) then
     return nil
   end
-  local clean = { key = payload.key, role = payload.role, rev = payload.rev, updatedAt = payload.updatedAt }
+  local clean = { key = payload.key, rev = payload.rev, updatedAt = payload.updatedAt }
   if payload.rosterId ~= nil then
     if not isId(payload.rosterId) then
       return nil
@@ -566,7 +589,8 @@ local VALIDATORS = {
   PVP_KILL = validatePvPKill,
   BLACKLIST_UPSERT = validateBlacklistUpsert,
   BLACKLIST_DELETE = validateBlacklistDelete,
-  READINESS_RULES = validateReadinessRules,
+  ROSTER_RULES = validateRosterRules,
+  RANK_MAP = validateRankMap,
   LAYER_STATE = validateLayerState,
   LAYER_SWAP = validateLayerSwap,
   RECIPES = validateRecipes,
@@ -590,6 +614,7 @@ local VALIDATORS = {
   SYNC_DATA = validateSyncData,
   EVENT_UPSERT = validateEventUpsert,
   ATTENDANCE_UPSERT = validateAttendanceUpsert,
+  SIGNUP_UPSERT = validateSignupUpsert,
   ASSIGN_UPSERT = validateAssignUpsert,
   DELETE = validateDelete,
 }

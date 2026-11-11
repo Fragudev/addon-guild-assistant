@@ -31,6 +31,7 @@ function Comm.New(deps)
     roleOf = deps.roleOf,
     ownRole = deps.ownRole,
     onLootChange = deps.onLootChange,
+    onEventChange = deps.onEventChange,
     pvpStats = deps.pvpStats or {},
     pvpResets = deps.pvpResets or {},
     onPvPChange = deps.onPvPChange,
@@ -40,6 +41,10 @@ function Comm.New(deps)
     onBlacklistChange = deps.onBlacklistChange,
     readinessRules = deps.readinessRules or {},
     onRulesChange = deps.onRulesChange,
+    -- The data set of the guild, where the rank map is kept (rankMap), and the roster entry of a name.
+    rankData = deps.rankData or {},
+    entryOf = deps.entryOf,
+    onRanksChange = deps.onRanksChange,
     -- The layer directory and swap flow are in memory and created after Comm (Init.StartLayer sets them).
     layerDirectory = deps.layerDirectory,
     layerSwap = deps.layerSwap,
@@ -255,6 +260,9 @@ function Comm:HandleMessage(text, sender, channel)
   if ns.ReadinessRulesSync.IsRulesMessage(message.t) then
     return self:HandleReadinessRules(sender, message)
   end
+  if ns.RankMapSync.IsRankMapMessage(message.t) then
+    return self:HandleRankMap(sender, message)
+  end
   if ns.BlacklistSync.IsBlacklistMessage(message.t) then
     return self:HandleBlacklist(sender, message)
   end
@@ -274,12 +282,12 @@ function Comm:HandleMessage(text, sender, channel)
   return false, "wrong_channel"
 end
 
--- Snapshot request from a late joiner. Only a leader (RL/admin by guild rank) answers, because
+-- Snapshot request from a late joiner. Only a leader (by guild rank) answers, because
 -- only a leader's data will be accepted by the requester; each requester is served at most once per
 -- cooldown, after a random delay so several leaders do not all answer at the same instant.
 function Comm:HandleSyncRequest(sender)
   local constants = ns.Constants
-  if not ns.PermissionService.Can(self.ownRole(), "manage_events") then
+  if not ns.PermissionService.Can(self.ownRole(), "raid_manage") then
     return false, "not_leader"
   end
 
@@ -328,11 +336,16 @@ function Comm:SendSnapshot(target)
       pvpMax,
       self.blacklist,
       blacklistMax,
-      -- Only an admin's snapshot carries the rules: a receiver applies them under the role of the sender.
-      ns.PermissionService.Can(self.ownRole and self.ownRole(), "rules_edit") and self.readinessRules or nil,
-      -- The same goes for the rosters and the roles the guild master assigned.
-      ns.PermissionService.Can(self.ownRole and self.ownRole(), "roster_manage") and self:RosterContext() or nil,
-      math.floor(constants.MEMBER_SNAPSHOT_MAX * count / constants.SYNC_MAX_EVENTS)
+      -- Only a gm or cogm snapshot carries the rules of the rosters: a receiver applies them under the role of the
+      -- sender, and an rl sets the rules of its own roster only.
+      ns.PermissionService.CanAll(self.ownRole and self.ownRole(), "rules_edit") and self.readinessRules or nil,
+      -- The same goes for the rosters and the assignments of members; an rl only carries those of its own roster.
+      self:SnapshotRosterContext(),
+      math.floor(constants.MEMBER_SNAPSHOT_MAX * count / constants.SYNC_MAX_EVENTS),
+      math.floor(constants.ROSTERS_MAX * count / constants.SYNC_MAX_EVENTS),
+      -- The rank map goes along only from somebody who may author it: a receiver applies it under the rank of the
+      -- sender of the snapshot.
+      self:AuthoredRankMap()
     )
     if #items == 0 then
       return false, "empty"
@@ -360,15 +373,9 @@ function Comm:RequestSync()
   return self:Send("SYNC_REQ", {}, "SYNC_REQ")
 end
 
--- Is `name` a PvP officer right now, according to the officer records this client holds?
-function Comm:IsPvPOfficer(name)
-  local officers = self.pvpSeason.officers
-  return officers ~= nil and ns.PvPSeasonModel.IsOfficer(officers[name])
-end
-
 -- A whisper can only carry a snapshot (SYNC_DATA) or one page of a PvP ledger catch-up (PVP_LEDGER_DATA), and only a
--- leader's snapshot, or the catch-up of a leader or a PvP officer, is worth decoding. Both are checked from the local
--- guild roster and officer records before any decompression happens. Snapshots have a much stricter rate limit than
+-- leader's snapshot or catch-up is worth decoding. Both are checked from the local guild roster before any
+-- decompression happens. Snapshots have a much stricter rate limit than
 -- guild traffic because each one is expensive to decode; a catch-up is many small pages, so it has a limit of its own.
 function Comm:HandleWhisper(text, sender)
   local constants = ns.Constants
@@ -376,8 +383,8 @@ function Comm:HandleWhisper(text, sender)
   if role == nil then
     return false, "unknown_sender"
   end
-  local leader = ns.PermissionService.Can(role, "manage_events")
-  if not (leader or self:IsPvPOfficer(sender)) then
+  local leader = ns.PermissionService.Can(role, "raid_manage")
+  if not leader then
     return false, "forbidden"
   end
   if not self.ledgerInbox:AllowRate(sender, self.now()) then
@@ -421,6 +428,11 @@ function Comm:HandleWhisper(text, sender)
   ctx.blacklist = self.blacklist
   ctx.readinessRules = self.readinessRules
   ctx.rosters, ctx.members = self.rosters, self.members
+  ctx.roleOf = self.roleOf
+  ctx.rankData = self.rankData
+  ctx.entryOf = function(name)
+    return self:EntryOf(name)
+  end
   local summary = ns.Transfer.ApplyItems(message.p.items, ctx, sender, role)
   self.lastSnapshot = { from = sender, applied = summary.applied, total = summary.total, at = self.now() }
   if summary.pvp > 0 and self.onPvPChange then
@@ -431,6 +443,9 @@ function Comm:HandleWhisper(text, sender)
   end
   if summary.rules > 0 and self.onRulesChange then
     self.onRulesChange("SYNC_DATA")
+  end
+  if (summary.rankMap or 0) > 0 and self.onRanksChange then
+    self.onRanksChange("SYNC_DATA")
   end
   if summary.rosters > 0 and self.onRosterChange then
     self.onRosterChange("SYNC_DATA")
@@ -451,6 +466,8 @@ function Comm:HandleRaid(sender, message)
   local ok, reason = ns.EventSync.Apply(ctx, message, sender, self.roleOf(sender))
   if ok and self.onLootChange and message.t:sub(1, 5) == "LOOT_" then
     self.onLootChange(message.t)
+  elseif ok and self.onEventChange then
+    self.onEventChange(message.t)
   end
   return ok, reason
 end
@@ -531,19 +548,40 @@ function Comm:RosterContext()
   }
 end
 
+-- What a snapshot carries of the rosters: everything from a gm or cogm, the assignments to the own roster from an rl,
+-- nothing from anybody else (the receiver would refuse them).
+function Comm:SnapshotRosterContext()
+  local role = self.ownRole and self.ownRole()
+  if ns.PermissionService.CanAll(role, "members_manage") then
+    return self:RosterContext()
+  end
+  if not ns.PermissionService.Can(role, "members_manage") then
+    return nil
+  end
+  local ownRosterId = ns.RosterService.RosterOf(self.members, self.rosters, self.platform.GetIdentityKey())
+  if not ownRosterId then
+    return nil
+  end
+  local context = self:RosterContext()
+  context.onlyRoster = ownRosterId
+  return context
+end
+
 -- ROSTER_* and MEMBER_*: the sender's role is read from the local guild roster; only the guild master's are kept.
 function Comm:HandleRoster(sender, message)
   local ok, reason = ns.RosterSync.Apply(self:RosterContext(), message, sender, self.roleOf(sender))
+  if ok and message.t == "ROSTER_DELETE" then
+    ns.ReadinessRulesSync.Forget(self.readinessRules, message.p.rosterId)
+  end
   if ok and self.onRosterChange then
     self.onRosterChange(message.t)
   end
   return ok, reason
 end
 
--- Does this client approve PvP claims (an admin, or a PvP officer)? Claims are only kept by those that do.
+-- Does this client approve PvP claims (gm or cogm)? Claims are only kept by those that do.
 function Comm:IsPvPApprover()
-  local role = self.ownRole and self.ownRole()
-  return role == "admin" or (role ~= nil and self:IsPvPOfficer(self.platform.GetIdentityKey()))
+  return ns.PermissionService.Can(self.ownRole and self.ownRole(), "pvp_claim_decide")
 end
 
 -- The tables and callbacks the PvP season rules work with.
@@ -592,12 +630,10 @@ function Comm:RequestLedger()
   return self:Send("PVP_LEDGER_REQ", ns.PvPSeasonSync.RequestPayload(self.pvpSeason, self.pvpSeason.activeId), "PLR")
 end
 
--- Can this client answer a ledger request? Only a raid leader, an admin or a PvP officer: they are the ones a requester
--- accepts a catch-up from.
+-- Can this client answer a ledger request? Only a leader (raid_manage): they are the ones a requester accepts a
+-- catch-up from.
 function Comm:IsLedgerRelay()
-  local role = self.ownRole and self.ownRole()
-  return ns.PermissionService.Can(role, "manage_events")
-    or (role ~= nil and self:IsPvPOfficer(self.platform.GetIdentityKey()))
+  return ns.PermissionService.Can(self.ownRole and self.ownRole(), "raid_manage")
 end
 
 -- A ledger request from a late joiner: answered after a random delay, at most once a minute per requester, and only
@@ -693,12 +729,62 @@ function Comm:HandleLedgerData(sender, payload)
   return true
 end
 
--- READINESS_RULES: the sender's role is read from the local guild roster; only an admin's set is kept.
+-- The tables the readiness rules of the rosters work with.
+function Comm:RulesContext()
+  return {
+    records = self.readinessRules,
+    rosters = self.rosters,
+    members = self.members,
+    tombstones = self.tombstones,
+    now = self.platform.ServerTime,
+  }
+end
+
+-- ROSTER_RULES: the sender's role is read from the local guild roster and its roster from the local assignments; the
+-- set of a roster is kept when a gm or cogm sent it, or the rl of that roster.
 function Comm:HandleReadinessRules(sender, message)
-  local ctx = { record = self.readinessRules, now = self.platform.ServerTime }
+  local ctx = self:RulesContext()
   local ok, reason = ns.ReadinessRulesSync.Apply(ctx, message, sender, self.roleOf(sender))
   if ok and self.onRulesChange then
     self.onRulesChange(message.t)
+  end
+  return ok, reason
+end
+
+-- The tables the rank map works with. The roster entry of a name is read from the local guild roster (the own
+-- character from the client, since it is not in its own messages), never from a message.
+function Comm:RankMapContext()
+  return {
+    data = self.rankData,
+    now = self.platform.ServerTime,
+    entryOf = function(name)
+      return self:EntryOf(name)
+    end,
+  }
+end
+
+-- { rankName, rankIndex } of `name`: the own character reads the client (rank index 0 for the guild master, also when
+-- only IsGuildLeader says so); anybody else the guild roster.
+function Comm:EntryOf(name)
+  if self.platform.GetOwnGuildRank and name == self.platform.GetIdentityKey() then
+    local rankName, rankIndex = self.platform.GetOwnGuildRank()
+    if type(rankName) ~= "string" or rankName == "" then
+      return nil
+    end
+    if self.platform.IsGuildLeader and self.platform.IsGuildLeader() == true then
+      rankIndex = ns.Constants.GUILD_MASTER_RANK_INDEX
+    end
+    return { rankName = rankName, rankIndex = rankIndex }
+  end
+  return self.entryOf and self.entryOf(name) or nil
+end
+
+-- RANK_MAP: the sender is authorized by the roster and the map this client holds, before the incoming map is applied
+-- (RankMapSync); the author is the sender, never a payload field.
+function Comm:HandleRankMap(sender, message)
+  local ok, reason = ns.RankMapSync.Apply(self:RankMapContext(), message, sender)
+  if ok and self.onRanksChange then
+    self.onRanksChange(message.t)
   end
   return ok, reason
 end
@@ -736,6 +822,11 @@ end
 function Comm:SendAttendance(eventId, characterKey, record)
   local payload = ns.EventSync.AttendancePayload(eventId, characterKey, record)
   return self:Send("ATTENDANCE_UPSERT", payload, ("AT:%s:%s"):format(eventId, characterKey))
+end
+
+function Comm:SendSignup(eventId, characterKey, record)
+  local payload = ns.EventSync.SignupPayload(eventId, characterKey, record)
+  return self:Send("SIGNUP_UPSERT", payload, ("SU:%s:%s"):format(eventId, characterKey))
 end
 
 function Comm:SendAssignment(eventId, assignment)
@@ -834,21 +925,36 @@ function Comm:SendBlacklistDelete(key)
   return self:Send("BLACKLIST_DELETE", payload, "BL:" .. key)
 end
 
--- Tells the guild the stored set of readiness rules (one message, replacing one still waiting in the queue).
-function Comm:SendReadinessRules()
-  local payload = ns.ReadinessRulesSync.Payload(self.readinessRules)
+-- Tells the guild the stored set of readiness rules of a roster (one message, replacing one still waiting in the
+-- queue).
+function Comm:SendReadinessRules(rosterId)
+  local payload = ns.ReadinessRulesSync.Payload(rosterId, rosterId and self.readinessRules[rosterId])
   if not payload then
     return false, "no_rules"
   end
-  return self:Send("READINESS_RULES", payload, "RR")
+  return self:Send("ROSTER_RULES", payload, "RR:" .. rosterId)
 end
 
--- Admin only: replaces the guild's rules with `rules`. They are validated and applied here first (own messages are
--- never received), then told to the guild. Returns true, the revision used and whether it was queued; or false plus
--- the reason ("forbidden" or a ReadinessRules.Validate reason).
-function Comm:SetReadinessRules(rules)
+-- Tells the guild every set the own role may author: all of them for a gm or cogm, the own roster's for an rl. Once
+-- after login, for the members who were not there when they were set.
+function Comm:SendAuthoredReadinessRules()
+  local ownRoster = ns.RosterService.RosterOf(self.members, self.rosters, self.platform.GetIdentityKey())
+  for _, payload in ipairs(ns.ReadinessRulesSync.Authored(self.readinessRules, self.ownRole(), ownRoster)) do
+    self:Send("ROSTER_RULES", payload, "RR:" .. payload.rosterId)
+  end
+end
+
+-- Replaces the rules of a roster with `rules`: a gm or cogm for any roster, an rl for its own. They are validated and
+-- applied here first (own messages are never received), then told to the guild. Returns true, the revision used and
+-- whether it was queued; or false plus the reason ("forbidden", "unknown_roster" or a ReadinessRules.Validate reason).
+function Comm:SetReadinessRules(rosterId, rules)
   local role = self.ownRole()
-  if not ns.PermissionService.Can(role, "rules_edit") then
+  local ctx = self:RulesContext()
+  local sender = self.platform.GetIdentityKey()
+  if rosterId == nil or not self.rosters[rosterId] then
+    return false, "unknown_roster"
+  end
+  if ns.ReadinessRulesSync.Authorize(role, ns.RosterService.SenderRoster(ctx, sender), rosterId) then
     return false, "forbidden"
   end
   local clean, reason = ns.ReadinessRules.Validate(rules)
@@ -856,27 +962,82 @@ function Comm:SetReadinessRules(rules)
     return false, reason
   end
   local payload = {
-    rev = (self.readinessRules.rev or 0) + 1,
+    rosterId = rosterId,
+    rev = ((self.readinessRules[rosterId] or {}).rev or 0) + 1,
     updatedAt = self.platform.ServerTime(),
     rules = clean,
   }
-  local message = ns.Protocol.Validate(ns.Protocol.Build("READINESS_RULES", payload, "local"))
+  local message = ns.Protocol.Validate(ns.Protocol.Build("ROSTER_RULES", payload, "local"))
   if not message then
     return false, "bad_rules"
   end
-  local ok, applied = ns.ReadinessRulesSync.Apply(
-    { record = self.readinessRules, now = self.platform.ServerTime },
-    message,
-    self.platform.GetIdentityKey(),
-    role
-  )
+  local ok, applied = ns.ReadinessRulesSync.Apply(ctx, message, sender, role)
   if not ok then
     return false, applied
   end
   if self.onRulesChange then
     self.onRulesChange(message.t)
   end
-  return true, payload.rev, (self:SendReadinessRules())
+  return true, payload.rev, (self:SendReadinessRules(rosterId))
+end
+
+-- Tells the guild the stored rank map (one message, replacing one still waiting in the queue).
+function Comm:SendRankMap()
+  local payload = ns.RankMapSync.Payload(self.rankData.rankMap)
+  if not payload then
+    return false, "no_rank_map"
+  end
+  return self:Send("RANK_MAP", payload, "RM")
+end
+
+-- The stored map when this client may author it (the guild master, or a co-guild master by the map held), else nil:
+-- what a snapshot carries.
+function Comm:AuthoredRankMap()
+  local held = self.rankData.rankMap
+  if held and ns.RankMapSync.MayAuthor(self:EntryOf(self.platform.GetIdentityKey()), held) then
+    return held
+  end
+  return nil
+end
+
+-- Once after login, whoever saved the current map tells the guild again, for the members who were not there.
+function Comm:SendAuthoredRankMap()
+  local held = self:AuthoredRankMap()
+  if held and held.by == self.platform.GetIdentityKey() then
+    return self:SendRankMap()
+  end
+  return false, "not_author"
+end
+
+-- Replaces the rank map of the guild with `ranks` ({ [index] = { role, name } }): the guild master or a co-guild
+-- master.
+-- It is validated and applied here first (own messages are never received), then told to the guild. Returns true, the
+-- revision used and whether it was queued; or false plus the reason (RankMapSync.Apply: "no_guild", "invalid",
+-- "forbidden", "self_row", "stale").
+function Comm:SetRankMap(ranks)
+  local ctx = self:RankMapContext()
+  local sender = self.platform.GetIdentityKey()
+  local held = self.rankData.rankMap
+  local heldRev = type(held) == "table" and type(held.rev) == "number" and held.rev or 0
+  local heldAt = type(held) == "table" and type(held.updatedAt) == "number" and held.updatedAt or 0
+  local payload = ns.RankMapModel.ToWire({
+    ranks = ranks,
+    rev = math.min(heldRev + 1, 2147483647),
+    -- Later than the held map, so an edit made right after another one always outranks it.
+    updatedAt = math.max(ctx.now(), heldAt + 1),
+  })
+  local message = ns.Protocol.Validate(ns.Protocol.Build("RANK_MAP", payload, "local"))
+  if not message then
+    return false, "invalid"
+  end
+  local ok, reason = ns.RankMapSync.Apply(ctx, message, sender)
+  if not ok then
+    return false, reason
+  end
+  if self.onRanksChange then
+    self.onRanksChange(message.t)
+  end
+  return true, payload.rev, (self:SendRankMap())
 end
 
 -- Local roster changes -> wire. Keyed, so a newer edit replaces one still waiting in the queue.
@@ -889,6 +1050,7 @@ function Comm:SendDeleteRoster(id)
   if not payload then
     return false, "no_tombstone"
   end
+  ns.ReadinessRulesSync.Forget(self.readinessRules, id)
   return self:Send("ROSTER_DELETE", payload, "RO:" .. id)
 end
 
@@ -1021,6 +1183,11 @@ function Comm.Start()
         ns.UI.LootChanged()
       end
     end,
+    onEventChange = function()
+      if ns.UI and ns.UI.EventsChanged then
+        ns.UI.EventsChanged()
+      end
+    end,
     pvpStats = ns.db.global.pvpStats,
     pvpResets = ns.db.global.pvpResets,
     onPvPChange = function()
@@ -1035,10 +1202,20 @@ function Comm.Start()
         ns.BlacklistChanged()
       end
     end,
-    readinessRules = ns.db.global.readinessRules,
+    readinessRules = ns.db.global.readinessRulesByRoster,
     onRulesChange = function()
       if ns.UI and ns.UI.RulesChanged then
         ns.UI.RulesChanged()
+      end
+    end,
+    rankData = ns.db.global,
+    entryOf = function(name)
+      return ns.guildRoster and ns.guildRoster:Lookup(name) or nil
+    end,
+    -- A map that arrives changes roles: Init works out the own role again and the windows redraw.
+    onRanksChange = function()
+      if ns.RanksChanged then
+        ns.RanksChanged()
       end
     end,
     recipes = ns.db.global.recipes,
@@ -1101,12 +1278,13 @@ function Comm.Start()
       comm:RequestSync()
       -- And what the guild holds of the PvP season, in case it moved on while this client was away.
       comm:RequestLedger()
-      -- An admin also tells the guild the rules once, for the members who were not there when they were set.
-      if ns.PermissionService.Can(comm.ownRole(), "rules_edit") then
-        comm:SendReadinessRules()
-      end
+      -- Whoever can set rules tells the guild the sets of their rosters once, for the members who were not there
+      -- when they were set.
+      comm:SendAuthoredReadinessRules()
+      -- And the rank map, if this client saved the one in force.
+      comm:SendAuthoredRankMap()
       -- And the roster definitions (the assignments of the members travel in the snapshot an admin answers).
-      if ns.PermissionService.Can(comm.ownRole(), "roster_manage") then
+      if ns.PermissionService.CanAll(comm.ownRole(), "members_manage") then
         for _, roster in ipairs(ns.RosterService.List(comm.rosters)) do
           comm:SendRoster(roster)
         end

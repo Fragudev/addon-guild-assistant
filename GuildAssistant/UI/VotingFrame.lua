@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The voting window for the people who decide loot (GM, Officer, RL). It opens by itself when a session
+-- The voting window for the people who decide loot (GM, CoGM, Officer, RL). It opens by itself when a session
 -- opens, lists the candidates with their response, upgrade and votes, and lets the voter vote, award or close
 -- the session. Votes follow Constants.VOTE_VISIBILITY. It never opens during an encounter lockdown (it waits).
 -- What each row says comes from ViewModel; Controller holds the decisions about when to open. Client only.
@@ -110,6 +110,11 @@ local function events()
   local global = ns.db.global
   local viewer = ns.RosterService.OwnViewer(ns.Platform, global.rosters, global.members)
   return ns.RosterService.FilterEvents(global.events, viewer)
+end
+
+local function ownRosterId()
+  local global = ns.db.global
+  return ns.RosterService.RosterOf(global.members, global.rosters, ns.Platform.GetIdentityKey())
 end
 
 local function loot()
@@ -288,7 +293,6 @@ end
 -- selected one on the right. Everything it needs comes from the saved data, so it can be drawn with the fake kit.
 function VotingFrame.Draw(parent)
   local Kit = ns.Kit
-  local actions = ns.ViewModel.LootActions(ns.PermissionService.OwnRole(ns.Platform))
   local sessions = ns.ViewModel.VotingSessions(events(), selectedId)
   if #sessions == 0 then
     Kit.EmptyState(parent, {
@@ -320,7 +324,8 @@ function VotingFrame.Draw(parent)
   if lastMessage then
     Kit.Banner(main, { kind = lastMessage.kind, text = ns.ViewModel.Escape(lastMessage.text) })
   end
-  candidates(main, event, session, actions)
+  local role = ns.PermissionService.OwnRole(ns.Platform)
+  candidates(main, event, session, ns.ViewModel.LootActions(role, ownRosterId(), event))
   Kit.Label(main, {
     text = L("Addon messages are not private: anyone with the addon can read votes."),
     style = "small",
@@ -408,7 +413,7 @@ function VotingFrame.Start()
   controller = Controller.New({
     openSessionIds = openSessionIds,
     canVote = function()
-      return ns.comm ~= nil and ns.ViewModel.LootActions(ns.PermissionService.OwnRole(ns.Platform)).vote
+      return ns.comm ~= nil and ns.ViewModel.LootActions(ns.PermissionService.OwnRole(ns.Platform), ownRosterId()).vote
     end,
     isLockedDown = ns.Platform.IsChatMessagingLockedDown,
     after = C_Timer.After,

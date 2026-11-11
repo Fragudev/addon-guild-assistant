@@ -10,5 +10,7 @@ return function(ns)
     end
   end
   toc:close()
+  -- Every rank index has the role of its place in the guild (support/roles); specs on the rank map itself replace it.
+  require("tests.support.roles").install(ns)
   return ns
 end

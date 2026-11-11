@@ -126,7 +126,7 @@ describe("EventService.Create", function()
   end)
 
   it("rejects invalid fields without creating anything", function()
-    local ctx = build_ctx("admin")
+    local ctx = build_ctx("gm")
     assert.are.equal("invalid:title", select(2, Service.Create(ctx, { title = "" })))
     assert.is_nil(next(ctx.events))
   end)
@@ -241,6 +241,116 @@ describe("EventService attendance", function()
   end)
 end)
 
+describe("EventService sign-up", function()
+  local ctx, event
+
+  before_each(function()
+    local leader = build_ctx("rl")
+    event = Service.Create(leader, { title = "Raid", startAt = 5000, rosterId = "r1" })
+    ctx = build_ctx("roster")
+    ctx.events = leader.events
+    ctx.actor = "Player-Realm"
+    ctx.clock = 1000
+  end)
+
+  it("signs up the own character and stamps the record", function()
+    local record = assert(Service.SetSignup(ctx, event.eventId, "yes"))
+    assert.are.equal("yes", record.status)
+    assert.are.equal(1, record.rev)
+    assert.are.equal(1000, record.updatedAt)
+    assert.are.equal("Player-Realm", next(event.signups))
+  end)
+
+  it("has no character argument: only the actor can be signed up", function()
+    -- A second argument after the status is not read, and a name in place of the status is not a status.
+    assert.are.equal("invalid:status", select(2, Service.SetSignup(ctx, event.eventId, "Other-Realm")))
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes", "Other-Realm"))
+    assert.is_nil(event.signups["Other-Realm"])
+    assert.is_truthy(event.signups["Player-Realm"])
+  end)
+
+  it("lets the answer change from yes to no", function()
+    Service.SetSignup(ctx, event.eventId, "yes")
+    ctx.clock = 1100
+    local record = assert(Service.SetSignup(ctx, event.eventId, "no"))
+    assert.are.equal("no", record.status)
+    assert.are.equal(2, record.rev)
+    assert.are.equal(1100, record.updatedAt)
+  end)
+
+  it("rejects a status that is neither yes nor no", function()
+    assert.are.equal("invalid:status", select(2, Service.SetSignup(ctx, event.eventId, "maybe")))
+    assert.are.equal("invalid:status", select(2, Service.SetSignup(ctx, event.eventId, nil)))
+  end)
+
+  it("refuses member, alter and a rank with no roster", function()
+    ctx.role = "member"
+    assert.are.equal("forbidden", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    ctx.role = "alter"
+    assert.are.equal("forbidden", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    ctx.role, ctx.rosterId = "rl", nil
+    assert.are.equal("forbidden", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    assert.is_nil(next(event.signups))
+  end)
+
+  it("accepts every rank that has event_signup", function()
+    for _, role in ipairs({ "officer", "rl", "roster" }) do
+      ctx.role = role
+      assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes"), role)
+    end
+    ctx.role, ctx.rosterId = "gm", nil
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes"))
+  end)
+
+  it("refuses an event of another roster, but not a guild-wide one", function()
+    ctx.rosterId = "r2"
+    assert.are.equal("other_roster", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    event.rosterId = nil
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes"))
+  end)
+
+  it("lets the guild master sign up for any roster", function()
+    ctx.role, ctx.rosterId = "gm", nil
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "no"))
+  end)
+
+  it("is closed once the event started, or is closed or cancelled", function()
+    ctx.clock = 5000
+    assert.are.equal("closed", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    ctx.clock = 1000
+    for _, status in ipairs({ "closed", "cancelled" }) do
+      event.status = status
+      assert.are.equal("closed", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    end
+    event.status = "open"
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes"))
+  end)
+
+  it("stays open for an undated event", function()
+    event.startAt = nil
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes"))
+  end)
+
+  it("works on an old event without a signups table, and reports a missing event", function()
+    event.signups = nil
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "yes"))
+    assert.are.equal("not_found", select(2, Service.SetSignup(ctx, "nope", "yes")))
+  end)
+
+  it("stops at the limit but still lets an existing answer change", function()
+    for i = 1, Constants.EVENT_ATTENDANCE_MAX do
+      event.signups["P" .. i .. "-Realm"] = { status = "yes", rev = 1, updatedAt = 1 }
+    end
+    assert.are.equal("limit", select(2, Service.SetSignup(ctx, event.eventId, "yes")))
+    ctx.actor = "P1-Realm"
+    assert.is_truthy(Service.SetSignup(ctx, event.eventId, "no"))
+  end)
+
+  it("creates new events with an empty signups table", function()
+    assert.are.same({}, event.signups)
+  end)
+end)
+
 describe("EventService assignments", function()
   local ctx, event
 
@@ -319,5 +429,67 @@ describe("EventService.List and Purge", function()
     assert.is_truthy(ctx.events.undated)
     assert.is_nil(ctx.tombstones.stale)
     assert.is_truthy(ctx.tombstones.recent)
+  end)
+end)
+
+describe("EventService raid_manage scope", function()
+  local function with_event(role, rosterId)
+    local ctx = build_ctx("gm")
+    ctx.rosterId = nil
+    local event = assert(Service.Create(ctx, { title = "Raid" }))
+    event.rosterId = rosterId
+    ctx.role, ctx.rosterId = role, "r1"
+    return ctx, event
+  end
+
+  it("lets an officer and a raid leader change events, attendance and assignments of the own roster", function()
+    for _, role in ipairs({ "officer", "rl" }) do
+      local ctx, event = with_event(role, "r1")
+      assert.is_truthy(Service.Update(ctx, event.eventId, { title = "Renamed" }), role)
+      assert.is_truthy(Service.SetAttendance(ctx, event.eventId, "Ann-Realm", "present"), role)
+      assert.is_truthy(
+        Service.AddAssignment(ctx, event.eventId, { encounter = "Garr", characterKey = "Ann-Realm" }),
+        role
+      )
+      assert.is_truthy(Service.Delete(ctx, event.eventId), role)
+    end
+  end)
+
+  it("keeps an officer and a raid leader out of the events of another roster", function()
+    for _, role in ipairs({ "officer", "rl" }) do
+      local ctx, event = with_event(role, "r2")
+      assert.are.equal("other_roster", select(2, Service.Update(ctx, event.eventId, { title = "X" })), role)
+      assert.are.equal(
+        "other_roster",
+        select(2, Service.SetAttendance(ctx, event.eventId, "Ann-Realm", "present")),
+        role
+      )
+      assert.are.equal(
+        "other_roster",
+        select(2, Service.AddAssignment(ctx, event.eventId, { encounter = "Garr", characterKey = "Ann-Realm" })),
+        role
+      )
+      assert.are.equal("other_roster", select(2, Service.Delete(ctx, event.eventId)), role)
+      assert.are.equal("Raid", event.title, role)
+    end
+  end)
+
+  it("creates the events of an officer in their own roster, and refuses another one", function()
+    local ctx = build_ctx("officer")
+    assert.are.equal("r1", assert(Service.Create(ctx, { title = "Mine" })).rosterId)
+    assert.are.equal("other_roster", select(2, Service.Create(ctx, { title = "Theirs", rosterId = "r2" })))
+  end)
+
+  it("refuses a roster player, a member and an alter, and lets gm and cogm act on any roster", function()
+    for _, role in ipairs({ "roster", "member", "alter" }) do
+      local ctx, event = with_event(role, "r1")
+      assert.are.equal("forbidden", select(2, Service.Update(ctx, event.eventId, { title = "X" })), role)
+      assert.are.equal("forbidden", select(2, Service.Create(ctx, { title = "Y" })), role)
+    end
+    for _, role in ipairs({ "gm", "cogm" }) do
+      local ctx, event = with_event(role, "r2")
+      ctx.rosterId = nil
+      assert.is_truthy(Service.Update(ctx, event.eventId, { title = "By boss" }), role)
+    end
   end)
 end)

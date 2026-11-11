@@ -33,6 +33,9 @@ function Transfer.BuildItems(events, tombstones)
     for _, key in ipairs(sortedKeys(event.attendance)) do
       add("ATTENDANCE_UPSERT", ns.EventSync.AttendancePayload(eventId, key, event.attendance[key]))
     end
+    for _, key in ipairs(sortedKeys(event.signups or {})) do
+      add("SIGNUP_UPSERT", ns.EventSync.SignupPayload(eventId, key, event.signups[key]))
+    end
     for _, assignmentId in ipairs(sortedKeys(event.assignments)) do
       add("ASSIGN_UPSERT", ns.EventSync.AssignPayload(eventId, event.assignments[assignmentId]))
     end
@@ -120,8 +123,9 @@ end
 -- includes them (BuildItems is used for it). `blacklist` (optional) is the blacklist table and `maxBlacklist` how
 -- many of its entries and of its removals ("B:" tombstones) to add, after the PvP items; its entries carry their
 -- author, as an item of a snapshot may. The text export leaves the blacklist out as well. `readinessRules`
--- (optional) is the stored set of guild readiness rules; its item goes last and only counts at the receiver when
--- whoever sends the snapshot is an admin (see ReadinessRulesSync).
+-- (optional) is the table of stored rule sets by roster; it needs `rosters` too, `maxRules` (default: all) limits how
+-- many sets go, and the items go last: they only count at the receiver when whoever sends the snapshot is a gm or
+-- cogm (see ReadinessRulesSync).
 -- `rosters` (optional) is a RosterSync context ({ rosters, members, tombstones, now }) and `maxMembers` how many member
 -- assignments and removals to add; like the rules they are only worth carrying from an admin.
 function Transfer.BuildSnapshot(
@@ -134,7 +138,9 @@ function Transfer.BuildSnapshot(
   maxBlacklist,
   readinessRules,
   rosters,
-  maxMembers
+  maxMembers,
+  maxRules,
+  rankMap
 )
   local list = {}
   for _, event in pairs(events) do
@@ -163,14 +169,23 @@ function Transfer.BuildSnapshot(
       items[#items + 1] = item
     end
   end
-  if readinessRules then
-    local item = ns.ReadinessRulesSync.SnapshotItem(readinessRules)
-    if item then
+  if rosters and maxMembers and maxMembers > 0 then
+    for _, item in ipairs(ns.RosterSync.SnapshotItems(rosters, maxMembers)) do
       items[#items + 1] = item
     end
   end
-  if rosters and maxMembers and maxMembers > 0 then
-    for _, item in ipairs(ns.RosterSync.SnapshotItems(rosters, maxMembers)) do
+  -- The rules of the rosters go after the rosters themselves, so a receiver knows each roster by then.
+  if readinessRules and rosters and maxRules ~= 0 then
+    for index, item in ipairs(ns.ReadinessRulesSync.SnapshotItems(readinessRules, rosters.rosters)) do
+      if maxRules and index > maxRules then
+        break
+      end
+      items[#items + 1] = item
+    end
+  end
+  if rankMap then
+    local item = ns.RankMapSync.SnapshotItem(rankMap)
+    if item then
       items[#items + 1] = item
     end
   end
@@ -214,12 +229,16 @@ local function applyRosterItem(item, ctx, sender, role)
   if not message then
     return false, invalid
   end
-  return ns.RosterSync.Apply(
+  local ok, why = ns.RosterSync.Apply(
     { rosters = ctx.rosters, members = ctx.members, tombstones = ctx.tombstones, now = ctx.now },
     message,
     sender,
     role
   )
+  if ok and item.t == "ROSTER_DELETE" and ctx.readinessRules then
+    ns.ReadinessRulesSync.Forget(ctx.readinessRules, message.p.rosterId)
+  end
+  return ok, why
 end
 
 -- The readiness rules of a snapshot, applied as if the sender had sent them.
@@ -228,7 +247,23 @@ local function applyRulesItem(item, ctx, sender, role)
   if not message then
     return false, invalid
   end
-  return ns.ReadinessRulesSync.Apply({ record = ctx.readinessRules, now = ctx.now }, message, sender, role)
+  return ns.ReadinessRulesSync.Apply({
+    records = ctx.readinessRules,
+    rosters = ctx.rosters,
+    members = ctx.members,
+    tombstones = ctx.tombstones,
+    now = ctx.now,
+  }, message, sender, role)
+end
+
+-- The rank map of a snapshot, applied as if the sender had sent it: the sender has to be able to author it according to
+-- the roster and the map this client holds.
+local function applyRankMapItem(item, ctx, sender)
+  return ns.RankMapSync.ApplyItem({
+    data = ctx.rankData,
+    now = ctx.now,
+    entryOf = ctx.entryOf,
+  }, item, sender)
 end
 
 -- Applies a list of { t, p } items as if `sender` had sent each one: every item goes through the
@@ -236,9 +271,11 @@ end
 -- now } as for EventSync; PvP items are only applied when `ctx.pvpStats` is there (see PvPSync) and blacklist items
 -- when `ctx.blacklist` is (see BlacklistSync), which a text import never provides; the readiness rules likewise
 -- when `ctx.readinessRules` is there. Returns { total, applied, pvp (how many of those were PvP), blacklist (how
--- many were blacklist), rules (1 when the guild rules were applied), skipped = { [reason] = count } }.
+-- many were blacklist), rules (how many roster rule sets were applied), rankMap (1 when the rank map was applied),
+-- skipped = { [reason] = count } }.
 function Transfer.ApplyItems(items, ctx, sender, role)
-  local summary = { total = #items, applied = 0, pvp = 0, blacklist = 0, rules = 0, rosters = 0, skipped = {} }
+  local summary =
+    { total = #items, applied = 0, pvp = 0, blacklist = 0, rules = 0, rosters = 0, rankMap = 0, skipped = {} }
   local function skip(why)
     summary.skipped[why] = (summary.skipped[why] or 0) + 1
   end
@@ -281,6 +318,19 @@ function Transfer.ApplyItems(items, ctx, sender, role)
     elseif
       type(item) == "table"
       and type(item.t) == "string"
+      and ctx.rankData
+      and ns.RankMapSync.IsRankMapMessage(item.t)
+    then
+      local ok, why = applyRankMapItem(item, ctx, sender)
+      if ok then
+        summary.applied = summary.applied + 1
+        summary.rankMap = summary.rankMap + 1
+      else
+        skip(why)
+      end
+    elseif
+      type(item) == "table"
+      and type(item.t) == "string"
       and ctx.rosters
       and ctx.members
       and ns.RosterSync.IsRosterMessage(item.t)
@@ -299,7 +349,12 @@ function Transfer.ApplyItems(items, ctx, sender, role)
       if not message then
         skip(invalid)
       else
-        local ok, why = ns.EventSync.Apply(ctx, message, sender, role)
+        -- A sign-up in a snapshot is relayed by a leader; see EventSync's applySignupUpsert.
+        local applyCtx = ctx
+        if item.t == "SIGNUP_UPSERT" then
+          applyCtx = setmetatable({ relay = true }, { __index = ctx })
+        end
+        local ok, why = ns.EventSync.Apply(applyCtx, message, sender, role)
         if ok then
           summary.applied = summary.applied + 1
         else
@@ -314,7 +369,7 @@ end
 -- Applies pasted text. `role` is the importer's own role: importing needs the same right as
 -- creating events. Returns the ApplyItems summary, or nil plus a Decode reason or "forbidden".
 function Transfer.Import(libs, text, ctx, role)
-  if not ns.PermissionService.Can(role, "manage_events") then
+  if not ns.PermissionService.Can(role, "raid_manage") then
     return nil, "forbidden"
   end
   local items, reason = Transfer.Decode(libs, text)

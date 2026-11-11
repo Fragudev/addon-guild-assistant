@@ -10,8 +10,11 @@ How Guild Assistant clients talk to each other. The limits quoted here are the v
   characters is rejected.
 - **The sender comes from the client, never from the payload.** Authors of records (`updatedBy`, `recordedBy`,
   a loot candidate, a voter, who awarded an item) are always the message sender.
-- **Authority comes from the receiver's own guild roster**, not from the message: the sender's rank is looked up
-  locally and turned into a role. An unknown sender gets nothing.
+- **Authority comes from the receiver's own guild roster**, not from the message: the sender's rank index is looked
+  up locally and turned into a role through the rank map (see *Rank mapping*): `gm`, `cogm`, `officer`, `rl`,
+  `roster`, `member` or `alter`. An unknown sender gets nothing. Where a table below says "admin" it means `gm` or
+  `cogm`, and "leader" means a rank that manages raids (`gm`, `cogm`, and `officer` or `rl` for their own roster);
+  the wording of the older sections predates the seven ranks.
 - **Nothing is executed.** Deserialization uses LibSerialize; there is no `loadstring` anywhere.
 - **Addon messages are not encrypted or confidential.**
 
@@ -32,11 +35,13 @@ How Guild Assistant clients talk to each other. The limits quoted here are the v
 ```
 
 - `v` must equal the receiver's major version (currently 1); a different major is reported as an incompatible
-  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 7): a client
+  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 10): a client
   that does not know a field drops it while validating, and a client that does not know a message type drops the
   message as `unknown_type`, so older and newer clients keep talking. Minor 5 added the roster and recipe messages and fields
   below; minor 6 added the layer messages (`LAYER_STATE`, `LAYER_SWAP`); minor 7 added the PvP season messages
-  (`PVP_SEASON` and the others of the "PvP seasons" section).
+  (`PVP_SEASON` and the others of the "PvP seasons" section); minor 8 added event sign-up (`SIGNUP_UPSERT`); minor 9
+  replaced `READINESS_RULES` with the per-roster `ROSTER_RULES`; minor 10 added the rank map (`RANK_MAP`, see
+  *Rank mapping*).
 - `id` is 1 to 40 characters from `[A-Za-z0-9_-]`; a `(sender, id)` pair is processed once (a bounded cache of the
   last 200).
 
@@ -49,41 +54,43 @@ the length given by the model (title 60, encounter 60, item name 60, reason 100,
 |---|---|---|---|
 | `HELLO` | guild | `version` | anyone |
 | `PROFILE` | guild | `rev`, `class`, `level`, optional `ilvl`, `professions[]` (`name`, `skill`, optional `max`, optional `secondary` = true for cooking, fishing and archaeology), `fields{role, main, notes}` | anyone, for themselves |
-| `EVENT_UPSERT` | guild | `eventId`, `rev`, `updatedAt`, `title`, optional `instance`, `startAt`, `status`, `rosterId` | rl of the roster of the event, admin |
-| `ATTENDANCE_UPSERT` | guild | `eventId`, `characterKey`, `state`, `rev`, `updatedAt` | rl, admin |
-| `ASSIGN_UPSERT` | guild | `eventId`, `assignmentId`, `rev`, `updatedAt`, `encounter`, `characterKey`, optional `group`, `task`, `note` | rl, admin |
-| `DELETE` | guild | `kind` (`event` or `assignment`), `eventId`, optional `assignmentId`, `rev` | rl, admin |
-| `LOOT_SESSION` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `status` | council, admin |
+| `EVENT_UPSERT` | guild | `eventId`, `rev`, `updatedAt`, `title`, optional `instance`, `startAt`, `status`, `rosterId` | gm, cogm; officer and rl, for the roster of the event |
+| `ATTENDANCE_UPSERT` | guild | `eventId`, `characterKey`, `state`, `rev`, `updatedAt` | gm, cogm; officer and rl, for the roster of the event |
+| `SIGNUP_UPSERT` | guild | `eventId`, `characterKey`, `status` (`yes` or `no`), `rev`, `updatedAt` | gm, cogm; officer, rl and roster, for the roster of the event; for themselves: the character is the sender |
+| `ASSIGN_UPSERT` | guild | `eventId`, `assignmentId`, `rev`, `updatedAt`, `encounter`, `characterKey`, optional `group`, `task`, `note` | gm, cogm; officer and rl, for the roster of the event |
+| `DELETE` | guild | `kind` (`event` or `assignment`), `eventId`, optional `assignmentId`, `rev` | gm, cogm; officer and rl, for the roster of the event |
+| `LOOT_SESSION` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `status` | gm, cogm; officer and rl, for the roster of the event |
 | `LOOT_CANDIDATE` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `spec`, `need`, optional `upgrade` | anyone; the candidate is the sender |
-| `LOOT_VOTE` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `target` | council, admin; the voter is the sender |
+| `LOOT_VOTE` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `target` | gm, cogm; officer and rl, for the roster of the event; the voter is the sender |
 | `PVP_STATS` | guild | `rev`, `updatedAt`, `honor{world, bg}`, optional `blows{world, bg}`, `today{day, honor{world, bg}, optional blows{world, bg}}` | anyone, for themselves; the record belongs to the sender |
-| `PVP_RESET` | guild | `target`, `rev` | admin |
+| `PVP_RESET` | guild | `target`, `rev` | gm, cogm |
 | `PVP_KILL` | guild | `victim` (text, 1 to 40 bytes), `where` (`world` or `bg`), `blow` (boolean) | anyone; the killer is the sender |
 | `BLACKLIST_UPSERT` | guild | `key`, `name` (1 to 40 bytes), `reason` (1 to 100 bytes), `rev`, `updatedAt` | anyone; the author is the sender |
-| `BLACKLIST_DELETE` | guild | `key`, `rev` | admin |
+| `BLACKLIST_DELETE` | guild | `key`, `rev` | gm, cogm |
 | `RECIPES` | guild | `prof` (profession id), optional `name`, `rev`, `updatedAt`, `part`, `parts` (up to 20), optional `total`, `ids[]` (up to 150 recipe ids per message) | anyone, for themselves; the record belongs to the sender |
-| `ROSTER_UPSERT` | guild | `rosterId`, `name` (1 to 30 bytes, plain text), `rev`, `updatedAt` | admin |
-| `ROSTER_DELETE` | guild | `rosterId`, `rev` | admin |
-| `MEMBER_UPSERT` | guild | `key` (the character name as the guild roster writes it, no `:`), `role` (`member`, `rl` or `council`: never `admin`), optional `rosterId`, `rev`, `updatedAt` | admin |
-| `MEMBER_DELETE` | guild | `key`, `rev` | admin |
+| `ROSTER_UPSERT` | guild | `rosterId`, `name` (1 to 30 bytes, plain text), `rev`, `updatedAt` | gm, cogm |
+| `ROSTER_DELETE` | guild | `rosterId`, `rev` | gm, cogm |
+| `MEMBER_UPSERT` | guild | `key` (the character name as the guild roster writes it, no `:`), optional `rosterId`, `rev`, `updatedAt` (older clients also sent a `role`: it is tolerated and ignored) | gm, cogm; rl, only into or out of its own roster, for a member in no roster or in its own |
+| `MEMBER_DELETE` | guild | `key`, `rev` | gm, cogm; rl, only for a member of its own roster |
 | `LAYER_STATE` | guild | `map` (0 to 9999), `layer` (0 to 2147483647; `0` means "forget me") | anyone, for themselves; the layer belongs to the sender |
 | `LAYER_SWAP` | guild | `rid`, `s` (`request`, `offer`, `assign` or `close`), and by step: `map` + `layer` (`request`), `helper` (`assign`), `o` (`close`: `done`, `expired`, `cancelled`, `declined` or `unconfirmed`) | anyone; the actor is the sender |
-| `READINESS_RULES` | guild | `rev`, `updatedAt`, `rules[]` (up to 30 rules, each validated: see Guild readiness rules) | admin |
-| `LOOT_AWARD` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `characterKey`, `reason` | council, admin |
-| `PVP_SEASON` | guild | `id`, `name` (1 to 40 bytes), `startsAt`, `endsAt`, `state` (`active` or `closed`), `rev`, `updatedAt` | admin |
-| `PVP_MISSION` | guild | `id`, `seasonId`, `title` (1 to 40), `desc` (0 to 100), `points` (1 to 1000), `goal{kind, count, zones[], place, distinct}`, `repeatKind`, `perPlayer`, `active`, `rev`, `updatedAt` | admin |
-| `PVP_PRIZES` | guild | `seasonId`, `tiers{["1"], ["2"], ["3"], ["4-6"], ["7-10"]}` (up to 5 gold or item rewards each), `rev`, `updatedAt` | admin |
-| `PVP_OFFICER` | guild | `player`, `intervals[]` (`from`, optional `to`; up to 10), `rev`, `updatedAt` | admin |
+| `ROSTER_RULES` | guild | `rosterId`, `rev`, `updatedAt`, `rules[]` (up to 30 rules, each validated: see Readiness rules per roster) | gm, cogm; rl for its own roster |
+| `LOOT_AWARD` | guild | `eventId`, `sessionId`, `rev`, `updatedAt`, `itemId`, `itemName`, `characterKey`, `reason` | gm, cogm; officer and rl, for the roster of the event |
+| `PVP_SEASON` | guild | `id`, `name` (1 to 40 bytes), `startsAt`, `endsAt`, `state` (`active` or `closed`), `rev`, `updatedAt` | gm, cogm |
+| `PVP_MISSION` | guild | `id`, `seasonId`, `title` (1 to 40), `desc` (0 to 100), `points` (1 to 1000), `goal{kind, count, zones[], place, distinct}`, `repeatKind`, `perPlayer`, `active`, `rev`, `updatedAt` | gm, cogm |
+| `PVP_PRIZES` | guild | `seasonId`, `tiers{["1"], ["2"], ["3"], ["4-6"], ["7-10"]}` (up to 5 gold or item rewards each), `rev`, `updatedAt` | gm, cogm |
+| `PVP_OFFICER` | guild | `player`, `intervals[]` (`from`, optional `to`; up to 10), `rev`, `updatedAt` | gm, cogm |
 | `PVP_CLAIM` | guild | `id`, `missionId`, `seasonId`, `periodKey`, `player`, `at`, `summary{}`, `evidence[]` (up to 60 rows), optional `note` | anyone; `player` must be the sender |
-| `PVP_REJECT` | guild | `claimId`, `seasonId`, optional `reason`, `at` | admin, PvP officer |
-| `PVP_GRANT` | guild | `id`, `seasonId`, `player`, `missionId`, `points`, `at` | admin, PvP officer (a direct grant: admin only) |
-| `PVP_VOID` | guild | `grantId`, `seasonId`, optional `reason`, `at` | admin |
-| `PVP_DELIVERY` | guild | `seasonId`, `player`, `tier`, `delivered`, `rev`, `updatedAt` | admin, PvP officer |
-| `PVP_FINAL` | guild | `seasonId`, `name`, `startsAt`, `endsAt`, `closedAt`, `standings[]` (up to 100), `prizes` | admin |
+| `PVP_REJECT` | guild | `claimId`, `seasonId`, optional `reason`, `at` | gm, cogm |
+| `PVP_GRANT` | guild | `id`, `seasonId`, `player`, `missionId`, `points`, `at` | gm, cogm |
+| `PVP_VOID` | guild | `grantId`, `seasonId`, optional `reason`, `at` | gm, cogm |
+| `PVP_DELIVERY` | guild | `seasonId`, `player`, `tier`, `delivered`, `rev`, `updatedAt` | gm, cogm |
+| `PVP_FINAL` | guild | `seasonId`, `name`, `startsAt`, `endsAt`, `closedAt`, `standings[]` (up to 100), `prizes` | gm, cogm |
 | `PVP_LEDGER_REQ` | guild | optional `seasonId`, `count`, `digest` | anyone |
-| `PVP_LEDGER_DATA` | whisper | optional `seasonId`, `page`, `pages`, `items[]` (`{ t, p, by }`) | rl, admin, PvP officer (checked before decoding) |
+| `PVP_LEDGER_DATA` | whisper | optional `seasonId`, `page`, `pages`, `items[]` (`{ t, p, by }`) | gm, cogm, officer, rl (checked before decoding) |
+| `RANK_MAP` | guild | `rev`, `updatedAt`, `ranks[]` (up to 9 rows `{ i, r, n }`: rank index 1 to 9, role, rank name 1 to 32 bytes; see *Rank mapping*) | the guild master (rank index 0), or a cogm by the map the receiver holds |
 | `SYNC_REQ` | guild | none | anyone |
-| `SYNC_DATA` | whisper | `items[]`, a list of `{ t, p }` raid, loot, PvP, blacklist, readiness rules or roster messages (a `PVP_STATS` item also carries `owner`, a `BLACKLIST_UPSERT` item `addedBy` and `addedAt`) | rl, admin (checked before decoding) |
+| `SYNC_DATA` | whisper | `items[]`, a list of `{ t, p }` raid, loot, PvP, blacklist, readiness rules, roster or rank map messages (a `PVP_STATS` item also carries `owner`, a `BLACKLIST_UPSERT` item `addedBy` and `addedAt`) | gm, cogm, officer, rl (checked before decoding) |
 
 `guid` is deliberately never sent.
 
@@ -221,8 +228,8 @@ channel; the protocol minor version was raised to 3 for them, and older clients 
 
 | Action | Roles | Message |
 |---|---|---|
-| `blacklist_add` | member, rl, council, admin (everyone with a role) | `BLACKLIST_UPSERT` |
-| `blacklist_remove` | admin (guild master, officers and the beta admins) | `BLACKLIST_DELETE` |
+| `blacklist_add` | every rank (everyone with a role) | `BLACKLIST_UPSERT` |
+| `blacklist_remove` | gm, cogm | `BLACKLIST_DELETE` |
 
 The receiver reads the role of the **sender** from its own guild roster, so hiding the Remove button is only
 convenience: a delete from anyone but an admin is dropped with `forbidden`, and one from a sender the roster does
@@ -254,7 +261,7 @@ not know with `unknown_sender`.
 **Snapshot.** Blacklist entries and `B:` tombstones are part of `SYNC_DATA`. Here is a second documented exception
 to "the author is the sender": a `BLACKLIST_UPSERT` item of a snapshot may carry `addedBy` (validated like a
 character name) and `addedAt` (a timestamp), so the original author and date are kept when a leader relays an
-entry. Both are only read from the items of a snapshot, which only a raid leader or admin can send (checked before
+entry. Both are only read from the items of a snapshot, which only a gm, cogm, officer or rl can send (checked before
 decoding); a guild message has nowhere to carry them, and an item with an unusable `addedBy` or `addedAt` is skipped
 (`bad_origin`). The item is otherwise applied as if the relaying leader had sent it, with `updatedBy` set to the
 leader and the usual validation, authority and conflict rules. A `BLACKLIST_DELETE` item only counts when the
@@ -263,35 +270,72 @@ recently updated entries and the 200 newest removals, and shrinks together with 
 (halved until the snapshot fits in 32 KB). The blacklist is not part of the text export, and an imported blacklist
 item is skipped.
 
-## Guild readiness rules
+## Readiness rules per roster
 
-One set of readiness rules for the whole guild (issue #32), in a single record `{ rev, updatedAt, updatedBy, rules }`
-that an admin replaces as a whole with `READINESS_RULES`. The protocol minor version was raised to 4 for it.
+Each roster has its own set of readiness rules (issue #32), a record
+`{ rev, updatedAt, updatedBy, rules }` per roster that is replaced as a whole with `ROSTER_RULES`. The protocol minor
+version was raised to 9 for it: the guild-wide `READINESS_RULES` (minor 4) is gone, so a new client drops it as
+`unknown_type`, and an old client drops `ROSTER_RULES` the same way.
 
-- **Authority:** `rules_edit`, admin only, read from the receiver's own guild roster. A newer `rev` wins, then
-  `updatedAt` (clamped), then the sender; a replay is a no-op. Until a set arrives, the starting checklist applies.
+- **Authority:** `rules_edit`, read from the receiver's own guild roster. gm and cogm may set the rules of any
+  roster; an rl only those of the roster it belongs to, read from the receiver's own assignments. Officer, roster,
+  member and alter are refused. A newer `rev` wins per roster, then `updatedAt` (clamped), then the sender; a replay is
+  a no-op. A roster without a record uses the starting checklist; a deleted roster (tombstone `R:<id>`) takes no rules
+  and its record is dropped.
 - **Rule validation:** every rule is checked field by field, and unknown fields are dropped. `check` is one of
   `field`, `confirm`, `level`, `ilvl`, `profession`, `enchants` or `buff`, with the numbers or lists that check
   needs (levels and item levels 1 to 999, enchant slots 1 to 18, up to 20 spell ids or names). `evidenceMode`
   is worked out from the check and never taken from the message. Ids are unique, up to 32 characters of `[%w_]`.
-- **Late joiners:** the set is part of a snapshot only when the sender is an admin, and the receiver applies it
-  under the role of the sender, so a leader who is not an admin cannot relay (or forge) rules. For the members who
-  were not online, an admin also sends the set once after login.
+- **Late joiners:** a gm or cogm snapshot carries the set of every roster (after the rosters themselves), and the
+  receiver applies each under the role of the sender. After login, gm and cogm send every stored set and an rl the
+  one of its own roster, for the members who were not online. Existing rosters start with a copy of the former
+  guild-wide set (schema 14); a new roster starts with none.
 
-## Rosters and assigned roles
+## Rank mapping
 
-Raid rosters (teams) and the addon role of each member are set by the guild master inside the addon (protocol
-minor 5, plan 3.4.1 and 3.4.2).
+`RANK_MAP { rev, updatedAt, ranks = { { i = 3, r = "officer", n = "Lieutenant" }, ... } }` replaces the whole rank map of
+the guild data set of the receiver: which addon role each guild rank index has, so renaming a rank in the game keeps
+the role of its members. Rank index 0 is the guild master and is never in the map; the role is one of `cogm`,
+`officer`, `rl`, `roster`, `member`, `alter` (`gm` is never assignable). `n` is the rank name when the map was saved,
+used for display and to detect a rename; it decides nothing. The validator refuses a duplicate index, an index
+outside 1 to 9, a role outside that set and a name with escape sequences.
 
-- **Records:** `rosters[id] = { id, name, rev, updatedAt, updatedBy }` and `members[key] = { role, rosterId,
-  rev, updatedAt, updatedBy }`. A member is in at most one roster (`rosterId` is a single value; a record that leaves
-  it out means no roster). Messages: `ROSTER_UPSERT` and `ROSTER_DELETE` for the definitions, `MEMBER_UPSERT` and
-  `MEMBER_DELETE` for the assignments.
-- **Authority:** `roster_manage`, which is the guild master only. The guild master is recognised from the receiver's
-  own guild roster by **rank index 0** (never by a character name; the beta admin list is gone), and the other roles
-  of a sender are the ones assigned in `members`. `admin` can never be assigned: a `MEMBER_UPSERT` whose `role` is
-  anything but `member`, `rl` or `council` does not pass validation, and a stored record that says `admin` counts as
-  nothing.
+There is one map per guild data set (`guilds[key].rankMap` in the saved variables), so a character in another guild
+never shares one. **No rank name is ever matched.** The addon role of a rank is, in this order: index 0 is `gm`; an
+index the map lists gives its role; every other rank, and every rank while no map is saved, is a `member`.
+
+Authority is worked out by the receiver, never read from the message, against the map it holds **before** applying
+the incoming one:
+
+- the sender is the guild master: their guild roster entry has rank index 0 (a rank that is merely called like the
+  guild master's does not count); or
+- the sender's role is `cogm` according to the map the receiver holds. The incoming map never authorizes itself, so
+  while no map is saved only the guild master can send the first one.
+- A `cogm` sender is also held to two guards: the row of their own rank must keep resolving to `cogm` (no
+  self-promotion or demotion), and the revision may go up by one at most. The receiver drops the whole message on a
+  violation. A cogm can still change the other rows, even make another rank `cogm`; a map the guild master saved
+  always overrides one a cogm saved, whatever its revision and time.
+
+A newer map wins by `rev`, then `updatedAt`, then the sender (see *Conflict resolution*). A sender whose rank is not in
+the receiver's roster yet is dropped as unknown. The author is the sender. A client older than minor 10 drops the type.
+
+The map is also in the snapshot (`SYNC_DATA`) of a sender who may author it, and whoever saved the map in force sends
+it once after login (jittered with the other login resends).
+
+## Rosters and roles
+
+Raid rosters (teams) are set by the guild master and the co-guild master inside the addon (protocol minor 5). The role
+of a player is their guild rank, through the rank map (see *Rank mapping*): nothing stored per player assigns one.
+
+- **Records:** `rosters[id] = { id, name, rev, updatedAt, updatedBy }` and `members[key] = { rosterId, rev,
+  updatedAt, updatedBy }`. A member is in at most one roster (`rosterId` is a single value; a record that leaves it out
+  means no roster). Messages: `ROSTER_UPSERT` and `ROSTER_DELETE` for the definitions, `MEMBER_UPSERT` and
+  `MEMBER_DELETE` for the assignments. A `role` in a `MEMBER_UPSERT` means nothing: an older client may still send
+  one, it validates and is dropped, and a stored `role` is never read.
+- **Authority:** `members_manage`. gm and cogm manage every roster and every assignment; an rl only moves members into
+  or out of the roster it belongs to (a member in no roster, or already in its roster), read from the receiver's own
+  assignments. The sender is recognised from the receiver's own guild roster: the guild master by **rank index 0**
+  (never by a character name), everybody else by the rank index through the rank map.
 - **Conflicts and deletions:** like the blacklist (higher `rev`, then `updatedAt`, then sender). Removals leave
   tombstones `R:<rosterId>` and `M:<key>` in the shared tombstones, with the deleted revision plus one.
 - **Events carry their roster:** `EVENT_UPSERT` has an optional `rosterId`; templates and loot sessions follow the
@@ -304,17 +348,17 @@ minor 5, plan 3.4.1 and 3.4.2).
   clears the roster an event already has, so an older client editing it does not undo the assignment. Only the
   guild master can delete something of an event the receiver has never seen.
 - **Late joiners:** the rosters, the 300 most recently updated assignments and the newest removals are part of a
-  snapshot only when the sender is an admin, and the receiver applies them under the role of the sender (a raid
-  leader cannot relay or forge them). An admin also sends the roster definitions after login; the assignments of a
-  member who was offline are only learned from an admin's snapshot, so a client that has never met the guild
-  master online does not know its own assigned role yet.
+  snapshot only when the sender is a gm or cogm, and the receiver applies them under the role of the sender (a
+  raid leader cannot relay or forge them). A gm or cogm also sends the roster definitions after login; the
+  assignments of a member who was offline are only learned from a gm or cogm snapshot, so a client that has never
+  met one online does not know its own roster yet.
 - **Visibility is not access control.** Every client with the addon still receives every message on the guild
   channel; the roster only decides what the window shows and who may change what. See `docs/PRIVACY.md`.
 
 ## PvP seasons
 
 A season system for PvP (protocol minor 7): admins define missions that award points,
-members claim them, an admin or a PvP officer approves each claim, the points make a season ranking, and the top 10
+members claim them, a gm or cogm approves each claim, the points make a season ranking, and the top 10
 get a prize at the end. Points live in an **append-only ledger of grants**; the ranking is derived from it on every
 client, so nothing but the grants has to be trusted.
 
@@ -322,12 +366,11 @@ client, so nothing but the grants has to be trusted.
   of message types. Each is validated by `PvPSeasonModel` (bounds, plain text, whole numbers; unknown fields are
   dropped). **No payload carries its author**: `by` is the message sender, or, inside a ledger catch-up, the author the
   item names.
-- **Authority** is worked out by the receiver. An admin is the guild master of the receiver's own guild roster. A
-  **PvP officer** is a flag, not a role: the receiver's own `PVP_OFFICER` records say since when (a list of
-  `from`/`to` intervals, both ends included). Officers may approve and reject claims and mark deliveries; everything
-  else is admin only. A grant counts if its author was an admin, or a PvP officer at the time of the grant and not
-  approving a claim of their own; removing the flag does not undo earlier grants, and an admin voids any abusive one.
-  A direct grant (an id that is not a claim id) is admin only.
+- **Authority** is worked out by the receiver. "Admin" is a `gm` or `cogm`, by the rank index through the rank map of
+  the receiver's own guild roster. The PvP officer flag gives no power any more: approving and rejecting claims, marking
+  deliveries and everything else is admin only. `PVP_OFFICER` records are still validated and stored but decide nothing.
+  A grant counts if its author was an admin; an admin voids any abusive one. A direct grant (an id that is not a claim
+  id) is admin only.
 - **Claims:** `id` is `<player>:<missionId>:<periodKey>:<n>` with the period `all`, `YYYYMMDD` (server day, UTC) or
   `YYYYWww` (ISO week, UTC), so a claim sent twice is one. Approving a claim sends a `PVP_GRANT` whose `id` is the claim
   id: two approvers make the same grant and the second is a no-op. Only a client that approves claims keeps them
@@ -349,20 +392,41 @@ client, so nothing but the grants has to be trusted.
   login (at the same moment as `SYNC_REQ`) and whenever a season becomes active, a client sends `PVP_LEDGER_REQ` with
   the number of ledger records it holds for its active season and a digest (Adler-32 of the sorted record tokens: the
   officers, the seasons, the finals and the deliveries, and for that season its missions, prizes, grants, voids and
-  rejections). A raid leader, admin or PvP officer whose own ledger differs answers, after a random 1 to 10 second
+  rejections). A gm, cogm, officer or rl whose own ledger differs answers, after a random 1 to 10 second
   delay and at most once a minute per requester, by whispering `PVP_LEDGER_DATA` pages: officers first (they decide who
   may write what), then the seasons, the missions, prizes, grants, voids, rejections of the requested season and the
   relay's active one, every final and every delivery. A page holds at most 400 items and fits the snapshot limit (32 KB
   encoded); there are at most 100 pages. The requester decodes a page only if the whisper comes from a raid leader,
-  admin or PvP officer according to its own data, and applies every item as if its `by` had sent it, through the same
+  gm or cogm according to its own data, and applies every item as if its `by` had sent it, through the same
   validation, authority and conflict rules. Because `by` is read from the item, a relay is trusted to name the right
   author, the same trust a `PVP_STATS` snapshot gives it. Pending claims are not relayed: they belong to their author,
   who announces them again.
 - **Order:** a record that reaches a client before the one that authorises it (a grant of an officer before the officer
   record, a claim before its mission) is refused and comes back with the next catch-up. Records an admin wrote do not
   depend on any other and may arrive in any order (a void before its grant, a grant before its season).
-- **Interim commands:** until the PvP tab has its own sub-tabs, `/ga pvp` (`season`, `officer`, `mission`, `claim`,
+- **Interim commands:** until the PvP tab has its own sub-tabs, `/ga pvp` (`season`, `mission`, `claim`,
   `queue`, `approve`, `reject`, `grant`) drives the same service, for testing.
+
+## Event sign-up
+
+Protocol minor 8. A player says whether they are coming; the leader's record of
+what happened (`ATTENDANCE_UPSERT`) is a separate thing, and a sign-up never touches it.
+
+- **Record:** `event.signups[characterKey] = { status, rev, updatedAt, updatedBy }`, `status` is `yes` or `no`; no
+  entry means not answered. At most `EVENT_ATTENDANCE_MAX` entries per event. An event without the table (made by an
+  older client) counts as having none.
+- **Authority:** `SIGNUP_UPSERT` is accepted only when `characterKey` is the sender, the rank of the sender (read from
+  the receiver's guild roster) has `event_signup` (gm, cogm, and officer, rl and roster with a roster), and the event
+  is visible to the roster the receiver holds for the sender (the event's roster, or none yet; gm and cogm any).
+  Otherwise `forbidden`, `unknown_sender` or `other_roster`.
+- **Conflicts:** last writer wins per character (higher `rev`, then `updatedAt` clamped to 5 minutes ahead, then the
+  sender), like attendance. The receiver does not check the closing time of the sign-up (planned or open, not yet
+  started): the sender enforces it, and a queued or relayed answer can arrive late.
+- **Late joiners:** the sign-ups are part of a snapshot. Here, and only inside `SYNC_DATA` (accepted from a raid
+  gm, cogm, officer or rl), the item names the character and is applied under that character's own rank and roster as the
+  receiver knows them, so a relayed sign-up gets the same checks as a live one. On the guild channel a
+  `characterKey` that is not the sender is never accepted. The text export carries sign-ups, but an import skips them
+  (the importer is not the character).
 
 ## Recipes
 
@@ -388,7 +452,7 @@ are bounded (500) and expire after 30 days.
 
 - Received: at most 60 messages per minute per sender, checked before decoding; at most 200 tracked senders.
 - Snapshots: at most 4 per minute per sender, and only from senders whose role can manage events. PvP ledger pages
-  (whispers from a raid leader, admin or PvP officer) have their own limit of 100 per minute per sender, checked
+  (whispers from a gm, cogm, officer or rl) have their own limit of 100 per minute per sender, checked
   before decoding.
 - Sent: everything goes through a queue of at most 100 messages, kept at most 120 seconds. While the encounter
   lockdown is active (`C_ChatInfo.InChatMessagingLockdown()`), nothing is sent; when it ends the queue drains with
@@ -398,9 +462,11 @@ are bounded (500) and expire after 30 days.
 ## Snapshot for late joiners
 
 1. Roughly 8 to 20 seconds after login (once the guild roster had time to load) the client sends `SYNC_REQ`.
-2. A raid leader or admin answers, after a random 1 to 10 second delay and at most once a minute per requester,
+2. A gm, cogm, officer or rl answers, after a random 1 to 10 second delay and at most once a minute per requester,
    by whispering `SYNC_DATA`: the 20 most recent events with their attendance, assignments and loot sessions or
-   awards, plus every tombstone. If it does not fit, the number of events is halved until it does.
+   awards, plus every tombstone. If it does not fit, the number of events is halved until it does. When the answering
+   leader may author the rank map (the guild master, or a co-guild master by the map held), the snapshot also carries
+   it (see *Rank mapping*).
 3. The requester decodes it only if the whisper comes from someone whose role allows managing events, and applies
    every item as if that leader had sent it, through the same validation, authority and conflict rules.
 
@@ -410,7 +476,7 @@ Loot candidates and votes are not part of a snapshot: on the wire they always be
 re-attributed to whoever relays them.
 
 PvP records are part of a snapshot, and here is the one documented exception to "the author is the sender": inside
-`SYNC_DATA` (only accepted from a raid leader or admin, checked before decoding) a `PVP_STATS` item carries the
+`SYNC_DATA` (only accepted from a gm, cogm, officer or rl, checked before decoding) a `PVP_STATS` item carries the
 `owner` of the record, validated like a character name, and is applied as if that owner had sent it, through the
 same plausibility and conflict rules, so a relayed record cannot lower or outrun what a client already holds. On
 the guild channel an `owner` is never accepted. The PvP part is capped separately: the 100 most recently updated

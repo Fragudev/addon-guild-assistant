@@ -26,6 +26,27 @@ function ns.GetGuildName()
   return ns.Platform.GetGuildName() or (ns.guildIdentity and ns.guildIdentity.name) or nil
 end
 
+-- The rank map of the current guild data set answers every role lookup through ns.rankMap. It is read lazily at every
+-- call (ns.db.global only exists once the guild is known); while nothing was saved every rank but the guild master's
+-- is a member.
+local function InstallRankMap()
+  ns.rankMapService = ns.RankMapService.New({
+    read = function()
+      return ns.db and ns.db.global and ns.db.global.rankMap or nil
+    end,
+  })
+  ns.rankMap = ns.rankMapService:Provider()
+end
+
+-- The rank map changed (saved here, or received from the guild): every role is worked out from it on the next lookup,
+-- so only what is on screen has to follow. The sidebar is built again (the own role may have changed) and the Ranks
+-- tab redraws. The access guard does not depend on roles, so it is not run again.
+function ns.RanksChanged()
+  if ns.UI and ns.UI.RanksChanged then
+    ns.UI.RanksChanged()
+  end
+end
+
 local function InitDatabase()
   local db, err = ns.Store.Load(GuildAssistantDB)
   if db then
@@ -34,6 +55,7 @@ local function InitDatabase()
     GuildAssistantDB = db
     ns.root = db
     ns.db = { settings = db.settings, chars = db.chars, root = db, schemaVersion = db.schemaVersion }
+    InstallRankMap()
     -- The saved language is applied before anything is drawn, so every text is read in it.
     ns.Locale.UsePreference(ns.Settings.Language(ns.db), ns.Platform.GetLocale())
   else
@@ -795,8 +817,6 @@ local function Activate(identity)
   ns.db = ns.Store.View(ns.root, ns.Store.ResolveGuildKey(ns.root, identity), identity)
   ns.active = true
   -- The saved data of this character keeps the key it always had; the shared name is resolved later.
-  -- The roles the guild master assigned are read from the saved assignments.
-  ns.PermissionService.Configure({ members = ns.db.global.members })
   ns.character = ns.Store.GetChar(ns.db, ns.Platform.GetLegacyIdentityKey())
   ns.ProfileService.Refresh(ns.Platform, ns.character.profile)
   ns.EventService.Purge({
@@ -837,6 +857,11 @@ local function Activate(identity)
     )
   else
     print(L("%s %s loaded. Click the minimap button or type /ga to open the window."):format(PREFIX, ns.GetVersion()))
+  end
+  if ns.PositionModel.TakeShareNotice(ns.db) then
+    print(
+      ("%s %s"):format(PREFIX, L("your position is now shared with the guild. You can turn it off in the settings."))
+    )
   end
 end
 

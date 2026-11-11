@@ -81,7 +81,8 @@ local function showTooltip(self)
   GameTooltip:AddLine("Guild Assistant " .. ns.GetVersion())
   if ns.active and ns.character and ns.db then
     local character = ns.character
-    local _, summary = ns.ReadinessService.Evaluate(ns.ReadinessRules.Current(), character.profile, character.readiness)
+    local rules = ns.ReadinessRules.Current(ns.UI.OwnRosterId())
+    local _, summary = ns.ReadinessService.Evaluate(rules, character.profile, character.readiness)
     local queue = ns.comm and ns.comm.queue
     for _, line in
       ipairs(ns.ViewModel.MinimapTooltip({
@@ -114,7 +115,7 @@ local function showMenu()
     return
   end
   GameTooltip:Hide()
-  local entries = ns.ViewModel.MinimapMenu(ns.UI.Role())
+  local entries = ns.ViewModel.MinimapMenu(ns.UI.Role(), ns.UI.OwnRosterId())
   local items, byValue = {}, {}
   for _, entry in ipairs(entries) do
     items[#items + 1] = { value = entry.value, text = entry.text, icon = entry.icon }
