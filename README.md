@@ -93,8 +93,9 @@ check.
   language, windows) are shared by all your characters. If you change guild during a session, the addon asks you to
   type `/reload` to load the new guild's data.
 - Shared data is accepted only from guild members, and edits only from members whose role allows them.
-- The **guild master is the only admin**, recognised by guild rank index 0, never by a name. Every other role (raid
-  leader, loot council) and the PvP officer flag are assigned by the guild master in the *Members* tab.
+- **Roles come from the guild rank:** guild master, co-guild master, officer, raid leader, roster, member and alt.
+  The guild master (rank index 0, never matched by name) maps each rank to a role in the *Ranks* tab; a rank nobody
+  mapped counts as member.
 
 ## Features
 
@@ -107,7 +108,7 @@ check.
 
 ### Raid events
 
-- Events created by raid leaders and admins, shared with the guild, with a roster and assignments.
+- Events created by raid leaders, the guild master and the co-guild master, shared with the guild, with a roster and assignments.
 - **Attendance**, reusable **templates** and **reports**.
 - **Export and import** as text, to move data between characters or back it up.
 
@@ -119,7 +120,19 @@ check.
 ### PvP and PvP seasons
 
 - **Kill counter** split into open world and battleground, a guild **kill ranking** and a **recent kills** feed.
-- **Seasons:** missions approved by admins and PvP officers, a points ranking and end-of-season rewards.
+- **Seasons:** missions approved by the guild master and co-guild master, a points ranking and end-of-season rewards.
+- A PvP log kept for 45 days whatever the season, a "battlegrounds played" goal, bounty missions on Kill on Sight
+  targets, and enemy classes and races that follow your own faction.
+
+### Intel and Kill on Sight
+
+- Enemy players around you are detected and shared with the guild: alerts, enemy pins on the maps and an Intel window.
+- Personal Kill on Sight and ignore lists, and a guild Kill on Sight list kept by the guild master and co-guild master.
+
+### Announcements and groups
+
+- **Announcements** from the guild master and co-guild master, with a popup, a sidebar badge and a Home banner.
+- **Groups:** post a group with the seats you need, apply to others, and get a notice when a guildmate opens one.
 
 ### Guild tools
 
@@ -127,6 +140,8 @@ check.
 - **Blacklist:** a guild-wide list of players to be warned about.
 - **Layers:** your current layer, the layers guildmates have shared, and layer swap requests.
 - **Guild map:** guildmates who share their position, on the minimap and the world map.
+- **Installed check:** the guild master and co-guild master see who runs the addon and which version.
+- **Modules:** turn off the parts of the addon you don't use.
 
 ### Sync
 
@@ -142,6 +157,8 @@ The full walkthrough, tab by tab and role by role, is the [user guide](docs/USER
 | `/ga` | open the window |
 | `/ga help` | the list of commands |
 | `/guildassistant` | the same as `/ga` |
+| `/ga intel ...` | Intel and Kill on Sight commands (`/ga intel help` lists them) |
+| `/ga spy ...` | the same as `/ga intel` |
 
 <details>
 <summary><b>Diagnostics for developers</b></summary>
