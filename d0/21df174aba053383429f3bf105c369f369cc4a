@@ -1,0 +1,27 @@
+GuildAssistant/Core/Constants.lua
+  s_32978aaf7efee9::t_dec9bfdbe478de 225-227,368-372
+GuildAssistant/Sync/Comm.lua
+  s_32978aaf7efee9::t_26e758436fcf61 87-91,431-434,451-453,466-467,678-679,739-787,802-803,805,809
+docs/PRIVACY.md
+  s_32978aaf7efee9::t_7cfc87bcd82f40 34-35,87,100-118
+docs/PROTOCOL.md
+  s_32978aaf7efee9::t_3353420b6a5ec8 402-405
+tests/comm_spec.lua
+  s_32978aaf7efee9::t_06e61201f2735e 2289-2368,2417-2478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "d021df174aba053383429f3bf105c369f369cc4a",
+  "prompts": {},
+  "sessions": {
+    "s_32978aaf7efee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e5c844-e38a-4f46-ba40-0ea2890d9363",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
