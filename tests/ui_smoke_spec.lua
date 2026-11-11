@@ -59,6 +59,7 @@ local function load_window(locale)
     "Commands/BlacklistCommands",
     "Commands/RosterCommands",
     "UI/Main",
+    "UI/Cards",
     "UI/Tabs/Home",
     "UI/Tabs/Profile",
     "UI/Tabs/Readiness",
@@ -2235,6 +2236,76 @@ describe("Window smoke test: Rules", function()
     local count = #env.ns.Kit.fake.nodes
     env.ns.UI.RulesChanged()
     assert.is_true(#env.ns.Kit.fake.nodes > count)
+  end)
+
+  it("commits the text being typed before the page is drawn again", function()
+    env = build("GM")
+    env.open("rules")
+    local commits = 0
+    env.ns.Kit.CommitEdit = function()
+      commits = commits + 1
+    end
+    env.ns.UI.Redraw()
+    assert.are.equal(1, commits)
+  end)
+
+  it(
+    "holds a redraw that follows the guild while a box has the keyboard, and runs it once the focus is gone",
+    function()
+      env = build("GM")
+      env.open("rules")
+      local typing = true
+      env.ns.Kit.HasEditFocus = function()
+        return typing
+      end
+      local count = #env.ns.Kit.fake.nodes
+      env.ns.UI.RulesChanged()
+      assert.are.equal(count, #env.ns.Kit.fake.nodes)
+      assert.are.equal(1, #env.timers)
+      -- Still typing a second later: it waits again, once.
+      env.timers[1]()
+      assert.are.equal(count, #env.ns.Kit.fake.nodes)
+      typing = false
+      env.timers[2]()
+      assert.is_true(#env.ns.Kit.fake.nodes > count)
+    end
+  )
+
+  it("redraws a click at once even while a box has the keyboard", function()
+    env = build("GM")
+    env.open("rules")
+    env.ns.Kit.HasEditFocus = function()
+      return true
+    end
+    local count = #env.ns.Kit.fake.nodes
+    env.ns.UI.Redraw()
+    assert.is_true(#env.ns.Kit.fake.nodes > count)
+  end)
+
+  it("builds the sidebar again keeping the scroll of its rows", function()
+    env = build("GM")
+    env.open("home")
+    local sidebar
+    for _, node in ipairs(env.ns.Kit.fake.nodes) do
+      if node.kind == "Sidebar" then
+        sidebar = node
+      end
+    end
+    assert.is_truthy(sidebar)
+    sidebar.nav = {
+      GetScroll = function()
+        return 120
+      end,
+    }
+    env.ns.UI.BuildSidebar()
+    local rebuilt
+    for _, node in ipairs(env.ns.Kit.fake.nodes) do
+      if node.kind == "Sidebar" then
+        rebuilt = node
+      end
+    end
+    assert.are_not.equal(sidebar, rebuilt)
+    assert.are.equal(120, rebuilt.opts.scroll)
   end)
 end)
 
