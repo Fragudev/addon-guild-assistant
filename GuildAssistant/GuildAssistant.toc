@@ -38,6 +38,8 @@ Domain\PermissionService.lua
 Domain\InstallDirectory.lua
 Domain\RankMapModel.lua
 Domain\RankMapService.lua
+Domain\AnnouncementModel.lua
+Domain\AnnouncementService.lua
 Domain\RosterService.lua
 Domain\PvPSeasonModel.lua
 Domain\PvPSeasonService.lua
@@ -82,6 +84,7 @@ Sync\PvPSync.lua
 Sync\BlacklistSync.lua
 Sync\ReadinessRulesSync.lua
 Sync\RankMapSync.lua
+Sync\AnnouncementSync.lua
 Sync\RosterSync.lua
 Sync\PvPSeasonSync.lua
 Sync\RecipeSync.lua

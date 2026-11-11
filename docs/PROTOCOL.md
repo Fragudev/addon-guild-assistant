@@ -35,7 +35,7 @@ How Guild Assistant clients talk to each other. The limits quoted here are the v
 ```
 
 - `v` must equal the receiver's major version (currently 1); a different major is reported as an incompatible
-  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 14): a client
+  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 15): a client
   that does not know a field drops it while validating, and a client that does not know a message type drops the
   message as `unknown_type`, so older and newer clients keep talking. Minor 5 added the roster and recipe messages and fields
   below; minor 6 added the layer messages (`LAYER_STATE`, `LAYER_SWAP`); minor 7 added the PvP season messages
@@ -43,7 +43,7 @@ How Guild Assistant clients talk to each other. The limits quoted here are the v
   replaced `READINESS_RULES` with the per-roster `ROSTER_RULES`; minor 10 added the rank map (`RANK_MAP`, see
   *Rank mapping*); minor 11 added `PVP_PROGRESS`, the optional `queue` of `PVP_LEDGER_REQ`, claims in the PvP
   catch-up between approvers and the optional mission goal fields (see *PvP seasons*);
-  minor 13 added the Groups post (`LFG_POST`, see *Groups*) and minor 14 its application steps (`LFG_APPLY`).
+  minor 13 added the Groups post (`LFG_POST`, see *Groups*) and minor 14 its application steps (`LFG_APPLY`); minor 15 added guild announcements (`ANN`, `ANN_DEL`, see *Announcements*).
 - `id` is 1 to 40 characters from `[A-Za-z0-9_-]`; a `(sender, id)` pair is processed once (a bounded cache of the
   last 200).
 
@@ -94,8 +94,10 @@ the length given by the model (title 60, encounter 60, item name 60, reason 100,
 | `PVP_LEDGER_REQ` | guild | optional `seasonId`, `count`, `digest`, optional `queue` (the requester approves claims) | anyone |
 | `PVP_LEDGER_DATA` | whisper | optional `seasonId`, `page`, `pages`, `items[]` (`{ t, p, by }`) | a leader (checked before decoding); an author other than the relay is only believed from a gm or cogm |
 | `RANK_MAP` | guild | `rev`, `updatedAt`, `ranks[]` (up to 9 rows `{ i, r, n }`: rank index 1 to 9, role, rank name 1 to 32 bytes; see *Rank mapping*) | the guild master (rank index 0), or a cogm by the map the receiver holds |
+| `ANN` | guild | `id`, `title` (1 to 60 characters), `body` (0 to 600 characters), `createdAt`, `updatedAt`, `rev`, `popup`, `popupRev`, `pinned`, optional `expiresAt`; see *Announcements* | gm, cogm |
+| `ANN_DEL` | guild | `id`, `rev`, `updatedAt` | gm, cogm |
 | `SYNC_REQ` | guild | none | anyone |
-| `SYNC_DATA` | whisper | `items[]`, a list of `{ t, p }` raid, loot, PvP, blacklist, readiness rules, roster or rank map messages (a `PVP_STATS` item also carries `owner`, a `BLACKLIST_UPSERT` item `addedBy` and `addedAt`) | gm, cogm, officer, rl (checked before decoding) |
+| `SYNC_DATA` | whisper | `items[]`, a list of `{ t, p }` raid, loot, PvP, blacklist, readiness rules, roster, rank map or announcement messages (a `PVP_STATS` item also carries `owner`, a `BLACKLIST_UPSERT` item `addedBy` and `addedAt`) | gm, cogm, officer, rl (checked before decoding) |
 
 `guid` is deliberately never sent.
 
@@ -361,6 +363,32 @@ the receiver's roster yet is dropped as unknown. The author is the sender. A cli
 
 The map is also in the snapshot (`SYNC_DATA`) of a sender who may author it, and whoever saved the map in force sends
 it once after login (jittered with the other login resends).
+
+## Announcements
+
+Protocol minor 15. A gm or cogm posts news for the whole guild; every member sees it on a board and, when `popup` is
+set, in a popup once per `popupRev`.
+
+- `ANN` carries the whole announcement: `id`, `title` (1 to 60 characters, one line), `body` (0 to 600 characters,
+  newlines allowed), `createdAt`, `updatedAt`, `rev` (from 1), `popup`, `popupRev` (from 1, raised by "Send popup again")
+  and `pinned` (booleans), and an optional `expiresAt` (nil: never). Limits count characters, not bytes. Text with an
+  escape sequence (`|`) or a control character is refused. There is no author field.
+- `ANN_DEL { id, rev, updatedAt }` removes one. Its `rev` must exceed the one the receiver holds.
+- **Authority is the receiver's.** The sender's role comes from the receiver's own guild roster and rank map, never
+  from the message, and only a role with the `announce_manage` action (gm and cogm) is heard: an `ANN` or `ANN_DEL`
+  from anyone else is dropped as `forbidden`. The author (and `updatedBy`) is the sender.
+- Conflicts follow *Conflict resolution*: the higher `rev` wins, then the later `updatedAt`, then the sender. A removal
+  leaves a tombstone (kept 30 days, at most 200); an `ANN` whose `rev` does not exceed the tombstone's is dropped, so an
+  older copy cannot bring a deleted announcement back. An announcement past `expiresAt` is not stored.
+- At most 30 announcements are kept per guild. When the board is full, an incoming one replaces the oldest unpinned
+  one only if it is newer (or pinned).
+- Announcements live in the guild data set (`guilds[key].announcements`); the popups already shown live next to them
+  (`guilds[key].announcementsSeen`, one `popupRev` per id), because an id is only unique inside one guild.
+- A gm or cogm repeats their own live announcements once after login, each at a random 5 to 40 second delay, for the
+  members who were offline. The snapshot (`SYNC_DATA`) of a gm or cogm also carries the newest ones and the removals;
+  here is the other exception to "the author is the sender": a snapshot item may name its original `author`, which the
+  receiver only believes when its own roster says that member may also manage announcements. On the guild channel
+  there is no such field. A client older than minor 15 drops both types as `unknown_type`.
 
 ## Rosters and roles
 
