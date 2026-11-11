@@ -1,0 +1,107 @@
+GuildAssistant/Commands/PvPSeasonCommands.lua
+  s_32978aaf7efee9::t_4abda62f5788a3 35,87,142,226-227,229-239,256-257,260
+GuildAssistant/Core/Constants.lua
+  s_32978aaf7efee9::t_fcd3136344de53 5,13,231-237,239-257,262-276
+GuildAssistant/Core/Init.lua
+  s_32978aaf7efee9::t_3f31feaf359dfd 92-104,115-118,131-149,154-156,161-182,190-193,198-202,204,829-832,840-841,843,873-889
+GuildAssistant/Core/Platform.lua
+  s_32978aaf7efee9::t_cc1aeacfe03c36 568-600
+GuildAssistant/Core/PvPProbe.lua
+  s_32978aaf7efee9::t_7d7919dc65cacb 333-337
+GuildAssistant/Core/Store.lua
+  s_32978aaf7efee9::t_b4194188fb910a 18-20,230-282,306-310,415-420
+GuildAssistant/Domain/PvPFeed.lua
+  s_32978aaf7efee9::t_67e90bb0b2228e 140-143,145
+GuildAssistant/Domain/PvPMissionService.lua
+  s_32978aaf7efee9::t_4121a8f3b3c2e9 3-5,7-11,14-15,18-25,32,52-53,55-56,58,61-62,67,71-107,113,116,121-136,143,146,151,157-220,223,227,230-231,234-246,248-252,255-299,335-342,364,403,420-422,429-456,462-463,470-479,481,485,487,493,498-505,515-517,521,539-561
+GuildAssistant/Domain/PvPMissionTracker.lua
+  s_32978aaf7efee9::t_f250232d818b99 7-9,12-13,15-18,33,102-128,130-139,142-144,150,189,202-242,257-259,262-267,282,285-299,306,308,313-315,317,322-327,341,344-350,352-371,376,382-388
+GuildAssistant/Domain/PvPProgressPublisher.lua
+  s_32978aaf7efee9::t_9be8da2358831d 1-115
+GuildAssistant/Domain/PvPPublisher.lua
+  s_32978aaf7efee9::t_bbfaf3f26693dc 61-62
+GuildAssistant/Domain/PvPSeasonModel.lua
+  s_32978aaf7efee9::t_5f88b7df277014 9-11,16,37-39,244-328,365-404,457-485,515-516,519-525,533-539
+GuildAssistant/Domain/PvPSeasonService.lua
+  s_32978aaf7efee9::t_b938a99d75641f 14-16,25,45-46,68-72,239-283,482-485,783-798,859-863,866
+GuildAssistant/GuildAssistant.toc
+  s_32978aaf7efee9::t_a6e9bd4ef7cccf 55
+GuildAssistant/Locales/esES.lua
+  s_32978aaf7efee9::t_23ffc88fa1fb40 1038-1117
+GuildAssistant/Sync/Comm.lua
+  s_32978aaf7efee9::t_a2ee5af5c40ea4 82-83,154-157,416,636-637,640-642,644,700,729-736,876-884
+GuildAssistant/Sync/Protocol.lua
+  s_32978aaf7efee9::t_e56db848023aaa 547-551,606
+GuildAssistant/Sync/PvPSeasonSync.lua
+  s_32978aaf7efee9::t_9a1d42d5d01e1d 8-9,19-20,23-27,32,41-53,94-125,148-152,211,316-344,397-399,437-472,651-652,673,696-702,704-712,714-719,733,776-785,791-792,797-800,805,828-831,959-982
+GuildAssistant/Sync/PvPSync.lua
+  s_32978aaf7efee9::t_9493691f3f2cd0 91-93,98-108,185-187,192
+GuildAssistant/Sync/Transfer.lua
+  s_32978aaf7efee9::t_8798ef52f880b4 199,204-207,209,215
+GuildAssistant/UI/Tabs/PvP.lua
+  s_32978aaf7efee9::t_7b9948ca652d3e 4-5,391-395,497-498,649-651,666-669
+GuildAssistant/UI/Tabs/PvPAdmin.lua
+  s_32978aaf7efee9::t_f648faad6bb9f7 80-83,256-311,412-560,566-577,634-646,657-667,700-709,744,768-780,1206-1208
+GuildAssistant/UI/ViewModelPvP.lua
+  s_32978aaf7efee9::t_c0863bf64e3f20 49,55,86,341-351,372-373,393-397,402-425,463,465-472,474-476,487-518,531,533,539-545,565-590,596-599,627-628,645-646,654-657,715-737,750,754-763,777,781-790,794-852,879-884,887-893,906-1144,1176-1191,1194,1257-1258,1273
+tests/comm_spec.lua
+  s_32978aaf7efee9::t_0be506d51833b7 346-365,1203-1204,1259,1272-1275,2115-2116,2136,2191,2197,2200,2228,2241-2284,2297-2299,2306-2332
+tests/constants_spec.lua
+  s_32978aaf7efee9::t_724dbd759b94da 13-14
+tests/platform_unmeasured_spec.lua
+  s_32978aaf7efee9::t_bd64b754bfccb0 555-609
+tests/protocol_spec.lua
+  s_32978aaf7efee9::t_57b96420e3ac90 662-663,954-999
+tests/pvp_feed_spec.lua
+  s_32978aaf7efee9::t_8e0422b761d78f 79,84,86,88-89
+tests/pvp_mission_service_spec.lua
+  s_32978aaf7efee9::t_87d8789e993a47 21,63,74-75,79-80,84-87,109-115,132-140,176-180,200-226,232-242,250,256,258-295,299-300,302,305,307-309,312,314-318,321,323-331,336,340-342,349-350,354-364,370-374,378,382-389,396-427,430-438,440,443-445,447-460,462,465-481,484-550,626,644,663,680-708,723,749-880,941-952,966
+tests/pvp_mission_tracker_spec.lua
+  s_32978aaf7efee9::t_84737a0f889ccd 146-177,238-244,255-256,262,265,269,271,273,283,287,291,295-296,301,305,309,312,315,319,330,373-586
+tests/pvp_progress_publisher_spec.lua
+  s_32978aaf7efee9::t_a159f6bc564b7b 1-190
+tests/pvp_publisher_spec.lua
+  s_32978aaf7efee9::t_d858e196c1e3c7 162-172
+tests/pvp_season_commands_spec.lua
+  s_32978aaf7efee9::t_517d2d4391bee7 302-316,338-348,356-360,363-368
+tests/pvp_season_model_spec.lua
+  s_32978aaf7efee9::t_7ae6ee75be5aa5 7,168-191,229-381,403-410,450
+tests/pvp_season_service_spec.lua
+  s_32978aaf7efee9::t_e640f51e4bbb74 55-57,71-72,568-605,662-675,889-943
+tests/pvp_season_sync_spec.lua
+  s_32978aaf7efee9::t_4dd501d0611831 43-44,290-315,317-322,327-328,542-592,994,1011,1017-1063,1075,1124,1204,1244,1249-1435
+tests/roster_sync_spec.lua
+  s_32978aaf7efee9::t_f79634c565175d 80,82
+tests/store_spec.lua
+  s_32978aaf7efee9::t_7a40395e8128a6 365-368,376,381,396,401,475,683-779
+tests/transfer_spec.lua
+  s_32978aaf7efee9::t_a74dd850af87b4 533-536,613-625
+tests/view_model_pvp_spec.lua
+  s_32978aaf7efee9::t_21f11be7a5a475 12,14,40,88,91,414,513-563,653-658,674-1042
+tests/support/intel_stub.lua
+  s_3e45109080fddd::t_b2f9c8d75198f4 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6405ac62d1196ff7d14d569d88f9cf87331325f0",
+  "prompts": {},
+  "sessions": {
+    "s_32978aaf7efee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e5c844-e38a-4f46-ba40-0ea2890d9363",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    },
+    "s_3e45109080fddd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a4738da682f46ef75",
+        "model": "unknown"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
