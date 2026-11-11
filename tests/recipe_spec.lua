@@ -102,6 +102,18 @@ describe("RecipeService", function()
     assert.are.equal(2, index.members)
     assert.are.equal("Alchemy", index.professions[171])
   end)
+
+  it("lists a crafter once when the same recipe is in two of their professions", function()
+    local received = {
+      ["Ann-R"] = {
+        [171] = { name = "Alchemy", ids = { 2 } },
+        [164] = { name = "Smithing", ids = { 2, 3 } },
+      },
+    }
+    local index = RecipeService.Index(nil, received)
+    assert.are.same({ "Ann-R" }, index.recipes[2].crafters)
+    assert.are.same({ "Ann-R" }, index.recipes[3].crafters)
+  end)
 end)
 
 describe("RECIPES on the wire", function()

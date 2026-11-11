@@ -25,20 +25,7 @@ local state = {
 }
 
 local PROFESSIONS = ns.Locale.Table(function()
-  return {
-    L("Alchemy"),
-    L("Blacksmithing"),
-    L("Enchanting"),
-    L("Engineering"),
-    L("Herbalism"),
-    L("Leatherworking"),
-    L("Mining"),
-    L("Skinning"),
-    L("Tailoring"),
-    L("Cooking"),
-    L("Fishing"),
-    L("First Aid"),
-  }
+  return ns.Professions.List()
 end)
 
 local function resetForm()
@@ -183,7 +170,8 @@ local function kindControls(card, fields)
     end
     Kit.Dropdown(profession, {
       items = items,
-      value = fields.profession ~= "" and fields.profession or nil,
+      -- In the language of the addon, so a rule saved in the other language still shows its profession.
+      value = fields.profession ~= "" and ns.Professions.Name(fields.profession) or nil,
       placeholder = L("Pick a profession"),
       disabled = view.locked,
       onChange = function(value)

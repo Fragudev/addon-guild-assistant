@@ -36,6 +36,7 @@ local function load_window(locale)
     "Domain/LootModel",
     "Domain/LootService",
     "Domain/TemplateService",
+    "Domain/Professions",
     "Domain/ReadinessService",
     "Domain/ReadinessRules",
     "Domain/ProfileService",

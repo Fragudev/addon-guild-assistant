@@ -248,19 +248,24 @@ describe("MapPins frames", function()
     end
   end)
 
-  it("builds a 12 px pin for the minimap and a 14 px pin for the world map", function()
+  it("builds a 15 px pin for the minimap and an 18 px pin for the world map", function()
     local mini, world = MapPins.BuildPin("minimap"), MapPins.BuildPin("worldmap")
-    assert.are.same({ 12, 12 }, { mini.width, mini.height })
-    assert.are.same({ 14, 14 }, { world.width, world.height })
+    assert.are.same({ 15, 15 }, { mini.width, mini.height })
+    assert.are.same({ 18, 18 }, { world.width, world.height })
     assert.is_truthy(mini.border)
     assert.is_truthy(mini.icon)
   end)
 
-  it("shows the class icon with a border in the class colour", function()
+  it("draws the border as the diamond texture, so the pin does not look like a party member", function()
+    local frame = MapPins.BuildPin("minimap")
+    assert.are.equal("Interface\\AddOns\\GuildAssistant\\Media\\Icons\\pin-diamond", frame.border.texture)
+  end)
+
+  it("shows the class icon in a diamond border in the class colour, fully opaque", function()
     local frame = MapPins.BuildPin("minimap")
     MapPins.DressPin(frame, pin("Ann", { sameLayer = true }))
     assert.are.equal("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES", frame.icon.texture)
-    assert.are.same({ 0.25, 0.78, 0.92, 1 }, frame.border.color)
+    assert.are.same({ 0.25, 0.78, 0.92, 1 }, frame.border.vertex)
     assert.are.equal(1, frame.alpha)
   end)
 
@@ -268,11 +273,41 @@ describe("MapPins frames", function()
     local frame = MapPins.BuildPin("worldmap")
     MapPins.DressPin(frame, pin("Ann", { class = "UNKNOWN", sameLayer = false }))
     assert.are.equal("Interface\\Buttons\\WHITE8X8", frame.icon.texture)
-    assert.are.same({ 0.5, 0.5, 0.5, 1 }, frame.border.color)
+    assert.are.same({ 0.5, 0.5, 0.5, 1 }, frame.border.vertex)
     assert.are.equal(0.5, frame.alpha)
     MapPins.DressPin(frame, pin("Ann", { class = false }))
     assert.are.equal("Interface\\Buttons\\WHITE8X8", frame.icon.texture)
     assert.are.equal(1, frame.alpha)
+  end)
+
+  it("masks the icon to the same diamond when the client has mask textures, and builds without them", function()
+    local created = nil
+    local realCreateFrame = _G.CreateFrame
+    _G.CreateFrame = function(...)
+      local frame = realCreateFrame(...)
+      frame.CreateMaskTexture = function()
+        created = {
+          SetTexture = function(self, path)
+            self.texture = path
+          end,
+          SetAllPoints = function(self, target)
+            self.target = target
+          end,
+        }
+        return created
+      end
+      return frame
+    end
+    local ok, frame = pcall(MapPins.BuildPin, "minimap")
+    _G.CreateFrame = realCreateFrame
+    assert.is_true(ok)
+    assert.are.equal(created, frame.mask)
+    assert.are.equal("Interface\\AddOns\\GuildAssistant\\Media\\Icons\\pin-diamond", frame.mask.texture)
+    assert.are.equal(frame.icon, frame.mask.target)
+    assert.has_no.errors(function()
+      MapPins.DressPin(frame, pin("Ann"))
+    end)
+    assert.is_nil(MapPins.BuildPin("minimap").mask)
   end)
 
   it("falls back to the grey dot when the client has no class tables", function()

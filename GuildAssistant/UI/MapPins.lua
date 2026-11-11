@@ -2,15 +2,23 @@ local _, ns = ...
 
 -- The guildmates on the minimap and the world map. This is the only file that touches HereBeDragons: it places a
 -- pooled pin frame per guildmate through the library's icon calls, and does nothing when the library is missing.
+-- A pin is a class icon inside a diamond: the diamond keeps it apart from the round pins Blizzard draws for the party
+-- and the raid, and its border carries the class colour. The pin is always fully opaque, except half transparent on
+-- another layer, so it stays readable over any map.
 -- The decisions (pooling, which maps, coalescing) are apart from the frames so they can be tested with fakes; the
 -- frames themselves (BuildPin) are client-only.
 local MapPins = {}
 
 local L = ns.L
 
-local MINIMAP_SIZE, WORLDMAP_SIZE = 12, 14
+-- A diamond shows about half of its square, so the pins are a little bigger than a square pin would be.
+local MINIMAP_SIZE, WORLDMAP_SIZE = 15, 18
 local CLASS_TEXTURE = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
 local DOT_TEXTURE = "Interface\\Buttons\\WHITE8X8"
+-- The border is the addon's own anti-aliased diamond (Media/Icons, registered in UI/Kit/Icons) tinted at runtime, and
+-- the same diamond masks the smaller icon on top of it, which leaves a clean diamond-shaped border.
+local DIAMOND_TEXTURE = "Interface\\AddOns\\GuildAssistant\\Media\\Icons\\pin-diamond"
+local RING_WIDTH = 3
 local GREY = { 0.5, 0.5, 0.5 }
 local GREEN = { 0.3, 1, 0.3 }
 
@@ -39,13 +47,13 @@ local function classColor(class)
   return GREY
 end
 
--- Dresses a pin frame for `pin`: the class icon with a thin border in the class colour, or a grey dot when the class
--- is unknown, and half transparent when the member is on another layer.
+-- Dresses a pin frame for `pin`: the class icon inside a diamond border in the class colour, or a grey dot when the
+-- class is unknown, and half transparent when the member is on another layer.
 function MapPins.DressPin(frame, pin)
   frame.pin = pin
   local coords = pin.class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[pin.class]
   local color = classColor(pin.class)
-  frame.border:SetColorTexture(color[1], color[2], color[3], 1)
+  frame.border:SetVertexColor(color[1], color[2], color[3], 1)
   if coords then
     frame.icon:SetTexture(CLASS_TEXTURE)
     frame.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
@@ -73,17 +81,26 @@ local function showTooltip(frame)
   GameTooltip:Show()
 end
 
--- A new pin frame of `kind` ("minimap" or "worldmap"): a border square with the icon inside. Client only.
+-- A new pin frame of `kind` ("minimap" or "worldmap"): a diamond with the diamond-masked icon inside. Client only.
 function MapPins.BuildPin(kind)
   local size = kind == "minimap" and MINIMAP_SIZE or WORLDMAP_SIZE
   local frame = CreateFrame("Frame", nil, UIParent)
   frame:SetSize(size, size)
   frame:EnableMouse(true)
   frame.border = frame:CreateTexture(nil, "BACKGROUND")
+  frame.border:SetTexture(DIAMOND_TEXTURE)
   frame.border:SetAllPoints(frame)
   frame.icon = frame:CreateTexture(nil, "ARTWORK")
-  frame.icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
-  frame.icon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+  frame.icon:SetPoint("TOPLEFT", frame, "TOPLEFT", RING_WIDTH, -RING_WIDTH)
+  frame.icon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -RING_WIDTH, RING_WIDTH)
+  -- Clients and fakes without mask textures keep a square icon; the border still shows.
+  local mask = frame.CreateMaskTexture and frame:CreateMaskTexture()
+  if mask then
+    mask:SetTexture(DIAMOND_TEXTURE)
+    mask:SetAllPoints(frame.icon)
+    frame.icon:AddMaskTexture(mask)
+    frame.mask = mask
+  end
   frame:SetScript("OnEnter", showTooltip)
   frame:SetScript("OnLeave", function()
     if GameTooltip then
