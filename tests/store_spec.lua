@@ -362,8 +362,10 @@ describe("Store migration to schema 12", function()
   it("creates the mission log of a new character", function()
     local db = Store.Load({})
     local char = Store.GetChar(db, "New-Realm")
-    assert.are.same({}, char.pvpMissions.kills)
-    assert.are.same({}, char.pvpMissions.claims)
+    assert.are.same({}, char.pvpLog.events)
+    assert.are.equal(1, char.pvpLog.version)
+    assert.are.same({}, char.pvpClaims)
+    assert.is_nil(char.pvpMissions)
   end)
 end)
 
@@ -371,12 +373,12 @@ describe("Store migration to schema 13 (one table per guild)", function()
   local Store, Constants = load_store_current()
 
   it("is the current schema", function()
-    assert.are.equal(18, Constants.SCHEMA_VERSION)
+    assert.are.equal(19, Constants.SCHEMA_VERSION)
   end)
 
   it("builds the root layout from an empty database", function()
     local db = Store.Load(nil)
-    assert.are.equal(18, db.schemaVersion)
+    assert.are.equal(19, db.schemaVersion)
     assert.are.same({}, db.guilds)
     assert.are.same({ minimap = {}, pvp = {} }, db.settings)
     assert.are.same({}, db.chars)
@@ -391,12 +393,12 @@ describe("Store migration to schema 13 (one table per guild)", function()
     local db = Store.Load(raw)
     assert.are.equal(raw, db)
     assert.is_nil(db.global)
-    assert.are.equal(18, db.schemaVersion)
+    assert.are.equal(19, db.schemaVersion)
     assert.are.equal(60, db.chars["Me-Realm"].profile.level)
     db.settings.language = "es"
     local again = Store.Load(db)
     assert.are.equal("es", again.settings.language)
-    assert.are.equal(18, again.schemaVersion)
+    assert.are.equal(19, again.schemaVersion)
   end)
 
   it("refuses data from a newer schema", function()
@@ -470,7 +472,7 @@ describe("Store.View", function()
     assert.are.equal(db.settings, view.settings)
     assert.are.equal(db.chars, view.chars)
     assert.are.equal(db, view.root)
-    assert.are.equal(18, view.schemaVersion)
+    assert.are.equal(19, view.schemaVersion)
     for _, value in pairs(db) do
       assert.are_not.equal(view, value)
     end
@@ -694,7 +696,7 @@ describe("Store migration 18 (installs per guild)", function()
     local db = Store.Load(raw)
     assert.are.same({}, db.guilds["club:1"].installs)
     assert.are.same({ Ann = { version = "1.0.0", seenAt = 5 } }, db.guilds["club:2"].installs)
-    assert.are.equal(18, db.schemaVersion)
+    assert.are.equal(19, db.schemaVersion)
 
     db.guilds["club:1"].installs.Bob = { seenAt = 9 }
     local again = Store.Load(db)
@@ -706,5 +708,102 @@ describe("Store migration 18 (installs per guild)", function()
     local db = Store.Load(nil)
     Store.ForGuild(db, "club:1").installs.Ann = { seenAt = 1 }
     assert.are.same({}, Store.ForGuild(db, "club:2").installs)
+  end)
+end)
+
+-- Schema 19: the PvP log does not belong to a season. Characters are account-wide (db.chars), whatever their guild.
+describe("Store migration 19 (season-independent PvP log)", function()
+  local Store, Constants = load_store_current()
+
+  local function at17()
+    return {
+      schemaVersion = 17,
+      guilds = { ["club:1"] = {}, ["club:2"] = {} },
+      settings = { minimap = {}, pvp = {} },
+      chars = {
+        ["Ann-Realm"] = {
+          pvpMissions = {
+            seasonId = "s1",
+            kills = {
+              { at = 300, victim = "B", place = "world" },
+              { at = 100, victim = "A", place = "bg", mapId = 489 },
+              { at = 200, bgWin = true, mapId = 489 },
+              { victim = "no time" },
+            },
+            claims = { ["c1"] = { claim = { id = "c1" }, state = "pending" } },
+          },
+        },
+        ["Bob-Realm"] = {
+          pvpMissions = { seasonId = "s9", kills = { { at = 50, victim = "Z", place = "world" } }, claims = {} },
+        },
+        ["Cid-Realm"] = {},
+      },
+    }
+  end
+
+  it("moves the kills and the battleground wins of every character into its pvpLog, oldest first", function()
+    local db = Store.Load(at17())
+    local events = db.chars["Ann-Realm"].pvpLog.events
+    assert.are.equal(3, #events)
+    assert.are.same({ 100, 200, 300 }, { events[1].at, events[2].at, events[3].at })
+    assert.are.equal("kill", events[1].kind)
+    assert.is_true(events[1].honor)
+    assert.are.same({ kind = "bg", result = "win", at = 200, mapId = 489 }, events[2])
+    assert.are.equal("B", events[3].victim)
+    assert.are.equal(1, db.chars["Ann-Realm"].pvpLog.version)
+    assert.are.equal("Z", db.chars["Bob-Realm"].pvpLog.events[1].victim)
+  end)
+
+  it("keeps the claims under their season and removes the old table", function()
+    local db = Store.Load(at17())
+    assert.are.same({ claim = { id = "c1" }, state = "pending" }, db.chars["Ann-Realm"].pvpClaims.s1.c1)
+    assert.are.same({ s9 = {} }, db.chars["Bob-Realm"].pvpClaims)
+    for _, char in pairs(db.chars) do
+      assert.is_nil(char.pvpMissions)
+    end
+    assert.are.same({ events = {}, version = 1 }, db.chars["Cid-Realm"].pvpLog)
+    assert.are.same({}, db.chars["Cid-Realm"].pvpClaims)
+  end)
+
+  it("leaves the data of the two guilds alone", function()
+    local raw = at17()
+    raw.guilds["club:1"].blacklist = { x = { name = "X" } }
+    local db = Store.Load(raw)
+    assert.are.same({ x = { name = "X" } }, db.guilds["club:1"].blacklist)
+    assert.is_not_nil(db.guilds["club:2"])
+  end)
+
+  it("is idempotent: loading again changes nothing", function()
+    local db = Store.Load(at17())
+    local before = {}
+    for key, char in pairs(db.chars) do
+      before[key] = #char.pvpLog.events
+    end
+    db.schemaVersion = 18
+    local again = Store.Load(db)
+    assert.are.equal(Constants.SCHEMA_VERSION, again.schemaVersion)
+    for key, char in pairs(again.chars) do
+      assert.are.equal(before[key], #char.pvpLog.events, key)
+      assert.is_nil(char.pvpMissions)
+    end
+  end)
+
+  it("keeps only the newest PVP_LOG_EVENTS_MAX rows", function()
+    local raw = at17()
+    local kills = {}
+    for index = 1, Constants.PVP_LOG_EVENTS_MAX + 5 do
+      kills[index] = { at = index, victim = "V" .. index, place = "world" }
+    end
+    raw.chars["Ann-Realm"].pvpMissions.kills = kills
+    local events = Store.Load(raw).chars["Ann-Realm"].pvpLog.events
+    assert.are.equal(Constants.PVP_LOG_EVENTS_MAX, #events)
+    assert.are.equal(6, events[1].at)
+  end)
+
+  it("gives a new character the new tables", function()
+    local db = Store.Load(nil)
+    local char = Store.GetChar(db, "New-Realm")
+    assert.are.same({ events = {}, version = 1 }, char.pvpLog)
+    assert.are.same({}, char.pvpClaims)
   end)
 end)

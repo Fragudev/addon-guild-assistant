@@ -52,6 +52,9 @@ local function new_service(world, name, options)
       return options.role or world.roles[name]
     end,
     roleOf = function(who)
+      if options.roleOf then
+        return options.roleOf(who)
+      end
       return world.roles[who]
     end,
     send = function(messageType, payload, key)
@@ -65,6 +68,8 @@ local function new_service(world, name, options)
       closed[#closed + 1] = seasonId
     end,
     fits = options.fits,
+    rosterReady = options.rosterReady,
+    canonicalName = options.canonicalName,
   })
   service.sent, service.changes, service.closed, service.name = sent, changes, closed, name
   return service
@@ -560,6 +565,44 @@ describe("PvPSeasonService direct grants, voids and the grant list", function()
     relay(admin, officer)
   end)
 
+  it("refuses a player who is not in a roster that was read, and stores the roster's spelling", function()
+    local ready = true
+    local gm = new_service(world, "Boss", {
+      rosterReady = function()
+        return ready
+      end,
+      roleOf = function(name)
+        return ROLES[name] or ROLES[name:sub(1, 1):upper() .. name:sub(2)]
+      end,
+      canonicalName = function(name)
+        return name == "ann" and "Ann" or nil
+      end,
+    })
+    relay(admin, gm)
+    assert.are.equal("unknown_player", select(2, gm:DirectGrant("Zed", "m1")))
+    assert.are.equal("Ann", assert(gm:DirectGrant("ann", "m1")).player)
+    ready = false
+    assert.is_truthy(gm:DirectGrant("Zed", "m1"))
+  end)
+
+  it("resolves a differently spelled name before the roster check, and keeps invalid:ref first", function()
+    local gm = new_service(world, "Boss", {
+      rosterReady = function()
+        return true
+      end,
+      roleOf = function(name)
+        return ROLES[name]
+      end,
+      canonicalName = function(name)
+        return name:lower() == "ann" and "Ann" or nil
+      end,
+    })
+    relay(admin, gm)
+    assert.are.equal("Ann", assert(gm:DirectGrant("ANN", "m1")).player)
+    assert.are.equal("unknown_player", select(2, gm:DirectGrant("Anne", "m1")))
+    assert.are.equal("invalid:ref", select(2, gm:DirectGrant("a:b", "m1")))
+  end)
+
   it("lets only an admin grant without a claim, with the mission's points unless told otherwise", function()
     local grant = assert(admin:DirectGrant("Ann", "m1"))
     assert.are.equal(10, grant.points)
@@ -614,6 +657,20 @@ describe("PvPSeasonService closing a season", function()
     member = new_service(world, "Ann")
     relay(admin, officer)
     relay(admin, member)
+  end)
+
+  it("refuses to close before the guild roster is read", function()
+    local ready = false
+    local gm = new_service(world, "Boss", {
+      rosterReady = function()
+        return ready
+      end,
+    })
+    relay(admin, gm)
+    assert.are.equal("roster_not_ready", select(2, gm:CloseSeason()))
+    assert.is_truthy(gm:ActiveSeason())
+    ready = true
+    assert.is_truthy(gm:CloseSeason())
   end)
 
   it("freezes the standing, copies the prizes, sends the final and then the closed season", function()
@@ -826,6 +883,61 @@ describe("PvPSeasonService reading", function()
     relay(ann, admin)
     local queue = admin:Queue()
     assert.are.same({ "Ann", "Bob" }, { queue[1].player, queue[2].player })
+  end)
+end)
+
+describe("PvPSeasonService progress board", function()
+  local admin
+
+  local function summary(player, rows)
+    local message = assert(
+      Protocol.Validate(
+        Protocol.Build("PVP_PROGRESS", { seasonId = admin:ActiveSeason().id, rows = rows }, "p-" .. player)
+      )
+    )
+    return assert(Sync.Apply(admin:Context(), message, player))
+  end
+
+  before_each(function()
+    admin = admin_with_season(new_world())
+  end)
+
+  it("orders the members of a mission by how close they are, and says who reports the goal and who claimed", function()
+    summary("Ann", { { missionId = "m1", count = 2, goal = 5 } })
+    summary("Bob", { { missionId = "m1", count = 5, goal = 5 } })
+    summary("Cat", { { missionId = "m1", count = 4, goal = 5 } })
+    summary("Dan", { { missionId = "m1", count = 2, goal = 5 } })
+    local claim = {
+      id = "Bob:m1:" .. ns.PvPSeasonModel.PeriodKey("daily", T0 + 100) .. ":1",
+      missionId = "m1",
+      seasonId = admin:ActiveSeason().id,
+      periodKey = ns.PvPSeasonModel.PeriodKey("daily", T0 + 100),
+      player = "Bob",
+      at = T0 + 100,
+      evidence = {},
+    }
+    assert.is_true(admin:ReceiveClaim(claim, "Bob"))
+    local board = admin:ProgressBoard(admin:ActiveSeason().id)
+    local names, ready, claimed = {}, {}, {}
+    for _, row in ipairs(board.m1) do
+      names[#names + 1] = row.player
+      ready[#ready + 1] = row.ready
+      claimed[#claimed + 1] = row.claimed
+    end
+    assert.are.same({ "Bob", "Cat", "Ann", "Dan" }, names)
+    assert.are.same({ true, false, false, false }, ready)
+    assert.are.same({ true, false, false, false }, claimed)
+  end)
+
+  it("is empty for a client that holds no summaries, another season or a mission it does not know", function()
+    assert.are.same({}, admin:ProgressBoard(admin:ActiveSeason().id))
+    summary("Ann", { { missionId = "m1", count = 1, goal = 5 } })
+    assert.are.same({}, admin:ProgressBoard("other"))
+    admin.ledger.progress.Ann.rows[2] = { missionId = "ghost", count = 1, goal = 2 }
+    assert.are.equal(1, #admin:ProgressBoard(admin:ActiveSeason().id).m1)
+    assert.is_nil(admin:ProgressBoard(admin:ActiveSeason().id).ghost)
+    admin.ledger.progress = nil
+    assert.are.same({}, admin:ProgressBoard(admin:ActiveSeason().id))
   end)
 end)
 

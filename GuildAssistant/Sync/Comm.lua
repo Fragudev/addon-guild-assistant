@@ -82,6 +82,8 @@ function Comm.New(deps)
     helloReplyPending = false,
     onPeerSeen = deps.onPeerSeen,
     lastAskAt = nil,
+    -- Called with the sender of every HELLO from a gm or cogm (set by Init after the PvP missions exist).
+    onApproverHello = deps.onApproverHello,
   }, Comm)
 end
 
@@ -176,6 +178,10 @@ function Comm:HandleHello(sender, payload)
   local known = self.peers[sender] ~= nil
   if not self:RememberPeer(sender, { version = payload.version }) then
     return false, "peers_full"
+  end
+  -- A gm or cogm is online: the claims that no approver has seen yet can be sent again (PvPMissionService decides).
+  if self.onApproverHello and ns.PermissionService.IsGlobal(self.roleOf(sender)) then
+    pcall(self.onApproverHello, sender)
   end
   if not known or payload.ask then
     self:MaybeReplyHello()
@@ -437,7 +443,7 @@ function Comm:HandleWhisper(text, sender)
     if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
       return false, "duplicate"
     end
-    return self:HandleLedgerData(sender, message.p)
+    return self:HandleLedgerData(sender, message.p, role)
   end
   if message.t ~= "SYNC_DATA" then
     return false, "wrong_channel"
@@ -657,13 +663,15 @@ function Comm:RequestLedger()
     return false, "cooldown"
   end
   self.lastLedgerRequestAt = now
-  return self:Send("PVP_LEDGER_REQ", ns.PvPSeasonSync.RequestPayload(self.pvpSeason, self.pvpSeason.activeId), "PLR")
+  local payload = ns.PvPSeasonSync.RequestPayload(self.pvpSeason, self.pvpSeason.activeId, self:IsPvPApprover())
+  return self:Send("PVP_LEDGER_REQ", payload, "PLR")
 end
 
--- Can this client answer a ledger request? Only a leader (raid_manage): they are the ones a requester accepts a
--- catch-up from.
+-- Can this client answer a ledger request? Only a gm or cogm: every record of a catch-up is an admin record, and a
+-- requester only believes the author an item names when the relay is a gm or cogm (see PvPSeasonSync.ApplyItems), so
+-- the answer of anyone else would be thrown away.
 function Comm:IsLedgerRelay()
-  return ns.PermissionService.Can(self.ownRole and self.ownRole(), "raid_manage")
+  return ns.PermissionService.IsGlobal(self.ownRole and self.ownRole())
 end
 
 -- A ledger request from a late joiner: answered after a random delay, at most once a minute per requester, and only
@@ -719,7 +727,7 @@ end
 function Comm:SendLedger(target, request)
   local constants = ns.Constants
   local sync = ns.PvPSeasonSync
-  local items = sync.LedgerItems(self.pvpSeason, sync.ScopeFor(self.pvpSeason, request))
+  local items = sync.LedgerItems(self.pvpSeason, sync.ScopeFor(self.pvpSeason, request), request.queue == true)
   if #items == 0 then
     return false, "empty"
   end
@@ -748,11 +756,14 @@ function Comm:SendLedger(target, request)
   return true, count
 end
 
--- One page of a catch-up, already checked to come from a trusted relay: each item is applied as if its author had sent
--- it, through the same validation, authority and conflict rules.
-function Comm:HandleLedgerData(sender, payload)
-  local summary = ns.PvPSeasonSync.ApplyItems(self:PvPSeasonContext(), payload.items)
-  self.lastLedger = { from = sender, applied = summary.applied, total = summary.total, at = self.now() }
+-- One page of a catch-up, already checked to come from a leader: each item is applied as if its author had sent it,
+-- through the same validation, authority and conflict rules, but an author other than the relay itself is only
+-- believed when the relay is a gm or cogm.
+function Comm:HandleLedgerData(sender, payload, role)
+  local relay = { sender = sender, global = ns.PermissionService.IsGlobal(role) }
+  local summary = ns.PvPSeasonSync.ApplyItems(self:PvPSeasonContext(), payload.items, relay)
+  self.lastLedger =
+    { from = sender, applied = summary.applied, total = summary.total, forged = summary.forged, at = self.now() }
   if summary.applied > 0 and self.onPvPSeasonChange then
     self.onPvPSeasonChange("PVP_LEDGER_DATA")
   end
@@ -890,6 +901,15 @@ end
 -- The own counters. Keyed, so a newer message replaces one still waiting in the queue.
 function Comm:SendPvPStats(payload)
   return self:Send("PVP_STATS", payload, "pvp")
+end
+
+-- The own progress in the missions. Live only: refused during the lockdown instead of queued, because the next one
+-- carries the current numbers. Keyed, so it never piles up.
+function Comm:SendPvPProgress(payload)
+  if not self.queue.guard:CanSend() then
+    return false, "locked"
+  end
+  return self:Send("PVP_PROGRESS", payload, "PP")
 end
 
 -- A kill for the feed. Never queued: during the lockdown it is refused instead of waiting, because a kill that

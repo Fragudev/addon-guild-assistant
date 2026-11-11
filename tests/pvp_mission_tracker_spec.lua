@@ -143,6 +143,38 @@ describe("PvPMissionTracker count", function()
   end)
 end)
 
+describe("PvPMissionTracker bounties", function()
+  it("counts only the kills flagged as guild KOS, with or without a target", function()
+    local log = {
+      kill(NOW - 4, "Zed", { kos = true }),
+      kill(NOW - 3, "Amy", { kos = true }),
+      kill(NOW - 2, "Bob"),
+      kill(NOW - 1, "Cal", { kos = true }),
+    }
+    local any = progress(mission({ kind = "kos", count = 3 }), log)
+    assert.are.same({ { label = "Kills", done = 3, total = 3 } }, any.bars)
+    assert.is_true(any.complete)
+    assert.is_true(any.evidence[1].kos)
+    local named = progress(mission({ kind = "kos", count = 1, target = "zed" }), log)
+    assert.is_true(named.complete)
+    assert.are.equal(1, #named.evidence)
+    assert.are.equal("Zed", named.evidence[1].victim)
+  end)
+
+  it("does not count a target kill that was not on the KOS at that moment", function()
+    local result = progress(mission({ kind = "kos", count = 1, target = "Bob" }), { kill(NOW - 1, "Bob") })
+    assert.is_false(result.complete)
+    assert.is_false(result.claimable)
+  end)
+
+  it("applies place and zones as for kills, and plain kills ignore the flag", function()
+    local log = { kill(NOW - 1, "Zed", { kos = true, place = "bg", mapId = 1 }) }
+    assert.is_false(progress(mission({ kind = "kos", count = 1, place = "world" }), log).complete)
+    assert.is_false(progress(mission({ kind = "kos", count = 1, zones = { 1411 } }), log).complete)
+    assert.is_true(progress(mission({ kind = "kills", count = 1 }), log).complete)
+  end)
+end)
+
 describe("PvPMissionTracker victim cap", function()
   it("counts one victim at most three times per server day, in time order", function()
     local log = {}
@@ -203,6 +235,13 @@ describe("PvPMissionTracker distinct names", function()
 end)
 
 describe("PvPMissionTracker class and race", function()
+  -- The guild of these tests is Alliance: it hunts the Horde classes and races.
+  local ALLIANCE_CLASSES = Constants.PVP_ENEMY_CLASSES_BY_FACTION.Alliance
+  local ALLIANCE_RACES = Constants.PVP_ENEMY_RACES_BY_FACTION.Alliance
+  local function alliance(m, log)
+    return Tracker.Progress(m, log, NOW, {}, SEASON, "Alliance")
+  end
+
   local function seen(classes, races)
     local log = {}
     for index = 1, math.max(#classes, #races) do
@@ -213,26 +252,25 @@ describe("PvPMissionTracker class and race", function()
 
   it("fills the class bar with the distinct classes and ignores repeats and unknown tokens", function()
     local log = seen({ "MAGE", "MAGE", "ROGUE", "PALADIN" }, {})
-    local result = progress(mission({ distinct = "class" }), log)
-    assert.are.same({ { label = "Classes", done = 2, total = #Constants.PVP_ENEMY_CLASSES } }, result.bars)
+    local result = alliance(mission({ distinct = "class" }), log)
+    assert.are.same({ { label = "Classes", done = 2, total = #ALLIANCE_CLASSES } }, result.bars)
     assert.is_false(result.complete)
     assert.are.equal(0, result.unknown)
   end)
 
   it("completes with every enemy class", function()
-    local result =
-      progress(mission({ distinct = "class" }, { repeatKind = "once" }), seen(Constants.PVP_ENEMY_CLASSES, {}))
+    local result = alliance(mission({ distinct = "class" }, { repeatKind = "once" }), seen(ALLIANCE_CLASSES, {}))
     assert.is_true(result.complete)
     assert.is_true(result.claimable)
-    assert.are.equal(#Constants.PVP_ENEMY_CLASSES, #result.evidence)
+    assert.are.equal(#ALLIANCE_CLASSES, #result.evidence)
   end)
 
   it("counts the kills without a class as unknown, lists them, and allows a claim the approver decides", function()
-    local classes = { unpack(Constants.PVP_ENEMY_CLASSES, 1, #Constants.PVP_ENEMY_CLASSES - 1) }
+    local classes = { unpack(ALLIANCE_CLASSES, 1, #ALLIANCE_CLASSES - 1) }
     local log = seen(classes, {})
-    assert.is_false(progress(mission({ distinct = "class" }, { repeatKind = "once" }), log).claimable)
+    assert.is_false(alliance(mission({ distinct = "class" }, { repeatKind = "once" }), log).claimable)
     log[#log + 1] = kill(NOW - 1, "Mystery")
-    local result = progress(mission({ distinct = "class" }, { repeatKind = "once" }), log)
+    local result = alliance(mission({ distinct = "class" }, { repeatKind = "once" }), log)
     assert.is_false(result.complete)
     assert.are.equal(1, result.unknown)
     assert.is_true(result.couldComplete)
@@ -242,43 +280,43 @@ describe("PvPMissionTracker class and race", function()
   end)
 
   it("counts one unknown victim once for the could-complete test", function()
-    local classes = { unpack(Constants.PVP_ENEMY_CLASSES, 1, #Constants.PVP_ENEMY_CLASSES - 2) }
+    local classes = { unpack(ALLIANCE_CLASSES, 1, #ALLIANCE_CLASSES - 2) }
     local log = seen(classes, {})
     log[#log + 1] = kill(NOW - 3, "Mystery")
     log[#log + 1] = kill(NOW - 2, "Mystery")
-    local result = progress(mission({ distinct = "class" }, { repeatKind = "once" }), log)
+    local result = alliance(mission({ distinct = "class" }, { repeatKind = "once" }), log)
     assert.are.equal(2, result.unknown)
     assert.is_false(result.couldComplete)
     log[#log + 1] = kill(NOW - 1, "Other")
-    assert.is_true(progress(mission({ distinct = "class" }, { repeatKind = "once" }), log).couldComplete)
+    assert.is_true(alliance(mission({ distinct = "class" }, { repeatKind = "once" }), log).couldComplete)
   end)
 
   it("fills the race bar on its own", function()
-    local result = progress(mission({ distinct = "race" }), seen({}, { "ORC", "TROLL", "ORC" }))
-    assert.are.same({ { label = "Races", done = 2, total = #Constants.PVP_ENEMY_RACES } }, result.bars)
+    local result = alliance(mission({ distinct = "race" }), seen({}, { "ORC", "TROLL", "ORC" }))
+    assert.are.same({ { label = "Races", done = 2, total = #ALLIANCE_RACES } }, result.bars)
   end)
 
   it("needs both sets for class_race and shows two bars", function()
     local log = {}
-    for index, class in ipairs(Constants.PVP_ENEMY_CLASSES) do
+    for index, class in ipairs(ALLIANCE_CLASSES) do
       log[#log + 1] = kill(NOW - 100 + index, "C" .. index, { class = class })
     end
     local m = mission({ distinct = "class_race" }, { repeatKind = "once" })
-    local result = progress(m, log)
+    local result = alliance(m, log)
     assert.are.equal(2, #result.bars)
     assert.are.equal("Classes", result.bars[1].label)
     assert.are.equal("Races", result.bars[2].label)
-    assert.are.equal(#Constants.PVP_ENEMY_CLASSES, result.bars[1].done)
+    assert.are.equal(#ALLIANCE_CLASSES, result.bars[1].done)
     assert.are.equal(0, result.bars[2].done)
     assert.is_false(result.complete)
-    assert.are.equal(#Constants.PVP_ENEMY_CLASSES, result.unknown)
+    assert.are.equal(#ALLIANCE_CLASSES, result.unknown)
     -- the unknown races could still fill the bar, so the approver decides
     assert.is_true(result.couldComplete)
-    for index, race in ipairs(Constants.PVP_ENEMY_RACES) do
+    for index, race in ipairs(ALLIANCE_RACES) do
       log[#log + 1] = kill(NOW - 50 + index, "R" .. index, { class = "MAGE", race = race })
     end
     log[#log + 1] = kill(NOW - 10, "Late", { class = "MAGE", race = "ORC" })
-    result = progress(m, log)
+    result = alliance(m, log)
     assert.is_true(result.complete)
     assert.is_true(result.claimable)
   end)
@@ -289,7 +327,7 @@ describe("PvPMissionTracker class and race", function()
       kill(NOW - 2, "B", { class = "ROGUE" }),
       kill(NOW - 1, "C", { race = "TROLL" }),
     }
-    local result = progress(mission({ distinct = "class_race" }), log)
+    local result = alliance(mission({ distinct = "class_race" }), log)
     assert.are.same({ "A", "B", "C" }, {
       result.evidence[1].victim,
       result.evidence[2].victim,
@@ -329,6 +367,220 @@ describe("PvPMissionTracker battleground wins and manual missions", function()
     assert.are.same({}, result.evidence)
     local claims = { x = { claim = { missionId = "m1", periodKey = "20261020" } } }
     assert.is_false(progress(m, {}, claims).claimable)
+  end)
+end)
+
+describe("PvPMissionTracker faction and battleground rows", function()
+  it("derives the enemy classes and races from the faction of the player", function()
+    local classes, races = Tracker.EnemySets("Alliance")
+    assert.are.same(Constants.PVP_ENEMY_CLASSES_BY_FACTION.Alliance, classes)
+    assert.are.same(Constants.PVP_ENEMY_RACES_BY_FACTION.Alliance, races)
+    assert.are.same({ "DWARF", "GNOME", "HUMAN", "NIGHTELF" }, select(2, Tracker.EnemySets("Horde")))
+    assert.are.same(
+      { "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "WARLOCK", "WARRIOR" },
+      (Tracker.EnemySets("Horde"))
+    )
+    -- an unreadable faction assumes no side: there are no sets at all
+    assert.is_nil((Tracker.EnemySets(nil)))
+    assert.is_nil(select(2, Tracker.EnemySets("Neutral")))
+  end)
+
+  it("hunts classes the other side has: a Horde player counts the paladins, an Alliance player the shamans", function()
+    local log = {
+      kill(NOW - 2, "A", { class = "PALADIN" }),
+      kill(NOW - 1, "B", { class = "SHAMAN" }),
+    }
+    local m = mission({ distinct = "class" })
+    assert.are.same(
+      { { label = "Classes", done = 1, total = 8 } },
+      Tracker.Progress(m, log, NOW, {}, SEASON, "Horde").bars
+    )
+    assert.are.same(
+      { { label = "Classes", done = 1, total = 8 } },
+      Tracker.Progress(m, log, NOW, {}, SEASON, "Alliance").bars
+    )
+    local horde = Tracker.Progress(m, { log[1] }, NOW, {}, SEASON, "Horde")
+    local alliance = Tracker.Progress(m, { log[1] }, NOW, {}, SEASON, "Alliance")
+    assert.are.equal(1, horde.bars[1].done)
+    assert.are.equal(0, alliance.bars[1].done)
+  end)
+
+  it("counts nothing and never completes a class or race mission while the faction is unknown", function()
+    local log = {}
+    for index, class in ipairs(Constants.PVP_ENEMY_CLASSES_BY_FACTION.Alliance) do
+      log[index] = kill(NOW - 100 + index, "P" .. index, { class = class })
+    end
+    for _, kind in ipairs({ "class", "race", "class_race" }) do
+      local result = Tracker.Progress(mission({ distinct = kind }, { repeatKind = "once" }), log, NOW, {}, SEASON, nil)
+      assert.are.same({}, result.bars, kind)
+      assert.is_true(result.unknownFaction, kind)
+      assert.is_false(result.complete, kind)
+      assert.is_false(result.claimable, kind)
+      assert.are.equal(0, result.completions, kind)
+    end
+    -- the other missions do not care about the faction
+    assert.is_true(
+      Tracker.Progress(
+        mission({ count = 3 }),
+        { kill(NOW - 3, "A"), kill(NOW - 2, "B"), kill(NOW - 1, "C") },
+        NOW,
+        {},
+        SEASON,
+        nil
+      ).complete
+    )
+  end)
+
+  it("fills the race bar with the races of the other side for a Horde player", function()
+    local log = {
+      kill(NOW - 3, "A", { race = "HUMAN" }),
+      kill(NOW - 2, "B", { race = "ORC" }),
+      kill(NOW - 1, "C", { race = "GNOME" }),
+    }
+    local m = mission({ distinct = "race" })
+    local horde = Tracker.Progress(m, log, NOW, {}, SEASON, "Horde")
+    assert.are.same({ { label = "Races", done = 2, total = 4 } }, horde.bars)
+    local alliance = Tracker.Progress(m, log, NOW, {}, SEASON, "Alliance")
+    assert.are.same({ { label = "Races", done = 1, total = 4 } }, alliance.bars)
+  end)
+
+  it("counts a battleground result of the log by its kind, and a loss is not a win or a kill", function()
+    local log = {
+      { kind = "bg", result = "win", bg = "wsg", at = NOW - 3, mapId = 1459 },
+      { kind = "bg", result = "loss", bg = "wsg", at = NOW - 2, mapId = 1459 },
+      kill(NOW - 1, "Zed"),
+    }
+    local result = progress(mission({ kind = "bg_wins", count = 2 }), log)
+    assert.are.equal(1, result.bars[1].done)
+    assert.are.same({ at = NOW - 3, bgWin = true, mapId = 1459, bg = "wsg" }, result.evidence[1])
+    assert.are.equal(1, progress(mission({ count = 5 }), log).bars[1].done)
+  end)
+end)
+
+describe("PvPMissionTracker mission options", function()
+  local function bg(at, result, which, mapId)
+    return { kind = "bg", result = result, bg = which, at = at, mapId = mapId or 1459 }
+  end
+
+  it("counts the battlegrounds played, wins and losses, and keeps a win-only count for bg_wins", function()
+    local log = { bg(NOW - 3, "win", "wsg"), bg(NOW - 2, "loss", "ab"), bg(NOW - 1, "loss", "av"), kill(NOW, "Zed") }
+    local played = progress(mission({ kind = "bg_played", count = 3 }), log)
+    assert.are.same({ { label = "Battlegrounds", done = 3, total = 3 } }, played.bars)
+    assert.is_true(played.complete)
+    assert.are.same({ at = NOW - 2, bgWin = false, mapId = 1459, bg = "ab" }, played.evidence[2])
+    assert.are.equal(1, progress(mission({ kind = "bg_wins", count = 3 }), log).bars[1].done)
+  end)
+
+  it("filters the battlegrounds by type, and a row without a type never matches the filter", function()
+    local log = { bg(NOW - 3, "win", "wsg"), bg(NOW - 2, "win", "ab"), { kind = "bg", result = "win", at = NOW - 1 } }
+    assert.are.equal(1, progress(mission({ kind = "bg_wins", count = 5, bgs = { "ab" } }), log).bars[1].done)
+    assert.are.equal(2, progress(mission({ kind = "bg_wins", count = 5, bgs = { "ab", "wsg" } }), log).bars[1].done)
+    assert.are.equal(3, progress(mission({ kind = "bg_wins", count = 5, bgs = {} }), log).bars[1].done)
+    assert.are.equal(2, progress(mission({ kind = "bg_played", count = 5, bgs = { "wsg", "ab" } }), log).bars[1].done)
+  end)
+
+  it("keeps the old rows readable: a legacy win counts for wins and for played", function()
+    local log = { { at = NOW - 1, bgWin = true, mapId = 1459 } }
+    assert.are.equal(1, progress(mission({ kind = "bg_wins", count = 1 }), log).bars[1].done)
+    assert.are.equal(1, progress(mission({ kind = "bg_played", count = 1 }), log).bars[1].done)
+  end)
+
+  it("filters the victims by class and by race; an unknown value does not match a filter", function()
+    local log = {
+      kill(NOW - 4, "A", { class = "MAGE", race = "ORC" }),
+      kill(NOW - 3, "B", { class = "ROGUE", race = "TROLL" }),
+      kill(NOW - 2, "C", { class = "MAGE" }),
+      kill(NOW - 1, "D", { race = "ORC" }),
+    }
+    assert.are.equal(2, progress(mission({ count = 5, victimClasses = { "MAGE" } }), log).bars[1].done)
+    assert.are.equal(2, progress(mission({ count = 5, victimRaces = { "ORC" } }), log).bars[1].done)
+    assert.are.equal(
+      1,
+      progress(mission({ count = 5, victimClasses = { "MAGE" }, victimRaces = { "ORC" } }), log).bars[1].done
+    )
+    assert.are.equal(4, progress(mission({ count = 5, victimClasses = {} }), log).bars[1].done)
+  end)
+
+  it("gives a mission its own per-victim daily cap, replacing the global one", function()
+    local log = {}
+    for index = 1, 5 do
+      log[index] = kill(NOW - 10 + index, "Zed")
+    end
+    log[6] = kill(NOW - 4, "Amy", { place = "bg" })
+    -- no cap of its own: the global cap of three applies (and Amy counts)
+    assert.are.equal(4, progress(mission({ count = 10 }), log).bars[1].done)
+    assert.are.equal(1, progress(mission({ count = 10, victimCapPerDay = 1, place = "world" }), log).bars[1].done)
+    assert.are.equal(5, progress(mission({ count = 10, victimCapPerDay = 0, place = "world" }), log).bars[1].done)
+    assert.are.equal(6, progress(mission({ count = 10, victimCapPerDay = 0 }), log).bars[1].done)
+    assert.are.equal(5, progress(mission({ count = 10, victimCapPerDay = 5, place = "world" }), log).bars[1].done)
+  end)
+
+  it("applies the cap of a mission to the rows that match it, not to the whole log", function()
+    -- three kills of Zed in the world and two in a battleground: the global cap would keep three of the five, the
+    -- mission cap of two counts the battleground ones on their own
+    local log = {}
+    for index = 1, 3 do
+      log[#log + 1] = kill(NOW - 20 + index, "Zed")
+    end
+    for index = 1, 2 do
+      log[#log + 1] = kill(NOW - 10 + index, "Zed", { place = "bg" })
+    end
+    assert.are.equal(2, progress(mission({ count = 10, place = "bg", victimCapPerDay = 2 }), log).bars[1].done)
+    assert.are.equal(0, progress(mission({ count = 10, place = "bg" }), log).bars[1].done)
+  end)
+
+  it("needs the guild members in the group the mission asks for", function()
+    local log = {
+      kill(NOW - 3, "A", { guildInGroup = 3 }),
+      kill(NOW - 2, "B", { guildInGroup = 1 }),
+      kill(NOW - 1, "C"),
+    }
+    local result = progress(mission({ count = 5, minGuildInGroup = 2 }), log)
+    assert.are.equal(1, result.bars[1].done)
+    assert.are.equal(3, result.evidence[1].guild)
+    assert.are.equal(3, progress(mission({ count = 5 }), log).bars[1].done)
+    assert.is_nil(progress(mission({ count = 5 }), log).evidence[1].guild)
+  end)
+
+  it("counts only what happened inside the window of the mission", function()
+    local log = { kill(NOW - 30, "A"), kill(NOW - 20, "B"), kill(NOW - 10, "C") }
+    local window = { startsAt = NOW - 25, endsAt = NOW - 15 }
+    assert.are.equal(1, progress(mission({ count = 5, window = window }), log).bars[1].done)
+    local edges = { startsAt = NOW - 20, endsAt = NOW - 10 }
+    assert.are.equal(2, progress(mission({ count = 5, window = edges }), log).bars[1].done)
+    local wins = { bg(NOW - 30, "win", "wsg"), bg(NOW - 20, "win", "wsg") }
+    assert.are.equal(1, progress(mission({ kind = "bg_wins", count = 5, window = window }), wins).bars[1].done)
+  end)
+
+  it("stops being claimable after maxCompletions claims in the season, not counting a rejected one", function()
+    local m = mission({ count = 1, maxCompletions = 2 }, { perPlayer = 5, repeatKind = "daily" })
+    local log = { kill(NOW - 1, "A") }
+    local function claims(...)
+      local out = {}
+      for index, state in ipairs({ ... }) do
+        out["c" .. index] = { claim = { missionId = "m1", periodKey = "2026101" .. index }, state = state }
+      end
+      return out
+    end
+    local first = progress(m, log, claims("approved"))
+    assert.is_true(first.claimable)
+    assert.are.equal(1, first.completions)
+    assert.is_false(first.maxedOut)
+    local second = progress(m, log, claims("approved", "pending"))
+    assert.is_true(second.maxedOut)
+    assert.is_false(second.claimable)
+    assert.is_true(progress(m, log, claims("approved", "rejected")).claimable)
+    -- no limit by default
+    local open = mission({ count = 1 }, { perPlayer = 5 })
+    assert.is_false(progress(open, log, claims("approved", "approved", "approved")).maxedOut)
+  end)
+
+  it("does not change a mission without options: the global cap and the kinds behave as before", function()
+    local log = { kill(NOW - 4, "Zed"), kill(NOW - 3, "Zed"), kill(NOW - 2, "Zed"), kill(NOW - 1, "Zed") }
+    local result = progress(mission({ count = 10 }), log)
+    assert.are.equal(3, result.bars[1].done)
+    assert.is_false(result.maxedOut)
+    assert.are.equal(0, result.completions)
   end)
 end)
 
