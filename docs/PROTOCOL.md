@@ -35,13 +35,14 @@ How Guild Assistant clients talk to each other. The limits quoted here are the v
 ```
 
 - `v` must equal the receiver's major version (currently 1); a different major is reported as an incompatible
-  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 10): a client
+  peer and the local data is left alone. `m` only adds optional fields and new message types (currently 11): a client
   that does not know a field drops it while validating, and a client that does not know a message type drops the
   message as `unknown_type`, so older and newer clients keep talking. Minor 5 added the roster and recipe messages and fields
   below; minor 6 added the layer messages (`LAYER_STATE`, `LAYER_SWAP`); minor 7 added the PvP season messages
   (`PVP_SEASON` and the others of the "PvP seasons" section); minor 8 added event sign-up (`SIGNUP_UPSERT`); minor 9
   replaced `READINESS_RULES` with the per-roster `ROSTER_RULES`; minor 10 added the rank map (`RANK_MAP`, see
-  *Rank mapping*).
+  *Rank mapping*); minor 11 added `PVP_PROGRESS`, the optional `queue` of `PVP_LEDGER_REQ`, claims in the PvP
+  catch-up between approvers and the optional mission goal fields (see *PvP seasons*).
 - `id` is 1 to 40 characters from `[A-Za-z0-9_-]`; a `(sender, id)` pair is processed once (a bounded cache of the
   last 200).
 
@@ -86,8 +87,9 @@ the length given by the model (title 60, encounter 60, item name 60, reason 100,
 | `PVP_VOID` | guild | `grantId`, `seasonId`, optional `reason`, `at` | gm, cogm |
 | `PVP_DELIVERY` | guild | `seasonId`, `player`, `tier`, `delivered`, `rev`, `updatedAt` | gm, cogm |
 | `PVP_FINAL` | guild | `seasonId`, `name`, `startsAt`, `endsAt`, `closedAt`, `standings[]` (up to 100), `prizes` | gm, cogm |
-| `PVP_LEDGER_REQ` | guild | optional `seasonId`, `count`, `digest` | anyone |
-| `PVP_LEDGER_DATA` | whisper | optional `seasonId`, `page`, `pages`, `items[]` (`{ t, p, by }`) | gm, cogm, officer, rl (checked before decoding) |
+| `PVP_PROGRESS` | guild | `seasonId`, `rows[]` (`missionId`, `count`, `goal`; up to 50), numbers only | anyone, for themselves; only an approver keeps it |
+| `PVP_LEDGER_REQ` | guild | optional `seasonId`, `count`, `digest`, optional `queue` (the requester approves claims) | anyone |
+| `PVP_LEDGER_DATA` | whisper | optional `seasonId`, `page`, `pages`, `items[]` (`{ t, p, by }`) | a leader (checked before decoding); an author other than the relay is only believed from a gm or cogm |
 | `RANK_MAP` | guild | `rev`, `updatedAt`, `ranks[]` (up to 9 rows `{ i, r, n }`: rank index 1 to 9, role, rank name 1 to 32 bytes; see *Rank mapping*) | the guild master (rank index 0), or a cogm by the map the receiver holds |
 | `SYNC_REQ` | guild | none | anyone |
 | `SYNC_DATA` | whisper | `items[]`, a list of `{ t, p }` raid, loot, PvP, blacklist, readiness rules, roster or rank map messages (a `PVP_STATS` item also carries `owner`, a `BLACKLIST_UPSERT` item `addedBy` and `addedAt`) | gm, cogm, officer, rl (checked before decoding) |
@@ -384,7 +386,8 @@ client, so nothing but the grants has to be trusted.
 - **Closing a season:** the closing admin sends `PVP_FINAL` (the standing, up to 100 rows, cut from the tail if it
   does not fit one message, never below 10) and then the season as `closed`. Every client, on receiving the final,
   deletes the grants, voids, rejections and queued claims of that season, creates one delivery per player in the
-  prize tiers (positions 1 to 10) and drops the detail of its own mission log. A season a client never saw is kept
+  prize tiers (positions 1 to 10) and drops the claims its own characters kept for it (the PvP log is not tied to a
+  season). A season a client never saw is kept
   as history. The addon never sends gold or mail: delivery is done in game and marked with `PVP_DELIVERY`.
 - **Ranking:** points per player from the grants that count; ties go to whoever reached the total first (the earlier
   `at` of their last counted grant), then name. Nobody without points is ranked. Tiers: 1, 2, 3, 4 to 6, 7 to 10.
@@ -392,15 +395,32 @@ client, so nothing but the grants has to be trusted.
   login (at the same moment as `SYNC_REQ`) and whenever a season becomes active, a client sends `PVP_LEDGER_REQ` with
   the number of ledger records it holds for its active season and a digest (Adler-32 of the sorted record tokens: the
   officers, the seasons, the finals and the deliveries, and for that season its missions, prizes, grants, voids and
-  rejections). A gm, cogm, officer or rl whose own ledger differs answers, after a random 1 to 10 second
+  rejections). A gm or cogm whose own ledger differs answers, after a random 1 to 10 second
   delay and at most once a minute per requester, by whispering `PVP_LEDGER_DATA` pages: officers first (they decide who
   may write what), then the seasons, the missions, prizes, grants, voids, rejections of the requested season and the
   relay's active one, every final and every delivery. A page holds at most 400 items and fits the snapshot limit (32 KB
-  encoded); there are at most 100 pages. The requester decodes a page only if the whisper comes from a raid leader,
-  gm or cogm according to its own data, and applies every item as if its `by` had sent it, through the same
-  validation, authority and conflict rules. Because `by` is read from the item, a relay is trusted to name the right
-  author, the same trust a `PVP_STATS` snapshot gives it. Pending claims are not relayed: they belong to their author,
-  who announces them again.
+  encoded); there are at most 100 pages. The requester decodes a page only if the whisper comes from a leader
+  according to its own data, and applies every item as if its `by` had sent it, through the same validation,
+  authority and conflict rules. Because `by` is read from the item, the author a relay names is only believed when the
+  relay is a gm or cogm; from anyone else only the items authored by the relay itself count (the rest are counted as
+  forged). Claims still waiting for a decision travel in the catch-up only between approvers: a request from a gm or
+  cogm carries `queue = true`, the digest then also covers the undecided claims, and the relay (a gm or cogm) adds them
+  as `PVP_CLAIM` items, last, with the claimant as `by`. A relay that is not a gm or cogm cannot hand claims in. The
+  claimant also sends its pending claims again when it hears a HELLO from a gm or cogm (at most every 2 minutes), so a
+  claim is not stuck when its author is never online with an approver.
+- **Progress summaries (`PVP_PROGRESS`):** a member shares, at most every 2 minutes and only when something changed,
+  how far they are in each mission of the active season (counts only, no evidence). Only a client that approves claims
+  keeps the last summary of each member (up to 1000, `pvpSeason.progress` of the guild data, dropped when the season
+  closes). It is display only and not checked; the claim decides. It never travels in a catch-up. It is a guild channel
+  message sent live: refused during an encounter lockdown instead of queued, because the next one carries the current
+  numbers (queue key `PP`).
+- **Goal fields (minor 11):** a mission goal may carry optional fields (victim classes and races, a per-victim daily cap,
+  guild members required in the group, a time window, a maximum number of completions per member, battlegrounds, and
+  automatic claiming) and the goal kind `bg_played` (battlegrounds played, won or lost). The enemy classes and races of
+  a `class`, `race` or `class_race` mission are those of the other side than the player's own faction; a client that
+  cannot read its faction counts nothing for them. A client without these fields drops them while validating (so it
+  would count more than the admin asked) and refuses a mission of kind `bg_played` (`invalid:goal`); the admin form
+  warns when a mission uses them.
 - **Order:** a record that reaches a client before the one that authorises it (a grant of an officer before the officer
   record, a claim before its mission) is refused and comes back with the next catch-up. Records an admin wrote do not
   depend on any other and may arrive in any order (a void before its grant, a grant before its season).
@@ -478,7 +498,8 @@ re-attributed to whoever relays them.
 
 PvP records are part of a snapshot, and here is the one documented exception to "the author is the sender": inside
 `SYNC_DATA` (only accepted from a gm, cogm, officer or rl, checked before decoding) a `PVP_STATS` item carries the
-`owner` of the record, validated like a character name, and is applied as if that owner had sent it, through the
+`owner` of the record, validated like a character name and known to the receiver's own guild roster (otherwise the
+item is skipped as `unknown_owner`: a relay cannot invent members), and is applied as if that owner had sent it, through the
 same plausibility and conflict rules, so a relayed record cannot lower or outrun what a client already holds. On
 the guild channel an `owner` is never accepted. The PvP part is capped separately: the 100 most recently updated
 records and the 100 highest resets, shrinking together with the events if the snapshot does not fit. The resets
