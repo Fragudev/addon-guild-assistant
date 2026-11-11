@@ -18,8 +18,8 @@ local EVIDENCE_SHOWN = 8
 -- ---------------------------------------------------------------------------------------------------------------
 -- Sub-tabs
 
--- The sub-tabs of the PvP tab. The Admin one is only for admins and PvP officers (`options.admin`).
-function ViewModel.PvPSubTabs(options)
+-- The sub-tabs of the PvP tab. The admin views are their own tab (UI/Tabs/PvPAdmin.lua).
+function ViewModel.PvPSubTabs()
   local tabs = {
     { value = "season", text = L("Season") },
     { value = "missions", text = L("Missions") },
@@ -27,9 +27,6 @@ function ViewModel.PvPSubTabs(options)
     { value = "feed", text = L("Recent kills") },
     { value = "history", text = L("History") },
   }
-  if options and options.admin then
-    tabs[#tabs + 1] = { value = "admin", text = L("Admin") }
-  end
   return tabs
 end
 
@@ -49,7 +46,7 @@ function ViewModel.PvPHistoryViews()
   }
 end
 
--- The sections of the Admin sub-tab. An admin sees all five; a PvP officer only approvals and deliveries.
+-- The sections of the Admin sub-tab. An admin (gm or cogm) sees all five.
 -- `options` = { manage = boolean (admin), pending = number of claims waiting }.
 function ViewModel.PvPAdminSections(options)
   local pending = options.pending or 0
@@ -85,7 +82,6 @@ ViewModel.PVP_ERRORS = ns.Locale.Table(function()
     decided = L("it was decided already."),
     unknown_mission = L("that mission does not exist."),
     unknown_player = L("that player is not in the guild."),
-    self_grant = L("you cannot approve your own claim."),
     unchanged = L("nothing changed."),
     inactive = L("the mission is paused."),
     out_of_season = L("that is outside the season dates."),

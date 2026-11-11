@@ -77,7 +77,9 @@ local function nextEventCard(grid, events, viewer)
     icon = "chevron",
     layout = { width = "auto" },
     onClick = function()
-      UI.OpenTab("raid", { eventId = nextEvent.eventId })
+      -- The management tab for who has it, else the read-only Raid tab of the Guild group.
+      local tab = ns.ViewModel.TabVisible("raid", UI.Role(), UI.OwnRosterId()) and "raid" or "events"
+      UI.OpenTab(tab, { eventId = nextEvent.eventId })
     end,
   })
 end

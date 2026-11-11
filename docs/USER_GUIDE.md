@@ -23,9 +23,28 @@ guild's data. Account settings (minimap, language, windows) are shared by all yo
 ## The window and the settings
 
 The window has a header (logo, version, a pill that shows the sync state, the gear and the close button), a sidebar
-with one entry per tab (grouped under *Guild* and, for the guild master, *Admin*) and your character card at the
-bottom, and the page of the selected tab. Drag the header to move it and the corner to resize it; the size and
-position are remembered.
+with one entry per tab, in two groups, and your character card at the bottom, and the page of the selected tab. Drag
+the header to move it and the corner to resize it; the size and position are remembered.
+
+The **Guild** group is for everybody, though what you see depends on your guild rank and your roster:
+
+- **Home** and **Professions**, and **PvP** (the player views), are open to every rank.
+- **Raid** lists the upcoming events of your roster (and the guild-wide ones), soonest first, read-only. From the
+  Roster rank up, with a roster.
+- **Raid check** is your own checklist, measured with the rules of your roster. From the Roster rank up, with a roster.
+- **Loot**: from the Roster rank up, with a roster. Guild and co-guild masters see every roster.
+
+The **Admin** group appears from the Officer and Raid Leader ranks up:
+
+- **Raid** is where events, attendance, assignments, templates and reports are managed (Officer and RL on their own
+  roster, GM and CoGM on any). It has a roster selector when you may act on every roster, and a label with your roster
+  otherwise.
+- **Roster rules** and **Members** (Officer and RL, GM and CoGM).
+- **Ranks**: the role of each guild rank (every Admin rank reads it; GM and CoGM change it).
+- **PvP** holds the season admin: approvals, missions, season, prizes and deliveries (GM and CoGM only).
+
+A tab you cannot see, or one that no longer exists in the sidebar (Profile, Layers and Blacklist are hidden for now),
+opens Home instead. A player without a roster only sees Home, Professions and PvP.
 
 The **gear** in the header opens the settings, which are the same from every tab and are saved for your whole account:
 
@@ -61,20 +80,41 @@ The guild logo sits in a gold ring on the edge of the minimap, like most addons'
 
 ## What you can do, by role
 
-The **guild master is the only admin**. They are recognised by holding rank index 0 of the guild, never by the name
-of the character or of the rank, and nobody can be made admin from inside the addon. Every other role is **assigned
-by the guild master** in the *Members* tab, together with a roster, and shared with the whole guild; whoever has not
-been assigned anything is a member. The addon never trusts what a message says about its sender: every client checks
-the sender against its own copy of the guild roster and of the assignments.
+Your role is your **guild rank**, and the guild decides which role each rank has in the **Ranks** tab (see below). The
+guild master is always recognised by holding rank index 0 of the guild, never by the name of the character or of the
+rank. Every other rank is a plain **Member** until the guild master or a co-guild master maps it, and rank names are
+never matched, so the guild can call its ranks whatever it wants. Nothing is assigned per player inside the addon: to
+change somebody's role, change their rank in the game (or the role of that rank in the Ranks tab). The addon never
+trusts what a message says about its sender: every client checks the sender against its own copy of the guild roster
+and of the rank map.
 
-| Role | Who | Can |
-|---|---|---|
-| member | everybody the guild master did not assign a role to | see shared data, edit and publish your own sheet, put yourself forward for loot (in your roster), add players to the blacklist |
-| rl | raid leaders, assigned | everything a member can, plus create and edit events, record attendance and manage assignments, only for the events of their own roster |
-| council | loot council, assigned | everything a member can, plus open loot sessions, vote and award, only for the sessions of their own roster |
-| admin | the guild master | everything above for every roster, plus managing rosters and roles, the readiness rules, moderation and removing players from the blacklist, and all of the PvP seasons |
+| Role | Can (so far) |
+|---|---|
+| Guild Master (always rank 0) and Co-GM | everything, for every roster: events, loot, rosters and members, the readiness rules, the rank mapping, moderation, removing players from the blacklist and all of the PvP seasons |
+| Officer | events and loot of their own roster, plus everything a member can; reads the rules, the members and the rank mapping |
+| Raid Leader | events and loot of their own roster, moving members into and out of their own roster, the readiness rules of their own roster, plus everything a member can |
+| Roster | sign up for events and put yourself forward for loot (in your roster), plus everything a member can |
+| Member | see shared data, edit and publish your own sheet, add players to the blacklist |
+| Alt | the same as a member, except signing up and putting yourself forward for loot |
 
-**PvP officer** is not a role but a flag the guild master gives to a player on top of whatever role they have (see *PvP seasons* below). A PvP officer can approve and reject mission claims and mark prizes as delivered, and nothing else.
+A rank the mapping does not list is a **Member**. A new guild starts with no mapping, so everybody but the guild master
+is a Member until the guild master (or a Co-GM, once one exists) saves one.
+
+The PvP officer flag is gone: approving claims, marking deliveries and the rest of the PvP administration are for the
+Guild Master and the Co-GM only. Rosters themselves can only be changed by them for now.
+
+### The Ranks tab
+
+The **Ranks** tab of the Admin group lists the ranks of your guild by position (0 is the guild master), with their
+name, how many members hold each, and the role each one has. Every rank in the Admin group can read it; the Guild
+Master and the Co-GM change it:
+
+1. Pick a role for each rank in the dropdowns. The preview under the table says who would change role.
+2. Press **Save mapping**: it is applied here and sent to the guild. **Discard changes** drops what you edited.
+
+The roles follow the rank position, so renaming a rank in the game keeps the role of its members; a banner tells you
+when a rank was renamed, added or removed since the mapping was saved. A Co-GM cannot change the role of their own
+rank, and no rank can be made Guild Master. If the Guild Master saves a mapping, it always wins over one a Co-GM saved.
 
 **Rosters.** The guild master defines the rosters (teams) and puts each player in at most one. A player sees the
 events, reports and loot of their own roster only (events made before rosters existed stay visible to every
@@ -117,23 +157,24 @@ The checklist keeps itself up to date: while the Readiness tab (or the readiness
 read again when your auras, gear, level or skills change, so a flask that ran out stops counting as met without you
 doing anything. Nothing about your readiness is sent to the guild.
 
-The rules are the same for the whole guild and only an admin can change them. Until the guild sets its own, the
-starting list applies (level 60, item level, role, consumables and enchants). Items measured from the game
+Each roster has its own rules. GM and CoGM change those of any roster, the RL those of their own roster, and the
+Officer sees them all read-only. A roster that never had its own rules uses the starting list (level 60, item level, role, consumables and enchants); GM and CoGM pick which roster to measure against in the
+Raid check tab, everybody else is measured against their own. Items measured from the game
 (level, item level, professions, enchants and buffs) say where their value comes from; the rest are confirmed by
 hand.
 
-The guild master also sees a **Rules** tab, which nobody else gets. It lists the rules in force with a
+The **Roster rules** tab of the Admin group is the editor of the readiness rules. It lists the rules in force with a
 Remove button each, and a form to add one: pick the kind (minimum level, minimum item level, enchanted slots, active
 buff, profession, declared field, or confirmed by hand), give it a name and type the details (the hint under Details
 says what fits). Slots can be typed by name (`mainhand`, `chest`, `back`...) or number, and buffs by spell id or name.
-Every change replaces the whole set for the guild; **Use the starting list** puts the starting rules back.
+Every change replaces the whole set of the selected roster; **Use the starting list** puts the starting rules back.
 
 ## Raid events
 
-Events are created by raid leaders and admins and are shared with the guild. Names of characters can have several
+Events are created by Officers and Raid Leaders (for their own roster) and by GM and CoGM, and are shared with the guild. Names of characters can have several
 words (`Yonemon Gg`); in the window you pick a member from a list, so nothing needs quoting.
 
-The **Raid** tab has the events on the left (with a field to create one, and the *Export* and *Import* buttons) and
+The **Raid** tab of the Admin group has the events on the left (with a field to create one, and the *Export* and *Import* buttons) and
 the selected event on the right. The right side has a sub-tab for each thing you can do: *Summary* (everyone:
 status, attendance counts and assignments), and, depending on your rank, *Details* (rename, status, start time in
 your local time, and *Delete this event*, which asks you to click twice), *Attendance* (a state dropdown for each member already recorded, and a search to add somebody
@@ -200,10 +241,10 @@ Windows remember where you leave them and how big they are.
 
 The **Loot** tab does all of this from the window. Pick the event, and each session shows its item, candidates,
 votes and decision. Anyone can apply to an open session with a spec and the *Apply: main / off / other* buttons
-(the upgrade field is optional). Council and admins also get *Vote*, *Award* (with a reason) and *Close without
-awarding*, and a field to paste or shift-click an item link to open a session. Controls your role does not allow
-are not shown. At the bottom, *Show the minutes* lists every closed session of the event with what was decided and
-why (never who voted for whom). Raid leaders, council and admins can change their vote; awarding closes the session.
+(the upgrade field is optional). From the Roster rank up you apply for the sessions of your own roster (GM and CoGM see
+every roster); Officer, RL, GM and CoGM also get *Vote*, *Award* (with a reason) and *Close without awarding*, and a
+field to paste or shift-click an item link to open a session. Controls your role does not allow are not shown. At the bottom, *Show the minutes* lists every closed session of the event with what was decided and
+why (never who voted for whom). Whoever votes can change their vote; awarding closes the session.
 
 Votes are open: they are visible to everyone while a session is open, and the guild chose it that way. Addon
 messages are not confidential, so a secret vote could not be guaranteed anyway. A late joiner receives the minutes (awards and open sessions), not the votes of past
@@ -211,8 +252,8 @@ sessions.
 
 ## PvP
 
-The **PvP** tab has six sub-tabs: **Season**, **Missions**, **Stats**, **Recent kills**, **History** and, for admins
-and PvP officers only, **Admin**. The seasons are described under *PvP seasons* below. **Stats** holds two views, *My
+The **PvP** tab has five sub-tabs: **Season**, **Missions**, **Stats**, **Recent kills** and **History**. The admin
+views are the **PvP** tab of the Admin group (guild master and co-guild master only). The seasons are described under *PvP seasons* below. **Stats** holds two views, *My
 stats* and *Kill ranking*, which are described here. *My stats* counts your kills automatically, split into **open world** and **battleground**, with
 a total and today's count for each. Days follow the server's date in UTC, so they may not start at your midnight.
 
@@ -268,8 +309,7 @@ screens (see *The sub-tabs* below). The same actions are also available as `/ga 
 | Who | Can |
 |---|---|
 | any member | claim a mission when it is complete (`/ga pvp claim <missionId> [note]`); see the season, its missions and the ranking (`/ga pvp season`, `/ga pvp mission`) |
-| PvP officer | everything a member can, plus see the claims waiting (`/ga pvp queue`), approve (`approve <claimId>`) or reject (`reject <claimId> [reason]`) them, and mark a prize as delivered. An officer cannot approve their own claim |
-| admin (guild master) | everything an officer can, plus create and close seasons (`/ga pvp season create <days> <name>`, `close`), define missions and prizes, make an officer or take the flag away (`/ga pvp officer add\|remove <name>`), give points without a claim (`grant <player> <missionId> [points]`) and void a grant |
+| GM, CoGM | everything a member can, plus see the claims waiting (`/ga pvp queue`), approve (`approve <claimId>`) or reject (`reject <claimId> [reason]`) them, mark a prize as delivered, create and close seasons (`/ga pvp season create <days> <name>`, `close`), define missions and prizes, give points without a claim (`grant <player> <missionId> [points]`) and void a grant |
 
 ### The sub-tabs
 
@@ -284,21 +324,19 @@ screens (see *The sub-tabs* below). The same actions are also available as `/ga 
 - **Stats** and **Recent kills**: described above.
 - **History**: *By season* shows a card per closed season (podium, delivery progress and, on request, the full final
   standing) and *Cumulative* adds all the closed seasons (seasons played, podiums, points).
-- **Admin** (admins and PvP officers): *Approvals* (each claim with its evidence, **Reject** or **Approve**, and the
+- **Admin** (GM and CoGM only): *Approvals* (each claim with its evidence, **Reject** or **Approve**, and the
   rejected ones, which can still be approved) and *Deliveries* (**Mark delivered** once you handed the prize over in
-  game). Admins also get *Missions* (table, **New mission**, **Edit**, copy from another season; the form takes
+  game), *Missions* (table, **New mission**, **Edit**, copy from another season; the form takes
   title, description, goal, count, points, zones as map ids or the current zone, place, distinct by, repetition,
   times per player and status), *Season* (name and dates, **Create season** or **Save**, and **Close season**,
   which asks for a second click and warns about the pending claims that will expire; the kill-counter reset is
   here too) and *Prizes* (a row per tier with its rewards, click one to remove it; add gold, or an item by
   pasting its link: only the item id and name are kept).
 
-In the **Members** tab the guild master has a **PVP** switch next to each member's role to make a PvP officer; everybody
-else sees an *OFICIAL PVP* / *PVP OFFICER* badge on those members.
 
 - Only **one season** is active at a time. A claim only counts for something done between the start and the end date
   of the season; the end date blocks new claims, and the admin **closes** the season by hand.
-- Every claim needs the approval of an admin or a PvP officer, also the automatic ones. Approving gives the points the
+- Every claim needs the approval of the GM or the CoGM, also the automatic ones. Approving gives the points the
   mission is worth at that moment, and approving the same claim twice counts once.
 - The ranking is the sum of the approved points. If two players have the same total, the one who got there first
   ranks higher. Points are never spent.
@@ -307,7 +345,7 @@ else sees an *OFICIAL PVP* / *PVP OFFICER* badge on those members.
   to 10th; each player in a tier gets the whole prize). The addon never sends gold or mail: the prize is handed over
   in game and marked as delivered.
 - A member who logs in late, or while a season starts, asks the guild for it and receives the ranking from a raid
-  leader, an admin or a PvP officer who is online.
+  leader, the GM or the CoGM who is online.
 
 ### How missions are counted and claimed
 
@@ -329,7 +367,7 @@ itself; nothing is shared until you claim.
 - **Claiming.** When a mission is complete (or could be, with unknown classes), claim it. The claim carries up to 60
   of the rows that back it, the counts and your note, and goes to the guild. It is repeated after you log in and
   about every 10 minutes while it waits, so an approver who comes online later receives it. A claim is *pending*
-  until an admin or a PvP officer approves or rejects it. A period allows as many approved claims as the mission says
+  until the GM or the CoGM approves or rejects it. A period allows as many approved claims as the mission says
   (usually one), and a rejected claim uses its place.
 - **Not available on this client.** Zones, class and race, and battleground wins depend on what the game client lets
   addons read, which is still being measured. A mission that needs a source the client does not give is shown as not
@@ -354,8 +392,8 @@ member running the addon (see the privacy notes: names and the reason you type g
 
 - **Anyone can add** a player: type the **Name** (a name with several words is fine, a realm suffix is dropped) and a
   **Reason** of up to 100 characters, then press **Add**. Adding a player who is already listed changes the reason, but only the member who added
-  the entry and the guild master and officers can do it; for anyone else it is refused.
-- **Only the guild master and officers can remove** an entry. The **Remove** button only shows for them, and every
+  the entry and the GM and CoGM can do it; for anyone else it is refused.
+- **Only the GM and CoGM can remove** an entry. The **Remove** button only shows for them, and every
   client checks the sender's rank again, so a removal from anyone else is ignored. Once a player has been removed,
   anyone can add them again.
 - The list is sorted by name and shows the reason, who added the player and when. It holds up to 200 players, and a

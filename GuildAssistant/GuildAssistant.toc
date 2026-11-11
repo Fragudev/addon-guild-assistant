@@ -32,6 +32,8 @@ Domain\AutoPublisher.lua
 Domain\Throttle.lua
 Domain\GuildRoster.lua
 Domain\PermissionService.lua
+Domain\RankMapModel.lua
+Domain\RankMapService.lua
 Domain\RosterService.lua
 Domain\PvPSeasonModel.lua
 Domain\PvPSeasonService.lua
@@ -71,6 +73,7 @@ Sync\LootSync.lua
 Sync\PvPSync.lua
 Sync\BlacklistSync.lua
 Sync\ReadinessRulesSync.lua
+Sync\RankMapSync.lua
 Sync\RosterSync.lua
 Sync\PvPSeasonSync.lua
 Sync\RecipeSync.lua
@@ -96,6 +99,7 @@ UI\ViewModelGuild.lua
 UI\ViewModelPvP.lua
 UI\ViewModelProfessions.lua
 UI\ViewModelLayers.lua
+UI\ViewModelRanks.lua
 UI\Main.lua
 UI\Cards.lua
 UI\Tabs\Home.lua
@@ -103,13 +107,16 @@ UI\Tabs\Profile.lua
 UI\Tabs\Readiness.lua
 UI\Tabs\Members.lua
 UI\Tabs\Raid.lua
+UI\Tabs\Events.lua
 UI\Tabs\Loot.lua
 UI\Tabs\PvP.lua
+UI\Tabs\PvPAdmin.lua
 UI\Tabs\Blacklist.lua
 UI\Tabs\Rules.lua
 UI\Tabs\Professions.lua
 UI\Tabs\Layers.lua
 UI\PopupFrame.lua
+UI\Tabs\Ranks.lua
 UI\LootPopup.lua
 UI\LayerPopup.lua
 UI\VotingFrame.lua

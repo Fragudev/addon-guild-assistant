@@ -10,6 +10,7 @@ local function load_modules()
     "Core/Locale",
     "Core/Validate",
     "Domain/PermissionService",
+    "Domain/RankMapModel",
     "Domain/RosterService",
     "Domain/RecipeService",
     "Domain/EventModel",
@@ -25,6 +26,7 @@ local function load_modules()
     "Sync/PvPSync",
     "Sync/BlacklistSync",
     "Sync/ReadinessRulesSync",
+    "Sync/RankMapSync",
     "Sync/RosterSync",
     "Sync/RecipeSync",
     "Sync/Transfer",
@@ -103,7 +105,7 @@ describe("Transfer export and import", function()
 
     local target = store()
     -- The deletion of an event this store never saw is only the guild master's to remember.
-    local summary = assert(import_into(target, text, "admin"))
+    local summary = assert(import_into(target, text, "gm"))
     assert.are.equal(0, next(summary.skipped) and 1 or 0)
     assert.are.equal(summary.total, summary.applied)
 
@@ -127,7 +129,7 @@ describe("Transfer export and import", function()
   it("marks imported records as received, authored by the import", function()
     local source, event = populated()
     local target = store()
-    assert(import_into(target, assert(Transfer.Export(libs, source.events, source.tombstones)), "admin"))
+    assert(import_into(target, assert(Transfer.Export(libs, source.events, source.tombstones)), "gm"))
     assert.are.equal("received", target.events[event.eventId].source)
     assert.are.equal("import", target.events[event.eventId].updatedBy)
   end)
@@ -372,6 +374,68 @@ describe("Transfer.BuildSnapshot and ApplyItems", function()
   end)
 end)
 
+describe("Transfer sign-ups in a snapshot", function()
+  local source, event
+
+  before_each(function()
+    source = store()
+    event = assert(EventService.Create(source.ctx("rl"), { title = "Raid", startAt = 50000, rosterId = "r1" }))
+    event.signups["Fan-Realm"] = { status = "yes", rev = 2, updatedAt = 20, updatedBy = "Fan-Realm" }
+  end)
+
+  local function receiver(roleOf)
+    local target = store()
+    local ctx = target.ctx()
+    ctx.rosterOf = function()
+      return "r1"
+    end
+    ctx.roleOf = roleOf
+    return target, ctx
+  end
+
+  it("carries the sign-ups and applies them under the rank of the character", function()
+    local items = Transfer.BuildSnapshot(source.events, source.tombstones, 5)
+    local target, ctx = receiver(function()
+      return "roster"
+    end)
+    local summary = Transfer.ApplyItems(items, ctx, "Leader-Realm", "rl")
+    assert.are.equal(#items, summary.applied)
+    local record = target.events[event.eventId].signups["Fan-Realm"]
+    assert.are.equal("yes", record.status)
+    assert.are.equal(2, record.rev)
+  end)
+
+  it("skips a sign-up of a character that is a member, or unknown", function()
+    local items = Transfer.BuildSnapshot(source.events, source.tombstones, 5)
+    local target, ctx = receiver(function()
+      return "member"
+    end)
+    local summary = Transfer.ApplyItems(items, ctx, "Leader-Realm", "rl")
+    assert.are.equal(1, summary.skipped.forbidden)
+    assert.is_nil(next(target.events[event.eventId].signups))
+    local _, unknown = receiver(function() end)
+    assert.are.equal(1, Transfer.ApplyItems(items, unknown, "Leader-Realm", "rl").skipped.unknown_sender)
+  end)
+
+  it("does not relay a sign-up from a sender who is not a leader", function()
+    local items = Transfer.BuildSnapshot(source.events, source.tombstones, 5)
+    local target, ctx = receiver(function()
+      return "roster"
+    end)
+    -- The event itself is already known here, so only the sign-up is at stake.
+    target.events[event.eventId] = { eventId = event.eventId, rosterId = "r1", signups = {}, attendance = {} }
+    local summary = Transfer.ApplyItems(items, ctx, "Fan-Realm", "roster")
+    assert.is_truthy(summary.skipped.forbidden)
+    assert.is_nil(next(target.events[event.eventId].signups))
+  end)
+
+  it("skips them in a text import, where the importer is not the character", function()
+    local items = Transfer.BuildSnapshot(source.events, source.tombstones, 5)
+    local _, ctx = receiver(nil)
+    assert.are.equal(1, Transfer.ApplyItems(items, ctx, "import", "rl").skipped.unknown_sender)
+  end)
+end)
+
 describe("Transfer with loot sessions", function()
   local LootService = ns.LootService
   local ITEM = { itemId = 19019, itemName = "Thunderfury" }
@@ -380,9 +444,9 @@ describe("Transfer with loot sessions", function()
   local function with_loot()
     local source = store()
     local event = assert(EventService.Create(source.ctx("rl"), { title = "Molten Core" }))
-    local admin = source.ctx("admin")
+    local admin = source.ctx("gm")
     local awarded = assert(LootService.OpenSession(admin, event.eventId, ITEM))
-    local ann = source.ctx("member")
+    local ann = source.ctx("roster")
     ann.actor = "Ann-Realm"
     assert(LootService.Register(ann, event.eventId, awarded.sessionId, { spec = "Fury", need = "main" }))
     assert(LootService.Vote(admin, event.eventId, awarded.sessionId, "Ann-Realm"))
@@ -396,7 +460,7 @@ describe("Transfer with loot sessions", function()
     local text = assert(Transfer.Export(libs, source.events, source.tombstones))
 
     local target = store()
-    local summary = assert(import_into(target, text, "admin"))
+    local summary = assert(import_into(target, text, "gm"))
     assert.are.equal(summary.total, summary.applied)
 
     local loot = target.events[event.eventId].loot
@@ -410,19 +474,29 @@ describe("Transfer with loot sessions", function()
   it("leaves candidates and votes out, because they cannot be re-attributed", function()
     local source, event, awarded = with_loot()
     local target = store()
-    assert(import_into(target, assert(Transfer.Export(libs, source.events, source.tombstones)), "admin"))
+    assert(import_into(target, assert(Transfer.Export(libs, source.events, source.tombstones)), "gm"))
     local imported = target.events[event.eventId].loot[awarded.sessionId]
     assert.are.same({}, imported.candidates)
     assert.are.same({}, imported.votes)
   end)
 
-  it("lets a raid leader import the events and awards, but skips opening sessions", function()
+  it("lets a raid leader import the events, the awards and the sessions: loot_manage is theirs too", function()
     local source, event, awarded = with_loot()
     local target = store()
     local summary = assert(import_into(target, assert(Transfer.Export(libs, source.events, source.tombstones)), "rl"))
-    assert.are.equal(1, summary.skipped.forbidden)
+    assert.is_nil(summary.skipped.forbidden)
     assert.is_truthy(target.events[event.eventId])
     assert.is_truthy(target.events[event.eventId].loot[awarded.sessionId].award)
+  end)
+
+  it("refuses an import from a roster player, a member and an alter", function()
+    local source = with_loot()
+    local text = assert(Transfer.Export(libs, source.events, source.tombstones))
+    for _, role in ipairs({ "roster", "member", "alter" }) do
+      local result, reason = import_into(store(), text, role)
+      assert.is_nil(result, role)
+      assert.are.equal("forbidden", reason, role)
+    end
   end)
 
   it("puts an event's loot in its snapshot", function()
@@ -516,7 +590,7 @@ describe("Transfer PvP items in a snapshot", function()
   it("applies each record to its owner and the resets under the role of the snapshot's sender", function()
     local items = Transfer.BuildSnapshot({}, {}, 5, source_context(), 10)
     local ctx = pvp_context()
-    local summary = Transfer.ApplyItems(items, ctx, "Lead-Realm", "admin")
+    local summary = Transfer.ApplyItems(items, ctx, "Lead-Realm", "gm")
     assert.are.equal(3, summary.applied)
     assert.are.equal(3, summary.pvp)
     assert.are.equal(10, ctx.pvpStats["Ann-Realm"].honor.world)
@@ -554,7 +628,7 @@ describe("Transfer PvP items in a snapshot", function()
     local items = Transfer.BuildSnapshot({}, {}, 5, source_context(), 10)
     local ctx = pvp_context()
     ctx.pvpStats, ctx.pvpResets = nil, nil
-    local summary = Transfer.ApplyItems(items, ctx, "import", "admin")
+    local summary = Transfer.ApplyItems(items, ctx, "import", "gm")
     assert.are.equal(0, summary.applied)
     assert.are.equal(3, summary.skipped.unsupported)
   end)
@@ -660,7 +734,7 @@ describe("Transfer blacklist items in a snapshot", function()
     assert.is_nil(target.tombstones["B:gone"])
 
     local admin = context()
-    summary = Transfer.ApplyItems(items, admin, "Boss-Realm", "admin")
+    summary = Transfer.ApplyItems(items, admin, "Boss-Realm", "gm")
     assert.are.equal(3, summary.blacklist)
     assert.are.equal(4, admin.tombstones["B:gone"].rev)
   end)
@@ -674,8 +748,8 @@ describe("Transfer blacklist items in a snapshot", function()
       reversed[#reversed + 1] = items[index]
     end
     local a, b = context(), context()
-    Transfer.ApplyItems(items, a, "Boss-Realm", "admin")
-    Transfer.ApplyItems(reversed, b, "Boss-Realm", "admin")
+    Transfer.ApplyItems(items, a, "Boss-Realm", "gm")
+    Transfer.ApplyItems(reversed, b, "Boss-Realm", "gm")
     assert.are.same(a.blacklist, b.blacklist)
   end)
 
@@ -713,7 +787,7 @@ describe("Transfer blacklist items in a snapshot", function()
     local items = Transfer.BuildSnapshot({}, {}, 5, nil, nil, s.blacklist, 10)
     local ctx = context()
     ctx.blacklist = nil
-    local summary = Transfer.ApplyItems(items, ctx, "import", "admin")
+    local summary = Transfer.ApplyItems(items, ctx, "import", "gm")
     assert.are.equal(0, summary.applied)
     assert.are.equal(2, summary.skipped.unsupported)
   end)

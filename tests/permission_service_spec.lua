@@ -3,10 +3,14 @@ local function load_service()
   assert(loadfile("GuildAssistant/Core/Constants.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Core/Validate.lua"))("GuildAssistant", ns)
   assert(loadfile("GuildAssistant/Domain/PermissionService.lua"))("GuildAssistant", ns)
-  return ns.PermissionService, ns.Constants
+  return ns.PermissionService, ns.Constants, ns
 end
 
-local Service, ConstantsTable = load_service()
+local Service, _, ns = load_service()
+local Roles = require("tests.support.roles")
+Roles.install(ns)
+
+local ROLES = { "gm", "cogm", "officer", "rl", "roster", "member", "alter" }
 
 local function roster_with(entries)
   return {
@@ -16,340 +20,209 @@ local function roster_with(entries)
   }
 end
 
-describe("PermissionService.RoleForRank", function()
-  it("maps the placeholder ranks", function()
-    assert.are.equal("admin", Service.RoleForRank("GM"))
-    assert.are.equal("admin", Service.RoleForRank("Officer"))
-    assert.are.equal("rl", Service.RoleForRank("RL"))
-    for _, rank in ipairs({ "roster", "member", "alter" }) do
-      assert.are.equal("member", Service.RoleForRank(rank))
+local function platform_of(rank, index, leader)
+  return {
+    GetOwnGuildRank = function()
+      return rank, index
+    end,
+    IsGuildLeader = leader ~= nil and function()
+      return leader
+    end or nil,
+  }
+end
+
+describe("PermissionService.RoleFor", function()
+  it("gives each rank index the role the rank map holds for it", function()
+    for index, role in ipairs(ROLES) do
+      assert.are.equal(role, Service.RoleFor(index - 1), role)
     end
   end)
 
-  it("ignores case", function()
-    assert.are.equal("admin", Service.RoleForRank("oFfIcEr"))
+  it("makes the guild master, rank index 0, gm", function()
+    assert.are.equal("gm", Service.RoleFor(0))
   end)
 
-  it("treats a rank nobody mapped as a plain member", function()
-    assert.are.equal("member", Service.RoleForRank("Recruit"))
+  it("makes a rank the map does not list a member, and a missing index too", function()
+    assert.are.equal("member", Service.RoleFor(8))
+    assert.are.equal("member", Service.RoleFor(nil))
   end)
 
-  it("gives no role when there is no rank name", function()
-    assert.is_nil(Service.RoleForRank(nil))
-    assert.is_nil(Service.RoleForRank(""))
-    assert.is_nil(Service.RoleForRank(5))
-  end)
-
-  it("uses a custom mapping when given one", function()
-    assert.are.equal("rl", Service.RoleForRank("Captain", { captain = "rl" }))
+  it("has no rank names in it: nothing in the constants maps a name to a role", function()
+    local _, Constants = load_service()
+    assert.is_nil(Constants.RANK_ROLES)
+    assert.is_nil(Constants.ROLE_SOURCE)
+    assert.is_nil(Constants.ASSIGNABLE_ROLES)
+    assert.are.equal(0, Constants.GUILD_MASTER_RANK_INDEX)
   end)
 end)
 
-describe("PermissionService.RoleOf with the rank as the source", function()
-  local options = { source = "rank" }
+describe("PermissionService.RoleOf", function()
+  local roster = roster_with({
+    ["Boss-Realm"] = { rankName = "Maestro", rankIndex = 0 },
+    ["Co-Realm"] = { rankName = "CoGM", rankIndex = 1 },
+    ["Officer-Realm"] = { rankName = "Whatever", rankIndex = 2 },
+    ["Leader-Realm"] = { rankName = "RL", rankIndex = 3 },
+    ["Plain-Realm"] = { rankName = "Plain", rankIndex = 5 },
+    ["Odd-Realm"] = { rankName = "Newbie", rankIndex = 8 },
+    ["Fake-Realm"] = { rankName = "GM", rankIndex = 2 },
+    ["Yonemon Gg"] = { rankName = "Officer", rankIndex = 9 },
+  })
 
-  it("reads the sender's role from the rank in the local guild roster", function()
-    local roster = roster_with({
-      ["Boss-Realm"] = { rankName = "Officer" },
-      ["Raider-Realm"] = { rankName = "roster" },
-    })
-    assert.are.equal("admin", Service.RoleOf(roster, "Boss-Realm", options))
-    assert.are.equal("member", Service.RoleOf(roster, "Raider-Realm", options))
+  it("reads the role from the rank index in the local guild roster, not from its name", function()
+    assert.are.equal("cogm", Service.RoleOf(roster, "Co-Realm"))
+    assert.are.equal("officer", Service.RoleOf(roster, "Officer-Realm"))
+    assert.are.equal("rl", Service.RoleOf(roster, "Leader-Realm"))
+    assert.are.equal("member", Service.RoleOf(roster, "Plain-Realm"))
+  end)
+
+  it("makes the guild master, by rank index 0, gm whatever the rank is called", function()
+    assert.are.equal("gm", Service.RoleOf(roster, "Boss-Realm"))
+  end)
+
+  it("makes a rank outside the map a member, and a rank called GM at another index just that rank", function()
+    assert.are.equal("member", Service.RoleOf(roster, "Odd-Realm"))
+    assert.are.equal("member", Service.RoleOf(roster, "Yonemon Gg"))
+    assert.are.equal("officer", Service.RoleOf(roster, "Fake-Realm"))
+  end)
+
+  it("never reads an assignment: a stored role means nothing", function()
+    assert.are.equal(
+      "member",
+      Service.RoleOf(roster, "Plain-Realm", { members = { ["Plain-Realm"] = { role = "rl" } } })
+    )
   end)
 
   it("gives no role to someone the roster does not know", function()
-    assert.is_nil(Service.RoleOf(roster_with({}), "Stranger-Realm", options))
     assert.is_nil(Service.RoleOf(roster_with({}), "Stranger-Realm"))
   end)
 end)
 
-describe("PermissionService.Can", function()
-  it("lets everyone see data and edit their own profile", function()
-    for _, role in ipairs({ "member", "rl", "admin" }) do
-      assert.is_true(Service.Can(role, "view"))
-      assert.is_true(Service.Can(role, "edit_own_profile"))
-    end
+describe("PermissionService.OwnRole", function()
+  it("is gm for rank index 0, or when the client says the player is the guild master", function()
+    assert.are.equal("gm", Service.OwnRole(platform_of("Whatever", 0)))
+    assert.are.equal("gm", Service.OwnRole(platform_of("Whatever", nil, true)))
+    assert.are.equal("gm", Service.OwnRole(platform_of("Alter", 6, true)))
+    assert.are.equal("officer", Service.OwnRole(platform_of("GM", 2, false)))
   end)
 
-  it("keeps event, attendance and assignment management for RL and admin", function()
-    for _, action in ipairs({ "manage_events", "record_attendance", "manage_assignments" }) do
-      assert.is_false(Service.Can("member", action))
-      assert.is_true(Service.Can("rl", action))
-      assert.is_true(Service.Can("admin", action))
-    end
+  it("is the role of the rank index for everybody else", function()
+    assert.are.equal("cogm", Service.OwnRole(platform_of("Anything", 1)))
+    assert.are.equal("rl", Service.OwnRole(platform_of(" rl ", 3)))
+    assert.are.equal("member", Service.OwnRole(platform_of("Recruit", 9)))
   end)
 
-  it("keeps moderation for admins only", function()
-    assert.is_false(Service.Can("member", "moderate"))
-    assert.is_false(Service.Can("rl", "moderate"))
-    assert.is_true(Service.Can("admin", "moderate"))
-  end)
-
-  it("lets every role publish its own PvP counters", function()
-    for _, role in ipairs({ "member", "rl", "council", "admin" }) do
-      assert.is_true(Service.Can(role, "pvp_publish"))
-    end
-    assert.is_false(Service.Can(nil, "pvp_publish"))
-  end)
-
-  it("lets every role share its map position, like its layer", function()
-    for _, role in ipairs({ "member", "rl", "council", "admin" }) do
-      assert.is_true(Service.Can(role, "position_share"), role)
-    end
-    assert.is_false(Service.Can(nil, "position_share"))
-  end)
-
-  it("lets every role add to the blacklist but only an admin remove from it", function()
-    for _, role in ipairs({ "member", "rl", "council", "admin" }) do
-      assert.is_true(Service.Can(role, "blacklist_add"), role)
-    end
-    assert.is_false(Service.Can(nil, "blacklist_add"))
-    assert.is_true(Service.Can("admin", "blacklist_remove"))
-    for _, role in ipairs({ "member", "rl", "council" }) do
-      assert.is_false(Service.Can(role, "blacklist_remove"), role)
-    end
-    assert.is_false(Service.Can(nil, "blacklist_remove"))
-  end)
-
-  it("denies unknown actions and unknown roles", function()
-    assert.is_false(Service.Can("admin", "delete_the_guild"))
-    assert.is_false(Service.Can(nil, "view"))
-    assert.is_false(Service.Can("superuser", "moderate"))
+  it("is nothing for somebody who is not in a guild", function()
+    assert.is_nil(Service.OwnRole(platform_of(nil, nil)))
+    assert.is_nil(Service.OwnRole(platform_of("", 0)))
   end)
 end)
 
-describe("PermissionService.OwnRole with the rank as the source", function()
-  it("derives the own role from the own rank", function()
-    local platform = {
-      GetOwnGuildRank = function()
-        return "RL"
-      end,
-      GetIdentityKey = function()
-        return "Someone-Realm"
-      end,
-    }
-    assert.are.equal("rl", Service.OwnRole(platform, { source = "rank" }))
+describe("PermissionService.Rank and IsGlobal", function()
+  it("orders the seven roles from gm to alter", function()
+    for index, role in ipairs(ROLES) do
+      assert.are.equal(index - 1, Service.Rank(role), role)
+    end
+    assert.is_nil(Service.Rank("admin"))
+    assert.is_nil(Service.Rank(nil))
+  end)
+
+  it("makes only gm and cogm global", function()
+    for _, role in ipairs(ROLES) do
+      assert.are.equal(role == "gm" or role == "cogm", Service.IsGlobal(role), role)
+    end
+    assert.is_false(Service.IsGlobal(nil))
+    assert.is_false(Service.IsGlobal("admin"))
   end)
 end)
 
-describe("PermissionService council and loot", function()
-  it("maps the council rank to the council role", function()
-    assert.are.equal("council", Service.RoleForRank("Council"))
-  end)
+-- The matrix: the scope of each role for each action.
+-- "-" is not allowed, "all" every roster, "own" the roster of the player.
+local MATRIX = {
+  --                    gm     cogm   officer rl     roster member alter
+  admin_view = { "all", "all", "all", "all", "-", "-", "-" },
+  raidcheck_view = { "all", "all", "own", "own", "own", "-", "-" },
+  loot_view = { "all", "all", "own", "own", "own", "-", "-" },
+  loot_manage = { "all", "all", "own", "own", "-", "-", "-" },
+  loot_apply = { "all", "all", "own", "own", "own", "-", "-" },
+  events_view = { "all", "all", "own", "own", "own", "-", "-" },
+  event_signup = { "all", "all", "own", "own", "own", "-", "-" },
+  raid_manage = { "all", "all", "own", "own", "-", "-", "-" },
+  members_view = { "all", "all", "all", "own", "-", "-", "-" },
+  members_manage = { "all", "all", "-", "own", "-", "-", "-" },
+  rules_view = { "all", "all", "all", "own", "-", "-", "-" },
+  rules_edit = { "all", "all", "-", "own", "-", "-", "-" },
+  pvp_admin = { "all", "all", "-", "-", "-", "-", "-" },
+  -- Open to every rank.
+  edit_own_profile = { "all", "all", "all", "all", "all", "all", "all" },
+  layer_share = { "all", "all", "all", "all", "all", "all", "all" },
+  position_share = { "all", "all", "all", "all", "all", "all", "all" },
+  pvp_publish = { "all", "all", "all", "all", "all", "all", "all" },
+  pvp_claim = { "all", "all", "all", "all", "all", "all", "all" },
+  recipes_publish = { "all", "all", "all", "all", "all", "all", "all" },
+  blacklist_add = { "all", "all", "all", "all", "all", "all", "all" },
+  -- Admin only actions that stay: gm and cogm.
+  moderate = { "all", "all", "-", "-", "-", "-", "-" },
+  blacklist_remove = { "all", "all", "-", "-", "-", "-", "-" },
+  blacklist_edit_any = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_claim_decide = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_delivery_mark = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_grant_direct = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_grant_void = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_season_manage = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_mission_manage = { "all", "all", "-", "-", "-", "-", "-" },
+  pvp_prize_manage = { "all", "all", "-", "-", "-", "-", "-" },
+}
 
-  it("lets the council and admins open sessions, vote and award", function()
-    for _, action in ipairs({ "loot_open", "loot_vote", "loot_award" }) do
-      assert.is_true(Service.Can("council", action), action)
-      assert.is_true(Service.Can("admin", action), action)
-      assert.is_false(Service.Can("member", action), action)
-    end
-  end)
+local function sorted_keys(map)
+  local keys = {}
+  for key in pairs(map) do
+    keys[#keys + 1] = key
+  end
+  table.sort(keys)
+  return keys
+end
 
-  it("lets a raid leader vote and award but not open sessions", function()
-    assert.is_true(Service.Can("rl", "loot_vote"))
-    assert.is_true(Service.Can("rl", "loot_award"))
-    assert.is_false(Service.Can("rl", "loot_open"))
-  end)
-
-  it("lets every role put themselves forward as a candidate", function()
-    for _, role in ipairs({ "member", "rl", "council", "admin" }) do
-      assert.is_true(Service.Can(role, "loot_apply"), role)
-    end
-    assert.is_false(Service.Can(nil, "loot_apply"))
-  end)
-
-  it("gives the council no event management rights", function()
-    for _, action in ipairs({ "manage_events", "record_attendance", "manage_assignments", "moderate" }) do
-      assert.is_false(Service.Can("council", action), action)
-    end
-    assert.is_true(Service.Can("council", "view"))
-    assert.is_true(Service.Can("council", "edit_own_profile"))
-  end)
-end)
-
-describe("PermissionService with assigned roles (the default)", function()
-  local function platform_of(rank, index, key, leader)
-    return {
-      GetOwnGuildRank = function()
-        return rank, index
-      end,
-      GetIdentityKey = function()
-        return key
-      end,
-      IsGuildLeader = leader and function()
-        return leader == true
-      end or nil,
-    }
+describe("PermissionService action matrix", function()
+  for _, action in ipairs(sorted_keys(MATRIX)) do
+    describe(action, function()
+      for index, role in ipairs(ROLES) do
+        local expected = MATRIX[action][index]
+        it(("%s: %s"):format(role, expected), function()
+          assert.are.equal(expected ~= "-", Service.Can(role, action))
+          -- With a roster, the scope is the one the matrix gives; without one "own" turns into "none".
+          assert.are.equal(expected == "-" and "none" or expected, Service.Scope(role, action, "r1"))
+          assert.are.equal(expected == "all" and "all" or "none", Service.Scope(role, action, nil))
+          assert.are.equal(expected == "all", Service.CanAll(role, action))
+        end)
+      end
+    end)
   end
 
-  it("is the default, with the beta admin list gone", function()
-    assert.are.equal("assigned", ConstantsTable.ROLE_SOURCE)
-    assert.is_false(ConstantsTable.BETA_ADMIN_ENABLED)
-    assert.is_nil(ConstantsTable.BETA_ADMIN_NAMES)
-    assert.is_nil(Service.IsBetaAdmin)
-  end)
-
-  describe("RoleOf", function()
-    local roster = roster_with({
-      ["Boss-Realm"] = { rankName = "Maestro", rankIndex = 0 },
-      ["Officer-Realm"] = { rankName = "officer", rankIndex = 1 },
-      ["Leader-Realm"] = { rankName = "Raider", rankIndex = 4 },
-      ["Plain-Realm"] = { rankName = "Raider", rankIndex = 4 },
-      ["Yonemon Gg"] = { rankName = "Raider", rankIndex = 4 },
-    })
-    local members = {
-      ["Leader-Realm"] = { role = "rl", rosterId = "r1" },
-      ["Officer-Realm"] = { role = "council" },
-      ["Boss-Realm"] = { role = "member" },
-    }
-
-    it("makes the guild master, by rank index 0, the admin whatever the rank is called", function()
-      assert.are.equal("admin", Service.RoleOf(roster, "Boss-Realm", { members = members }))
-    end)
-
-    it("does not let an assignment take the guild master's admin away", function()
-      assert.are.equal(
-        "admin",
-        Service.RoleOf(roster, "Boss-Realm", { members = { ["Boss-Realm"] = { role = "rl" } } })
-      )
-    end)
-
-    it("gives every other rank the assigned role, or member: an officer is not an admin", function()
-      assert.are.equal("rl", Service.RoleOf(roster, "Leader-Realm", { members = members }))
-      assert.are.equal("council", Service.RoleOf(roster, "Officer-Realm", { members = members }))
-      assert.are.equal("member", Service.RoleOf(roster, "Plain-Realm", { members = members }))
-      assert.are.equal("member", Service.RoleOf(roster, "Plain-Realm", { members = {} }))
-    end)
-
-    it("ignores the rank name for everybody but the guild master", function()
-      local ranked = roster_with({
-        ["A-Realm"] = { rankName = "GM", rankIndex = 2 },
-        ["B-Realm"] = { rankName = "rl", rankIndex = 3 },
-      })
-      assert.are.equal("member", Service.RoleOf(ranked, "A-Realm", { members = {} }))
-      assert.are.equal("member", Service.RoleOf(ranked, "B-Realm", { members = {} }))
-    end)
-
-    it("never turns an assignment into admin, nor accepts a role it does not know", function()
-      for _, role in ipairs({ "admin", "root", 5 }) do
-        local forged = { ["Plain-Realm"] = { role = role } }
-        assert.are.equal("member", Service.RoleOf(roster, "Plain-Realm", { members = forged }), tostring(role))
-      end
-      assert.is_nil(Service.AssignedRole({ x = { role = "admin" } }, "x"))
-      assert.are.equal("rl", Service.AssignedRole({ x = { role = "rl" } }, "x"))
-      assert.is_nil(Service.AssignedRole(nil, "x"))
-    end)
-
-    it("is not fooled by a name: a multi-word name is just a member unless assigned", function()
-      assert.are.equal("member", Service.RoleOf(roster, "Yonemon Gg", { members = members }))
-    end)
-
-    it("gives no role to someone the roster does not know, even with an assignment", function()
-      assert.is_nil(Service.RoleOf(roster, "Ghost-Realm", { members = { ["Ghost-Realm"] = { role = "rl" } } }))
-    end)
-
-    it("reads the configured assignments when none are passed", function()
-      Service.Configure({ members = members })
-      assert.are.equal("rl", Service.RoleOf(roster, "Leader-Realm"))
-      Service.Configure({ members = {} })
-      assert.are.equal("member", Service.RoleOf(roster, "Leader-Realm"))
-    end)
-  end)
-
-  describe("OwnRole", function()
-    it("is admin for rank index 0, or when the client says the player is the guild master", function()
-      assert.are.equal("admin", Service.OwnRole(platform_of("Whatever", 0, "Me-Realm"), { members = {} }))
-      assert.are.equal("admin", Service.OwnRole(platform_of("Whatever", nil, "Me-Realm", true), { members = {} }))
-      assert.are.equal("member", Service.OwnRole(platform_of("GM", 2, "Me-Realm", false), { members = {} }))
-    end)
-
-    it("is the assigned role, or member, for everybody else", function()
-      local members = { ["Me-Realm"] = { role = "council", rosterId = "r1" } }
-      assert.are.equal("council", Service.OwnRole(platform_of("Raider", 3, "Me-Realm"), { members = members }))
-      assert.are.equal("member", Service.OwnRole(platform_of("Officer", 1, "Other-Realm"), { members = members }))
-    end)
-
-    it("is nothing for somebody who is not in a guild", function()
-      assert.is_nil(Service.OwnRole(platform_of(nil, nil, "Me-Realm"), { members = {} }))
-      assert.is_nil(Service.OwnRole(platform_of("", 0, "Me-Realm"), { members = {} }))
-    end)
-
-    it("is not changed by the name of the character", function()
-      for _, key in ipairs({ "Yonemon Gg", "Yonemon", "Yonemon-Realm" }) do
-        assert.are.equal("member", Service.OwnRole(platform_of("alter", 7, key), { members = {} }), key)
-      end
-    end)
-  end)
-
-  describe("roster actions", function()
-    it("keeps managing rosters and seeing all of them for the admin", function()
-      for _, action in ipairs({ "roster_manage", "roster_view_all" }) do
-        assert.is_true(Service.Can("admin", action), action)
-        for _, role in ipairs({ "rl", "council", "member" }) do
-          assert.is_false(Service.Can(role, action), role .. " " .. action)
-        end
-      end
-    end)
-
-    it("lets everybody publish their recipes", function()
-      for _, role in ipairs({ "member", "rl", "council", "admin" }) do
-        assert.is_true(Service.Can(role, "recipes_publish"), role)
-      end
-    end)
-  end)
-end)
-
-describe("PermissionService PvP season actions", function()
-  local ADMIN_ONLY = {
-    "pvp_grant_direct",
-    "pvp_grant_void",
-    "pvp_season_manage",
-    "pvp_mission_manage",
-    "pvp_prize_manage",
-    "pvp_officer_assign",
-  }
-
-  it("lets every role claim", function()
-    for _, role in ipairs({ "member", "rl", "council", "admin" }) do
-      assert.is_true(Service.Can(role, "pvp_claim"), role)
-      assert.is_true(Service.CanPvP(role, false, "pvp_claim"), role)
+  it("lists no action the plan does not know", function()
+    for _, action in ipairs({ "view", "manage_events", "record_attendance", "manage_assignments" }) do
+      assert.is_false(Service.Can("gm", action), action)
     end
-    assert.is_false(Service.Can(nil, "pvp_claim"))
-    assert.is_false(Service.CanPvP(nil, true, "pvp_claim"))
+    for _, action in ipairs({ "loot_open", "loot_vote", "loot_award", "roster_manage", "roster_view_all" }) do
+      assert.is_false(Service.Can("gm", action), action)
+    end
+    assert.is_false(Service.Can("gm", "pvp_officer_assign"))
+    assert.is_nil(Service.CanPvP)
   end)
 
-  it("keeps the role-based part of deciding and delivering to the admin", function()
-    for _, action in ipairs({ "pvp_claim_decide", "pvp_delivery_mark" }) do
-      assert.is_true(Service.Can("admin", action), action)
-      for _, role in ipairs({ "rl", "council", "member" }) do
-        assert.is_false(Service.Can(role, action), role .. " " .. action)
-      end
-    end
+  it("denies unknown actions, unknown roles and a missing role", function()
+    assert.is_false(Service.Can("gm", "delete_the_guild"))
+    assert.is_false(Service.Can(nil, "pvp_publish"))
+    assert.is_false(Service.Can("admin", "moderate"))
+    assert.is_false(Service.Can("council", "loot_manage"))
+    assert.are.equal("none", Service.Scope("gm", "delete_the_guild", "r1"))
+    assert.are.equal("none", Service.Scope(nil, "pvp_publish", "r1"))
+    assert.are.equal("none", Service.Scope("admin", "moderate", "r1"))
   end)
 
-  it("adds deciding claims and marking deliveries for a PvP officer, whatever their role", function()
-    for _, role in ipairs({ "member", "rl", "council" }) do
-      for _, action in ipairs({ "pvp_claim_decide", "pvp_delivery_mark" }) do
-        assert.is_true(Service.CanPvP(role, true, action), role .. " " .. action)
-        assert.is_false(Service.CanPvP(role, false, action), role .. " " .. action)
-      end
-    end
-  end)
-
-  it("keeps everything else admin only, officer or not", function()
-    for _, action in ipairs(ADMIN_ONLY) do
-      assert.is_true(Service.CanPvP("admin", false, action), action)
-      for _, role in ipairs({ "rl", "council", "member" }) do
-        assert.is_false(Service.Can(role, action), role .. " " .. action)
-        assert.is_false(Service.CanPvP(role, true, action), role .. " " .. action)
-      end
-    end
-  end)
-
-  it("gives a sender the roster does not know nothing, officer flag or not", function()
-    for _, action in ipairs({ "pvp_claim_decide", "pvp_delivery_mark", "pvp_season_manage" }) do
-      assert.is_false(Service.CanPvP(nil, true, action), action)
-    end
-    assert.is_false(Service.CanPvP("member", true, "pvp_unknown_action"))
+  it("gives a scope of none to a roster-bound rank with no roster, but not to gm and cogm", function()
+    assert.are.equal("none", Service.Scope("rl", "raid_manage"))
+    assert.are.equal("own", Service.Scope("rl", "raid_manage", "r1"))
+    assert.are.equal("all", Service.Scope("cogm", "raid_manage"))
+    assert.are.equal("all", Service.Scope("officer", "members_view"))
   end)
 end)

@@ -8,9 +8,10 @@ local _, ns = ...
 -- so the code reads ns.db.global without knowing about the guild key. The view is never saved.
 --   guilds[guildKey] = { meta = { name, realm }, roster, events, loot, templates,
 --                 sync = { seen, tombstones }, pvpStats = {}, pvpResets = {},
---                 blacklist = {}, readinessRules = { rev, updatedAt, updatedBy, rules },
+--                 blacklist = {}, readinessRulesByRoster = { [rosterId] = { rev, updatedAt, updatedBy, rules } },
 --                 rosters = { [id] = { id, name, rev, ... } }, members = { [key] = { role, rosterId, rev, ... } },
 --                 recipes = { [memberKey] = { [professionId] = { name, ids, rev, receivedAt } } },
+--                 rankMap = { rev, updatedAt, by, ranks } (absent until a gm or cogm saves one, see RankMapModel),
 --                 pvpSeason = { seasons, activeId, missions, prizes, officers, grants, voids, rejects, queue, finals,
 --                               deliveries } (see PvPSeasonSync) }
 --   db.chars[identityKey] = { profile = {}, readiness = {}, publish = {}, pvp = {}, recipes = {},
@@ -36,6 +37,26 @@ local PVP_SEASON_TABLES = {
   "finals",
   "deliveries",
 }
+
+local function deepCopy(value)
+  if type(value) ~= "table" then
+    return value
+  end
+  local copy = {}
+  for key, inner in pairs(value) do
+    copy[key] = deepCopy(inner)
+  end
+  return copy
+end
+
+-- Runs `fn(guild)` on the data table of every guild (the migrations from v14 on work inside each guilds[key]).
+local function forEachGuild(db, fn)
+  for _, guild in pairs(ensureTable(db, "guilds")) do
+    if type(guild) == "table" then
+      fn(guild)
+    end
+  end
+end
 
 -- Each entry upgrades a db to that version. All of them must be idempotent. Up to version 12 the guild data lived in
 -- db.global; version 13 drops it (no installs existed) and moves to db.guilds / db.settings.
@@ -132,6 +153,78 @@ local MIGRATIONS = {
     ensureTable(db, "chars")
     db.global = nil
   end,
+  -- v14: readiness rules per roster (readinessRulesByRoster[rosterId], see ReadinessRules). Every existing roster
+  -- starts with a copy of the guild-wide record (readinessRules, or the starting list while none was set); the old key
+  -- stays but nothing reads it any more. A roster created later has no record and uses the starting list.
+  [14] = function(db)
+    forEachGuild(db, function(guild)
+      local byRoster = ensureTable(guild, "readinessRulesByRoster")
+      local old = type(guild.readinessRules) == "table" and guild.readinessRules or {}
+      local rules = type(old.rules) == "table" and #old.rules > 0 and old.rules or ns.Constants.DEFAULT_RULES
+      for id in pairs(ensureTable(guild, "rosters")) do
+        if type(byRoster[id]) ~= "table" then
+          byRoster[id] = {
+            rev = type(old.rev) == "number" and old.rev or 0,
+            updatedAt = type(old.updatedAt) == "number" and old.updatedAt or 0,
+            updatedBy = old.updatedBy,
+            rules = deepCopy(rules),
+          }
+        end
+      end
+    end)
+  end,
+  -- v15: sharing the position became the default. Until now every client saved share = false without the player
+  -- choosing it, so an explicit choice cannot be told apart: it is turned on once, and the player is told at login
+  -- (PositionModel.TakeShareNotice). Turning it off afterwards stays off. The setting is account-wide.
+  [15] = function(db)
+    local settings = ensureTable(db, "settings")
+    local position = settings.position
+    if type(position) == "table" and position.share == false then
+      position.share = true
+      settings.positionShareNotice = true
+    end
+  end,
+  -- v16: NameKey lowers the accented capitals of UTF-8 names too. Blacklist keys saved before kept them (a capital
+  -- A-acute in "Angel"), so they are rebuilt from the saved name, and so are the removal marks "B:<key>". When two keys
+  -- end up equal, the one with the higher revision stays. Applied inside every guild.
+  [16] = function(db)
+    local function rekey(map, prefix)
+      local moves = {}
+      for key, value in pairs(map) do
+        if type(key) == "string" and key:sub(1, #prefix) == prefix then
+          local fresh = prefix .. ns.Validate.NameKey(key:sub(#prefix + 1))
+          if fresh ~= key then
+            moves[#moves + 1] = { from = key, to = fresh, value = value }
+          end
+        end
+      end
+      table.sort(moves, function(a, b)
+        return a.from < b.from
+      end)
+      for _, move in ipairs(moves) do
+        map[move.from] = nil
+        local current = map[move.to]
+        local currentRev = type(current) == "table" and current.rev or -1
+        local movedRev = type(move.value) == "table" and move.value.rev or -1
+        if type(currentRev) ~= "number" or type(movedRev) ~= "number" or movedRev > currentRev then
+          map[move.to] = move.value
+        end
+      end
+    end
+    forEachGuild(db, function(guild)
+      rekey(ensureTable(guild, "blacklist"), "")
+      rekey(ensureTable(ensureTable(guild, "sync"), "tombstones"), "B:")
+    end)
+  end,
+  -- v17: the rank map of each guild (guild.rankMap = { rev, updatedAt, by, ranks }, see RankMapModel). There is none
+  -- until a gm or cogm saves one; every rank outside the map is a member until then. A damaged value is dropped.
+  [17] = function(db)
+    forEachGuild(db, function(guild)
+      if guild.rankMap ~= nil and type(guild.rankMap) ~= "table" then
+        guild.rankMap = nil
+      end
+    end)
+  end,
 }
 
 local function versionOf(db)
@@ -177,6 +270,7 @@ function Store.ForGuild(db, guildKey)
     "pvpResets",
     "blacklist",
     "readinessRules",
+    "readinessRulesByRoster",
     "rosters",
     "members",
     "recipes",

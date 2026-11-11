@@ -147,6 +147,20 @@ unit seen on `target`, `mouseover` and nameplates (`unit` lines, with `UnitIsPla
 | M4 | Do `NAME_PLATE_UNIT_ADDED` and `UPDATE_MOUSEOVER_UNIT` fire for enemy players without triggering the "blocked action" dialog? | events | not measured yet. The events are registered one by one in `pcall`; a refused one only removes its own source, and `distinct = class/race` missions show "Not available on this client" when none of the three could be registered |
 | M5 | Does `GetBattlefieldWinner()` return the winner after a battleground, and does `UPDATE_BATTLEFIELD_STATUS` fire then? | `GetBattlefieldWinner`, `UnitFactionGroup`, event | not measured yet. The addon assumes `1` is the Alliance and `0` the Horde (the Classic values) and compares it with `UnitFactionGroup("player")`; any other value, or no winner, logs nothing |
 
+## Rank mapping (not measured yet)
+
+The rank mapping (`RANK_MAP` in `docs/PROTOCOL.md`) keys addon roles by the guild rank index.
+
+| # | Question | API (through `Platform`) | Assumption in the code | Result |
+|---|---|---|---|---|
+| M6 | Do `GuildControlGetNumRanks()` and `GuildControlGetRankName(i)` (1-based) match the 0-based `rankIndex` of `GetGuildRosterInfo` / `GetGuildInfo` as `i - 1`? | `Platform.GetGuildRanks` | yes: position `i` is rank index `i - 1`, and rank index 0 is the guild master | not measured yet. If the index is shifted, the Ranks tab would show the wrong name next to a role; the stored map itself is unaffected, because members are matched by the index they report |
+
+```text
+/dump GuildControlGetNumRanks()
+/dump GuildControlGetRankName(1), GuildControlGetRankName(2)
+/dump GetGuildInfo("player")   -- the third value is the own rank index; compare it with the position above minus 1
+```
+
 ## Group names for the blacklist alert (to be measured)
 
 The blacklist alert compares the members of the party or raid with the blacklist. Nothing about group names has

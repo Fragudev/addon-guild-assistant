@@ -17,7 +17,6 @@ local state = {
   selectedId = nil,
   filter = "upcoming",
   subTab = "summary",
-  roster = nil,
   newOpen = false,
   draft = { title = "", startAt = nil, status = "planned", rosterId = nil },
   attendanceFilter = "",
@@ -64,30 +63,6 @@ local NO_ROSTER = ns.Locale.Table(function()
 end)
 
 -- ---------------------------------------------------------------------------------------------------------------
--- The roster selector (the guild master)
-
-local function rosterSelector(parent, viewer)
-  local items = {
-    { value = "all", text = L("All rosters") },
-    { value = "none", text = L("No roster") },
-  }
-  for _, roster in ipairs(ns.RosterService.List(ns.db.global.rosters)) do
-    items[#items + 1] = { value = roster.id, text = ViewModel.Escape(roster.name) }
-  end
-  local current = viewer.mode == "all" and "all" or (viewer.mode == "none" and "none" or viewer.rosterId)
-  Kit.Dropdown(parent, {
-    items = items,
-    value = current,
-    layout = { width = 220 },
-    onChange = function(value)
-      state.roster = value
-      state.selectedId = nil
-      UI.Redraw()
-    end,
-  })
-end
-
--- ---------------------------------------------------------------------------------------------------------------
 -- The new-event form
 
 local function newEventForm(parent, raid, actions, role)
@@ -130,7 +105,7 @@ local function newEventForm(parent, raid, actions, role)
   })
   -- The guild master picks the roster; a raid leader's event is of their own roster automatically.
   local rosterChoices = ViewModel.RosterChoices(global.rosters, true)
-  if ns.PermissionService.Can(role, "roster_view_all") and #rosterChoices > 1 then
+  if ns.PermissionService.IsGlobal(role) and #rosterChoices > 1 then
     local roster = Kit.Field(card, { label = L("Roster") })
     Kit.Dropdown(roster, {
       items = rosterChoices,
@@ -316,7 +291,7 @@ local function detailsTab(parent, event, raid, role)
       UI.Notify("danger", L("That time does not exist on that day (the clocks change)."))
     end,
   })
-  if ns.PermissionService.Can(role, "roster_view_all") then
+  if ns.PermissionService.IsGlobal(role) then
     local roster = Kit.Field(second, { label = L("Roster"), layout = { weight = 1 } })
     Kit.Dropdown(roster, {
       items = ViewModel.RosterChoices(global.rosters, false),
@@ -377,6 +352,7 @@ local function attendanceTab(parent, event, raid)
               end,
             },
           },
+          signup = { text = row.signupText, color = "dim" },
           when = { text = row.recordedAt or "-", color = "muted" },
         },
       }
@@ -385,9 +361,29 @@ local function attendanceTab(parent, event, raid)
       columns = {
         { key = "name", title = L("Name"), weight = 2 },
         { key = "state", title = L("State"), weight = 2 },
+        { key = "signup", title = L("Sign-up"), weight = 1 },
         { key = "when", title = L("Recorded"), weight = 1 },
       },
       rows = tableRows,
+    })
+  end
+
+  -- What the players said they would do; read-only, a leader records attendance above.
+  local signups = ViewModel.SignupRows(event)
+  local signupCard = Kit.Card(parent, { title = L("Sign-ups (%d)"):format(#signups), gap = 10 })
+  if #signups == 0 then
+    Kit.Label(signupCard, { text = L("Nobody has signed up yet."), color = "muted" })
+  else
+    local signupRows = {}
+    for _, row in ipairs(signups) do
+      signupRows[#signupRows + 1] = { cells = { name = row.label, signup = { text = row.statusText, color = "dim" } } }
+    end
+    Kit.Table(signupCard, {
+      columns = {
+        { key = "name", title = L("Name"), weight = 2 },
+        { key = "signup", title = L("Sign-up"), weight = 1 },
+      },
+      rows = signupRows,
     })
   end
 
@@ -695,7 +691,12 @@ UI.Register("raid", function(page)
   -- Without a sync transport nothing could be sent, so the tab stays read-only.
   local actions = ViewModel.RaidActions(ns.comm and role or nil)
   local raid, templates = services()
-  local viewer = UI.Viewer(state.roster)
+  local selection = UI.RosterSelection("raid", "raid_manage")
+  local viewer = UI.Viewer(selection.selected)
+  if viewer.mode == "roster" and ns.PermissionService.IsGlobal(role) then
+    -- Events no roster owns yet stay in sight of who can give them one.
+    viewer.legacy = true
+  end
   local events = ns.RosterService.FilterEvents(global.events, viewer)
 
   if UI.nav.eventId and global.events[UI.nav.eventId] then
@@ -709,10 +710,9 @@ UI.Register("raid", function(page)
     title = L("Raid"),
     description = L("Events, attendance, assignments and reports for your roster."),
   })
-  if viewer.canSelect then
-    local bar = Kit.Row(page, { gap = 10, align = "center" })
-    rosterSelector(bar, viewer)
-  end
+  UI.DrawRosterSelector(page, "raid", selection, function()
+    state.selectedId = nil
+  end)
   if viewer.mode == "blocked" then
     Kit.EmptyState(page, { icon = "users", title = NO_ROSTER.title, hint = NO_ROSTER.hint })
     return

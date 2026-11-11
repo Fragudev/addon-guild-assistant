@@ -11,6 +11,7 @@ local function load_addon()
     "Core/Locale",
     "Core/Validate",
     "Domain/PermissionService",
+    "Domain/RankMapModel",
     "Domain/RosterService",
     "Domain/PvPSeasonModel",
     "Domain/RecipeService",
@@ -30,6 +31,7 @@ local function load_addon()
     "Sync/PvPSync",
     "Sync/BlacklistSync",
     "Sync/ReadinessRulesSync",
+    "Sync/RankMapSync",
     "Sync/RosterSync",
     "Sync/PvPSeasonSync",
     "Sync/RecipeSync",
@@ -776,8 +778,8 @@ describe("Comm loot council", function()
   before_each(function()
     env = build_env()
     env.events["ev-1"] = event()
-    env.roles["Boss-Realm"] = "council"
-    env.roles["Ann-Realm"] = "member"
+    env.roles["Boss-Realm"] = "officer"
+    env.roles["Ann-Realm"] = "roster"
   end)
 
   it("applies a session opened by the council, as that sender", function()
@@ -823,8 +825,8 @@ describe("Comm loot council", function()
     -- The same four messages, received from the people who would really have sent them.
     local receiver = build_env()
     receiver.events["ev-1"] = event()
-    receiver.roles["Boss-Realm"] = "council"
-    receiver.roles["Ann-Realm"] = "member"
+    receiver.roles["Boss-Realm"] = "officer"
+    receiver.roles["Ann-Realm"] = "roster"
     assert.is_true(receiver.comm:HandleMessage(env.sent[1], "Boss-Realm", "GUILD"))
     assert.is_true(receiver.comm:HandleMessage(env.sent[2], "Ann-Realm", "GUILD"))
     assert.is_true(receiver.comm:HandleMessage(env.sent[3], "Boss-Realm", "GUILD"))
@@ -881,7 +883,7 @@ describe("Comm loot council", function()
     }
     assert.is_true(leader.comm:SendSnapshot("Joiner-Realm"))
 
-    env.roles["Lead-Realm"] = "admin"
+    env.roles["Lead-Realm"] = "gm"
     assert.is_true(env.comm:HandleMessage(leader.sent[1], "Lead-Realm", "WHISPER"))
     local loot = env.events["ev-1"].loot
     assert.are.equal("Ann-Realm", loot["s-1"].award.characterKey)
@@ -903,7 +905,7 @@ describe("Comm sender names", function()
     env.platform.GetIdentityKey = function()
       return "Yonemon Gg"
     end
-    env.roles["Black Coffee"] = "council"
+    env.roles["Black Coffee"] = "officer"
   end)
 
   local function session_text()
@@ -969,8 +971,9 @@ describe("Comm loot change notification", function()
 
   before_each(function()
     env = build_env()
-    env.roles["Council-Realm"] = "council"
+    env.roles["Council-Realm"] = "officer"
     env.roles["Lead-Realm"] = "rl"
+    env.roles["Raider-Realm"] = "roster"
     env.events["ev-1"] = {
       eventId = "ev-1",
       title = "Raid",
@@ -1006,7 +1009,7 @@ describe("Comm loot change notification", function()
   end)
 
   it("says nothing when the message is refused, and nothing for other kinds of message", function()
-    assert.is_false(env.comm:HandleMessage(session_text("m-1"), "Lead-Realm", "GUILD"))
+    assert.is_false(env.comm:HandleMessage(session_text("m-1"), "Raider-Realm", "GUILD"))
     local event =
       env.wire("EVENT_UPSERT", { eventId = "ev-2", rosterId = "r1", rev = 1, updatedAt = 10, title = "Other" }, "m-2")
     assert.is_true(env.comm:HandleMessage(event, "Lead-Realm", "GUILD"))
@@ -1034,7 +1037,7 @@ describe("Comm PvP counters", function()
   before_each(function()
     env = build_env()
     env.roles["Ann-Realm"] = "member"
-    env.roles["Boss-Realm"] = "admin"
+    env.roles["Boss-Realm"] = "gm"
     env.roles["Lead-Realm"] = "rl"
   end)
 
@@ -1114,8 +1117,8 @@ describe("Comm PvP counters", function()
 
   describe("an admin reset from this client", function()
     it("is applied here, then told to the guild", function()
-      env.ownRole = "admin"
-      env.roles["Me-Realm"] = "admin"
+      env.ownRole = "gm"
+      env.roles["Me-Realm"] = "gm"
       env.pvpStats["Ann-Realm"] = {
         honor = { world = 5, bg = 0 },
         today = { day = "2026-10-01", honor = { world = 0, bg = 0 } },
@@ -1139,7 +1142,7 @@ describe("Comm PvP counters", function()
       assert.are.equal("forbidden", reason)
       assert.are.equal(0, #env.sent)
 
-      env.ownRole = "admin"
+      env.ownRole = "gm"
       ok, reason = env.comm:ResetPvP("bad|name")
       assert.is_false(ok)
       assert.are.equal("bad_target", reason)
@@ -1147,8 +1150,8 @@ describe("Comm PvP counters", function()
     end)
 
     it("resets the own counters through the callback when it names this client", function()
-      env.ownRole = "admin"
-      env.roles["Me-Realm"] = "admin"
+      env.ownRole = "gm"
+      env.roles["Me-Realm"] = "gm"
       assert.is_true(env.comm:ResetPvP("Me-Realm"))
       assert.are.same({ 1 }, env.ownResets)
     end)
@@ -1204,7 +1207,7 @@ describe("Comm PvP in a snapshot", function()
     assert.are.equal(10, joiner.pvpStats["Ann-Realm"].honor.world)
 
     local admin = build_env()
-    admin.roles["Boss-Realm"] = "admin"
+    admin.roles["Boss-Realm"] = "gm"
     assert.is_true(admin.comm:HandleMessage(text, "Boss-Realm", "WHISPER"))
     assert.are.equal(9, admin.pvpResets["Ann-Realm"].rev)
   end)
@@ -1213,7 +1216,7 @@ describe("Comm PvP in a snapshot", function()
     leader.pvpResets["Me-Realm"] = { rev = 6 }
     local text = send_snapshot()
     local admin = build_env()
-    admin.roles["Boss-Realm"] = "admin"
+    admin.roles["Boss-Realm"] = "gm"
     assert.is_true(admin.comm:HandleMessage(text, "Boss-Realm", "WHISPER"))
     assert.are.same({ 6 }, admin.ownResets)
   end)
@@ -1243,7 +1246,7 @@ describe("Comm PvP in a snapshot", function()
     assert.is_true(#leader.sent[1] <= ns.Constants.SYNC_MAX_ENCODED_BYTES, #leader.sent[1])
 
     local admin = build_env()
-    admin.roles["Boss-Realm"] = "admin"
+    admin.roles["Boss-Realm"] = "gm"
     assert.is_true(admin.comm:HandleMessage(leader.sent[1], "Boss-Realm", "WHISPER"))
     local received, resets = 0, 0
     for _ in pairs(admin.pvpStats) do
@@ -1358,7 +1361,7 @@ describe("Comm blacklist", function()
   before_each(function()
     env = build_env()
     env.roles["Ann-Realm"] = "member"
-    env.roles["Boss-Realm"] = "admin"
+    env.roles["Boss-Realm"] = "gm"
   end)
 
   it("stores an entry from any member, with the sender as the author, and tells the interface", function()
@@ -1457,8 +1460,8 @@ describe("Comm blacklist", function()
 
     before_each(function()
       leader = build_env()
-      leader.ownRole = "admin"
-      env.roles["Lead-Realm"] = "admin"
+      leader.ownRole = "gm"
+      env.roles["Lead-Realm"] = "gm"
     end)
 
     it("gives a late joiner the entries with their author, and the removals", function()
@@ -1540,68 +1543,151 @@ describe("Comm readiness rules", function()
   end
 
   local function payload(overrides)
-    local p = { rev = 1, updatedAt = 4000, rules = rules() }
+    local p = { rosterId = "r1", rev = 1, updatedAt = 4000, rules = rules() }
     for k, v in pairs(overrides or {}) do
       p[k] = v
     end
     return p
   end
 
+  local function otherRoster(target)
+    target.rosters.r2 = { id = "r2", name = "Second", rev = 1, updatedAt = 1 }
+  end
+
   before_each(function()
     env = build_env()
     env.roles["Ann-Realm"] = "member"
-    env.roles["Boss-Realm"] = "admin"
+    env.roles["Boss-Realm"] = "gm"
+    env.roles["Cogm-Realm"] = "cogm"
+    env.roles["Rita-Realm"] = "rl"
+    env.roles["Olga-Realm"] = "officer"
+    env.roles["Rosa-Realm"] = "roster"
+    env.roles["Alt-Realm"] = "alter"
+    otherRoster(env)
   end)
 
-  it("keeps the rules an admin sends and tells the interface", function()
-    assert.is_true(env.comm:HandleMessage(env.wire("READINESS_RULES", payload()), "Boss-Realm", "GUILD"))
-    assert.are.equal(60, env.readinessRules.rules[1].min)
-    assert.are.same({ "READINESS_RULES" }, env.rulesChanges)
+  it("keeps the rules gm and cogm send for any roster and tells the interface", function()
+    assert.is_true(env.comm:HandleMessage(env.wire("ROSTER_RULES", payload()), "Boss-Realm", "GUILD"))
+    local second = env.wire("ROSTER_RULES", payload({ rosterId = "r2" }), "id-2")
+    assert.is_true(env.comm:HandleMessage(second, "Cogm-Realm", "GUILD"))
+    assert.are.equal(60, env.readinessRules.r1.rules[1].min)
+    assert.are.equal(60, env.readinessRules.r2.rules[1].min)
+    assert.are.same({ "ROSTER_RULES", "ROSTER_RULES" }, env.rulesChanges)
   end)
 
-  it("drops rules from a member or from a sender the roster does not know", function()
-    local ok, reason = env.comm:HandleMessage(env.wire("READINESS_RULES", payload()), "Ann-Realm", "GUILD")
+  it("keeps what the rl of a roster sends for that roster only", function()
+    assert.is_true(env.comm:HandleMessage(env.wire("ROSTER_RULES", payload()), "Rita-Realm", "GUILD"))
+    assert.are.equal("Rita-Realm", env.readinessRules.r1.updatedBy)
+    env.members["Rita-Realm"] = { rosterId = "r2" }
+    local again = env.wire("ROSTER_RULES", payload({ rev = 2 }), "id-2")
+    local ok, reason = env.comm:HandleMessage(again, "Rita-Realm", "GUILD")
     assert.is_false(ok)
     assert.are.equal("forbidden", reason)
-    ok, reason = env.comm:HandleMessage(env.wire("READINESS_RULES", payload(), "id-2"), "Stranger-Realm", "GUILD")
+    assert.are.equal(1, env.readinessRules.r1.rev)
+  end)
+
+  it("drops rules from officer, roster, member, alter and from a sender the roster does not know", function()
+    for index, name in ipairs({ "Olga", "Rosa", "Ann", "Alt" }) do
+      local wire = env.wire("ROSTER_RULES", payload(), "id-" .. index)
+      local ok, reason = env.comm:HandleMessage(wire, name .. "-Realm", "GUILD")
+      assert.is_false(ok)
+      assert.are.equal("forbidden", reason, name)
+    end
+    local ok, reason = env.comm:HandleMessage(env.wire("ROSTER_RULES", payload(), "id-9"), "Stranger-Realm", "GUILD")
     assert.is_false(ok)
     assert.are.equal("unknown_sender", reason)
-    assert.is_nil(env.readinessRules.rules)
+    assert.is_nil(env.readinessRules.r1)
     assert.are.same({}, env.rulesChanges)
   end)
 
-  it("lets an admin set the rules: applied here, then told to the guild", function()
-    env.ownRole = "admin"
-    local ok, rev, queued = env.comm:SetReadinessRules(rules(58))
-    assert.is_true(ok)
-    assert.are.equal(1, rev)
-    assert.is_true(queued)
-    assert.are.equal(58, env.readinessRules.rules[1].min)
-    assert.are.same({ "READINESS_RULES" }, env.rulesChanges)
-    local decoded = env.codec:Decode(env.sent[1])
-    assert.are.equal("READINESS_RULES", decoded.t)
-    assert.are.equal(1, decoded.p.rev)
-
-    ok, rev = env.comm:SetReadinessRules(rules(60))
-    assert.is_true(ok)
-    assert.are.equal(2, rev)
+  it("ignores the old guild-wide message", function()
+    local old = env.wire("READINESS_RULES", { rev = 1, updatedAt = 4000, rules = rules() })
+    local ok, reason = env.comm:HandleMessage(old, "Boss-Realm", "GUILD")
+    assert.is_false(ok)
+    assert.are.equal("unknown_type", reason)
+    assert.are.same({}, env.readinessRules)
   end)
 
-  it("refuses to set the rules for anyone but an admin, and refuses rules that do not validate", function()
+  it("lets gm and cogm set the rules of any roster: applied here, then told to the guild", function()
+    for _, role in ipairs({ "gm", "cogm" }) do
+      env = build_env()
+      otherRoster(env)
+      env.ownRole = role
+      local ok, rev, queued = env.comm:SetReadinessRules("r2", rules(58))
+      assert.is_true(ok)
+      assert.are.equal(1, rev)
+      assert.is_true(queued)
+      assert.are.equal(58, env.readinessRules.r2.rules[1].min)
+      assert.is_nil(env.readinessRules.r1)
+      assert.are.same({ "ROSTER_RULES" }, env.rulesChanges)
+      local decoded = env.codec:Decode(env.sent[1])
+      assert.are.same({ "ROSTER_RULES", "r2", 1 }, { decoded.t, decoded.p.rosterId, decoded.p.rev })
+
+      ok, rev = env.comm:SetReadinessRules("r2", rules(60))
+      assert.is_true(ok)
+      assert.are.equal(2, rev)
+    end
+  end)
+
+  it("lets an rl set the rules of its own roster only", function()
     env.ownRole = "rl"
-    assert.are.same({ false, "forbidden" }, { env.comm:SetReadinessRules(rules()) })
-    env.ownRole = "admin"
-    assert.are.same({ false, "empty" }, { env.comm:SetReadinessRules({}) })
+    assert.is_true((env.comm:SetReadinessRules("r1", rules())))
+    assert.are.same({ false, "forbidden" }, { env.comm:SetReadinessRules("r2", rules()) })
+    assert.is_nil(env.readinessRules.r2)
+  end)
+
+  it("refuses officer, roster, member and alter, an unknown roster, and rules that do not validate", function()
+    for _, role in ipairs({ "officer", "roster", "member", "alter" }) do
+      env.ownRole = role
+      assert.are.same({ false, "forbidden" }, { env.comm:SetReadinessRules("r1", rules()) })
+    end
+    env.ownRole = "gm"
+    assert.are.same({ false, "unknown_roster" }, { env.comm:SetReadinessRules("nope", rules()) })
+    assert.are.same({ false, "unknown_roster" }, { env.comm:SetReadinessRules(nil, rules()) })
+    assert.are.same({ false, "empty" }, { env.comm:SetReadinessRules("r1", {}) })
     assert.are.same(
       { false, "bad_check" },
-      { env.comm:SetReadinessRules({ { id = "x", label = "X", check = "run" } }) }
+      { env.comm:SetReadinessRules("r1", { { id = "x", label = "X", check = "run" } }) }
     )
-    assert.is_nil(env.readinessRules.rules)
+    assert.is_nil(env.readinessRules.r1)
     assert.are.same({}, env.sent)
   end)
 
-  it("sends nothing while there are no rules", function()
-    assert.are.same({ false, "no_rules" }, { env.comm:SendReadinessRules() })
+  it("sends nothing while a roster has no rules", function()
+    assert.are.same({ false, "no_rules" }, { env.comm:SendReadinessRules("r1") })
+    assert.are.same({ false, "no_rules" }, { env.comm:SendReadinessRules(nil) })
+  end)
+
+  it("sends after login the sets the own role may author", function()
+    env.readinessRules.r1 = { rev = 1, updatedAt = 1, rules = rules() }
+    env.readinessRules.r2 = { rev = 1, updatedAt = 1, rules = rules(50) }
+    local function sentRosters()
+      env.queue:Flush()
+      local ids = {}
+      for _, text in ipairs(env.sent) do
+        ids[#ids + 1] = env.codec:Decode(text).p.rosterId
+      end
+      table.sort(ids)
+      env.sent, env.targets = {}, {}
+      return ids
+    end
+    env.ownRole = "gm"
+    env.comm:SendAuthoredReadinessRules()
+    assert.are.same({ "r1", "r2" }, sentRosters())
+    -- An rl of r1 (everybody is in r1 here) sends its own roster's set only.
+    env.ownRole = "rl"
+    env.comm:SendAuthoredReadinessRules()
+    assert.are.same({ "r1" }, sentRosters())
+    env.ownRole = "officer"
+    env.comm:SendAuthoredReadinessRules()
+    assert.are.same({}, sentRosters())
+  end)
+
+  it("drops the rules of a roster that is deleted", function()
+    env.readinessRules.r2 = { rev = 1, updatedAt = 1, rules = rules() }
+    local delete = env.wire("ROSTER_DELETE", { rosterId = "r2", rev = 2 })
+    assert.is_true(env.comm:HandleMessage(delete, "Boss-Realm", "GUILD"))
+    assert.is_nil(env.readinessRules.r2)
   end)
 
   describe("in a snapshot", function()
@@ -1609,35 +1695,37 @@ describe("Comm readiness rules", function()
 
     before_each(function()
       leader = build_env()
+      otherRoster(leader)
       leader.roles["Ann-Realm"] = "member"
-      leader.readinessRules.rules = rules(58)
-      leader.readinessRules.rev = 3
-      leader.readinessRules.updatedAt = 4000
+      leader.readinessRules.r1 = { rev = 3, updatedAt = 4000, rules = rules(58) }
+      leader.readinessRules.r2 = { rev = 1, updatedAt = 4000, rules = rules(50) }
       leader.tombstones["B:x"] = { at = 1, rev = 1 }
     end)
 
-    it("gives a late joiner the rules when the snapshot comes from an admin", function()
-      leader.ownRole = "admin"
+    it("gives a late joiner the rules of every roster when the snapshot comes from gm or cogm", function()
+      leader.ownRole = "gm"
       assert.is_true(leader.comm:SendSnapshot("Joiner-Realm"))
       assert.is_true(env.comm:HandleMessage(leader.sent[1], "Boss-Realm", "WHISPER"))
-      assert.are.equal(58, env.readinessRules.rules[1].min)
-      assert.are.equal(3, env.readinessRules.rev)
+      assert.are.equal(58, env.readinessRules.r1.rules[1].min)
+      assert.are.equal(3, env.readinessRules.r1.rev)
+      assert.are.equal(50, env.readinessRules.r2.rules[1].min)
       assert.are.same({ "SYNC_DATA" }, env.rulesChanges)
     end)
 
-    it("does not put the rules in a snapshot that does not come from an admin", function()
+    it("does not put the rules in a snapshot that does not come from gm or cogm", function()
       leader.ownRole = "rl"
       assert.is_true(leader.comm:SendSnapshot("Joiner-Realm"))
       assert.is_true(env.comm:HandleMessage(leader.sent[1], "Boss-Realm", "WHISPER"))
-      assert.is_nil(env.readinessRules.rules)
+      assert.is_nil(env.readinessRules.r1)
     end)
 
-    it("ignores the rules of a snapshot whose sender is not an admin for the receiver", function()
-      leader.ownRole = "admin"
+    it("applies a snapshot under the role of its sender: an rl only gets the rules of its own roster", function()
+      leader.ownRole = "gm"
       env.roles["Boss-Realm"] = "rl"
       assert.is_true(leader.comm:SendSnapshot("Joiner-Realm"))
       env.comm:HandleMessage(leader.sent[1], "Boss-Realm", "WHISPER")
-      assert.is_nil(env.readinessRules.rules)
+      assert.are.equal(3, env.readinessRules.r1.rev)
+      assert.is_nil(env.readinessRules.r2)
     end)
   end)
 end)
@@ -1815,7 +1903,7 @@ describe("Comm PvP seasons", function()
   -- Gives an env the roles every test uses and a running season with a mission, as a guild member who saw it all.
   local function populated(env, ownRole)
     env.ownRole = ownRole
-    env.roles["Boss-Realm"] = "admin"
+    env.roles["Boss-Realm"] = "gm"
     env.roles["Off-Realm"] = "member"
     env.roles["Ann-Realm"] = "member"
     env.roles["Lead-Realm"] = "rl"
@@ -1836,7 +1924,7 @@ describe("Comm PvP seasons", function()
   local env
 
   before_each(function()
-    env = populated(build_env(), "admin")
+    env = populated(build_env(), "gm")
   end)
 
   it("takes the records of an admin, tells the interface, and keeps the sender as the author", function()
@@ -1847,7 +1935,7 @@ describe("Comm PvP seasons", function()
   end)
 
   it("refuses the same records from a member, and an author named in the payload changes nothing", function()
-    local other = populated(build_env(), "admin")
+    local other = populated(build_env(), "gm")
     local ok, reason =
       guild(other, "PVP_SEASON", season({ id = "s2", state = "closed", rev = 1, by = "Boss-Realm" }), "Ann-Realm")
     assert.is_false(ok)
@@ -1874,21 +1962,40 @@ describe("Comm PvP seasons", function()
     assert.are.equal("not_approver", reason)
   end)
 
-  it("knows an officer approves claims from the officer records, whatever the role", function()
+  it("approves claims only as gm or cogm: a stored officer flag gives nothing", function()
     local officer = populated(build_env(), "member")
     officer.platform.GetIdentityKey = function()
       return "Off-Realm"
     end
-    assert.is_true(officer.comm:IsPvPApprover())
-    assert.is_true(guild(officer, "PVP_CLAIM", claim("Ann-Realm"), "Ann-Realm"))
-    assert.is_false(populated(build_env(), "member").comm:IsPvPApprover())
-    assert.is_true(populated(build_env(), "admin").comm:IsPvPApprover())
+    assert.is_false(officer.comm:IsPvPApprover())
+    assert.are.equal("not_approver", select(2, guild(officer, "PVP_CLAIM", claim("Ann-Realm"), "Ann-Realm")))
+    for _, role in ipairs({ "officer", "rl", "roster", "member", "alter" }) do
+      assert.is_false(populated(build_env(), role).comm:IsPvPApprover(), role)
+    end
+    assert.is_true(populated(build_env(), "gm").comm:IsPvPApprover())
+    assert.is_true(populated(build_env(), "cogm").comm:IsPvPApprover())
   end)
 
-  it("applies a grant of an officer and one of the admin, and closes the season on the final", function()
+  it("refuses everybody but gm and cogm to set a PvP officer", function()
+    for _, sender in ipairs({ "Lead-Realm", "Ann-Realm", "Off-Realm" }) do
+      local ok, reason = guild(
+        env,
+        "PVP_OFFICER",
+        { player = "Ann-Realm", intervals = { { from = 100 } }, rev = 9, updatedAt = 20 },
+        sender
+      )
+      assert.is_false(ok, sender)
+      assert.are.equal("forbidden", reason, sender)
+    end
+    assert.is_nil(env.pvpSeason.officers["Ann-Realm"])
+  end)
+
+  it("applies a grant of the gm and the cogm, not one of an officer, and closes the season on the final", function()
+    env.roles["Co-Realm"] = "cogm"
     local grant =
       { id = "Ann-Realm:m1:all:1", seasonId = "s1", player = "Ann-Realm", missionId = "m1", points = 10, at = T }
-    assert.is_true(guild(env, "PVP_GRANT", grant, "Off-Realm"))
+    assert.are.equal("forbidden", select(2, guild(env, "PVP_GRANT", grant, "Off-Realm")))
+    assert.is_true(guild(env, "PVP_GRANT", grant, "Co-Realm"))
     assert.is_true(
       guild(
         env,
@@ -1958,7 +2065,7 @@ describe("Comm PvP seasons", function()
 
     it("asks by itself when a season becomes active here", function()
       local fresh = build_env()
-      fresh.roles["Boss-Realm"] = "admin"
+      fresh.roles["Boss-Realm"] = "gm"
       assert.is_true(guild(fresh, "PVP_SEASON", season(), "Boss-Realm"))
       assert.are.equal(1, #fresh.sent)
       local request = Protocol.Validate(fresh.codec:Decode(fresh.sent[1]))
@@ -1986,7 +2093,7 @@ describe("Comm PvP seasons", function()
           relay,
           "PVP_GRANT",
           { id = "Ann-Realm:m1:all:1", seasonId = "s1", player = "Ann-Realm", missionId = "m1", points = 10, at = T },
-          "Off-Realm"
+          "Boss-Realm"
         )
       )
       assert.is_true(
@@ -2001,7 +2108,7 @@ describe("Comm PvP seasons", function()
       late = build_env()
       late.ownRole = "member"
       late.roles["Lead-Realm"] = "rl"
-      late.roles["Boss-Realm"] = "admin"
+      late.roles["Boss-Realm"] = "gm"
       late.roles["Off-Realm"] = "member"
     end)
 
@@ -2055,15 +2162,18 @@ describe("Comm PvP seasons", function()
       assert.is_true(relay.comm:HandleMessage(ask(fresh), "Late-Realm", "GUILD"))
     end)
 
-    it("answers an officer as well as a raid leader or an admin", function()
+    it("answers a leader (raid_manage), and not a stored PvP officer who is only a member", function()
       local officer = populated(build_env(), "member")
       officer.platform.GetIdentityKey = function()
         return "Off-Realm"
       end
-      assert.is_true(officer.comm:IsLedgerRelay())
-      assert.is_true(populated(build_env(), "admin").comm:IsLedgerRelay())
-      assert.is_true(populated(build_env(), "rl").comm:IsLedgerRelay())
-      assert.is_false(populated(build_env(), "council").comm:IsLedgerRelay())
+      assert.is_false(officer.comm:IsLedgerRelay())
+      for _, role in ipairs({ "gm", "cogm", "officer", "rl" }) do
+        assert.is_true(populated(build_env(), role).comm:IsLedgerRelay(), role)
+      end
+      for _, role in ipairs({ "roster", "member", "alter" }) do
+        assert.is_false(populated(build_env(), role).comm:IsLedgerRelay(), role)
+      end
     end)
 
     it("says there is nothing to send when its ledger is empty", function()
@@ -2113,12 +2223,12 @@ describe("Comm PvP seasons", function()
       },
     }
 
-    it("is accepted from a raid leader, an admin and a PvP officer, and applied as its author", function()
+    it("is accepted from a raid leader and an admin, and applied as its author", function()
       assert.is_true(env.comm:HandleMessage(page(items), "Lead-Realm", "WHISPER"))
       assert.is_truthy(env.pvpSeason.grants.s1["direct-9"])
       assert.are.equal("Boss-Realm", env.pvpSeason.grants.s1["direct-9"].by)
       assert.is_true(env.comm:HandleMessage(page({}, "p-2"), "Boss-Realm", "WHISPER"))
-      assert.is_true(env.comm:HandleMessage(page({}, "p-3"), "Off-Realm", "WHISPER"))
+      assert.are.equal("forbidden", select(2, env.comm:HandleMessage(page({}, "p-3"), "Off-Realm", "WHISPER")))
     end)
 
     it("is refused from a member before anything is decoded", function()
@@ -2134,7 +2244,7 @@ describe("Comm PvP seasons", function()
       assert.is_nil(env.pvpSeason.grants.s1)
     end)
 
-    it("lets an officer relay the ledger but not a snapshot", function()
+    it("does not let a stored PvP officer relay a snapshot", function()
       local snapshot = env.wire("SYNC_DATA", { items = {} }, "s-1")
       local ok, reason = env.comm:HandleMessage(snapshot, "Off-Realm", "WHISPER")
       assert.is_false(ok)

@@ -37,6 +37,7 @@ local function load_view_model(locale)
       ns.Locale.Use(locale)
     end
   end
+  dofile("tests/support/roles.lua").install(ns)
   return ns.ViewModel, ns.Constants, ns
 end
 
@@ -140,36 +141,59 @@ describe("ViewModel misc", function()
     end
     assert.are.same({
       home = true,
-      profile = true,
+      professions = true,
+      events = true,
       ready = true,
-      raid = true,
       loot = true,
       pvp = true,
-      layers = true,
-      blacklist = true,
+      raid = true,
+      rules = true,
       roster = true,
-      professions = true,
+      pvpadmin = true,
+      ranks = true,
     }, values)
   end)
 
-  it("puts the Layers tab after PvP, then the Blacklist tab before Roster", function()
-    local order = {}
+  it("orders the Guild tabs and then the Admin ones, and hides Profile, Layers and Blacklist", function()
+    local order, groups = {}, {}
     for _, tab in ipairs(ViewModel.TABS) do
       order[#order + 1] = tab.value
+      groups[tab.value] = tab.group
+      assert.is_truthy(tab.icon, tab.value)
     end
-    local function index_of(value)
-      for index, name in ipairs(order) do
-        if name == value then
-          return index
-        end
-      end
+    assert.are.same(
+      { "home", "professions", "events", "ready", "loot", "pvp", "raid", "rules", "roster", "pvpadmin", "ranks" },
+      order
+    )
+    for _, value in ipairs({ "home", "professions", "events", "ready", "loot", "pvp" }) do
+      assert.are.equal("guild", groups[value], value)
     end
-    assert.are.equal(index_of("pvp") + 1, index_of("layers"))
-    assert.are.equal(index_of("layers") + 1, index_of("blacklist"))
-    assert.are.equal(index_of("blacklist") + 1, index_of("roster"))
-    assert.are.equal("Layers", ViewModel.TABS[index_of("layers")].text)
-    assert.are.equal("guild", ViewModel.TABS[index_of("layers")].group)
-    assert.are.equal("Blacklist", ViewModel.TABS[index_of("blacklist")].text)
+    for _, value in ipairs({ "raid", "rules", "roster", "pvpadmin", "ranks" }) do
+      assert.are.equal("admin", groups[value], value)
+    end
+    for _, value in ipairs({ "profile", "layers", "blacklist", "me" }) do
+      assert.is_nil(groups[value], value)
+    end
+  end)
+
+  it("labels the tabs: Raid in both groups, Raid check, Roster rules, Members and PvP", function()
+    local texts = {}
+    for _, tab in ipairs(ViewModel.TABS) do
+      texts[tab.value] = tab.text
+    end
+    assert.are.same({
+      home = "Home",
+      professions = "Professions",
+      events = "Raid",
+      ready = "Raid check",
+      loot = "Loot",
+      pvp = "PvP",
+      raid = "Raid",
+      rules = "Roster rules",
+      roster = "Members",
+      pvpadmin = "PvP",
+      ranks = "Ranks",
+    }, texts)
   end)
 
   it("documents the three commands that are left in the help", function()
@@ -340,11 +364,13 @@ end)
 
 describe("ViewModel raid tab helpers", function()
   it("only offers what the role may do, like the commands", function()
-    assert.are.same({ events = false, attendance = false, assignments = false }, ViewModel.RaidActions("member"))
-    assert.are.same({ events = false, attendance = false, assignments = false }, ViewModel.RaidActions("council"))
+    for _, role in ipairs({ "roster", "member", "alter" }) do
+      assert.are.same({ events = false, attendance = false, assignments = false }, ViewModel.RaidActions(role), role)
+    end
     assert.are.same({ events = false, attendance = false, assignments = false }, ViewModel.RaidActions(nil))
-    assert.are.same({ events = true, attendance = true, assignments = true }, ViewModel.RaidActions("rl"))
-    assert.are.same({ events = true, attendance = true, assignments = true }, ViewModel.RaidActions("admin"))
+    for _, role in ipairs({ "gm", "cogm", "officer", "rl" }) do
+      assert.are.same({ events = true, attendance = true, assignments = true }, ViewModel.RaidActions(role), role)
+    end
   end)
 
   it("offers every status and attendance state the model accepts, and only those", function()
@@ -433,22 +459,33 @@ describe("ViewModel raid tab helpers", function()
 end)
 
 describe("ViewModel loot tab helpers", function()
-  it(
-    "offers apply to everyone, voting to raid leaders, council and admins, and opening to council and admins",
-    function()
-      local member = ViewModel.LootActions("member")
-      assert.is_true(member.apply)
-      assert.is_false(member.open or member.vote or member.award)
-      local rl = ViewModel.LootActions("rl")
-      assert.is_true(rl.apply and rl.vote and rl.award)
-      assert.is_false(rl.open)
-      for _, role in ipairs({ "council", "admin" }) do
-        local actions = ViewModel.LootActions(role)
-        assert.is_true(actions.open and actions.apply and actions.vote and actions.award)
-      end
-      assert.is_false(ViewModel.LootActions(nil).apply)
+  it("offers opening, voting and awarding to rl, officer, cogm and gm, and nothing in the tab to the rest", function()
+    local roster = ViewModel.LootActions("roster", "r1")
+    assert.is_false(roster.apply or roster.open or roster.vote or roster.award)
+    for _, role in ipairs({ "member", "alter" }) do
+      local actions = ViewModel.LootActions(role, "r1")
+      assert.is_false(actions.apply or actions.open or actions.vote or actions.award, role)
     end
-  )
+    for _, role in ipairs({ "rl", "officer", "cogm", "gm" }) do
+      local actions = ViewModel.LootActions(role, "r1")
+      assert.is_true(actions.open and actions.apply and actions.vote and actions.award, role)
+    end
+    assert.is_false(ViewModel.LootActions(nil).apply)
+  end)
+
+  it("limits officer and rl to the events of the own roster, and gm and cogm to none", function()
+    local own, other, guildWide = { rosterId = "r1" }, { rosterId = "r2" }, {}
+    for _, role in ipairs({ "rl", "officer" }) do
+      assert.is_true(ViewModel.LootActions(role, "r1", own).vote, role)
+      assert.is_true(ViewModel.LootActions(role, "r1", guildWide).open, role)
+      local actions = ViewModel.LootActions(role, "r1", other)
+      assert.is_false(actions.open or actions.vote or actions.award or actions.apply, role)
+      assert.is_false(ViewModel.LootActions(role, nil, own).open, role)
+    end
+    for _, role in ipairs({ "gm", "cogm" }) do
+      assert.is_true(ViewModel.LootActions(role, nil, other).award, role)
+    end
+  end)
 
   it("offers every need the model accepts, and only those", function()
     local ns = {}
@@ -647,8 +684,11 @@ describe("ViewModel minimap helpers", function()
     for _, entry in ipairs(entries) do
       assert.are_not.equal("sync", entry.action)
     end
-    local admin = ViewModel.MinimapMenu("admin")
-    assert.are.equal("rules", admin[#admin - 1].value)
+    local admin = ViewModel.MinimapMenu("gm")
+    assert.are.equal("ranks", admin[#admin - 1].value)
+    local roster = ViewModel.MinimapMenu("roster", "r1")
+    assert.are.equal("ready", roster[4].value)
+    assert.are.equal(#ViewModel.TabsFor("roster", "r1") + 1, #roster)
   end)
 
   it("words the result of a sync request made from the troubleshooting command", function()
@@ -688,7 +728,7 @@ describe("ViewModel loot popup helpers", function()
   end
 
   it("lists the open sessions the player has not answered, in a stable order", function()
-    local pending = ViewModel.PendingLoot(events(), "Me-Realm", {})
+    local pending = ViewModel.PendingLoot(events(), "Me-Realm", {}, "roster", "r1")
     assert.are.equal(2, #pending)
     assert.are.equal("Sulfuras", pending[1].itemName)
     assert.are.equal("Thunderfury", pending[2].itemName)
@@ -699,14 +739,41 @@ describe("ViewModel loot popup helpers", function()
   it("leaves out sessions already answered, passed on or closed", function()
     local data = events()
     data.a.loot.s1.candidates["Me-Realm"] = { spec = "Fury", need = "main" }
-    local pending = ViewModel.PendingLoot(data, "Me-Realm", { s2 = true })
+    local pending = ViewModel.PendingLoot(data, "Me-Realm", { s2 = true }, "roster", "r1")
     assert.are.equal(0, #pending)
   end)
 
   it("still offers a session someone else applied to", function()
     local data = events()
     data.a.loot.s1.candidates["Other-Realm"] = { spec = "Fury", need = "main" }
-    assert.are.equal(2, #ViewModel.PendingLoot(data, "Me-Realm", {}))
+    assert.are.equal(2, #ViewModel.PendingLoot(data, "Me-Realm", {}, "roster", "r1"))
+  end)
+
+  it("returns nothing to a member and an alter", function()
+    for _, role in ipairs({ "member", "alter", "stranger" }) do
+      assert.are.equal(0, #ViewModel.PendingLoot(events(), "Me-Realm", {}, role, "r1"), role)
+    end
+    assert.are.equal(0, #ViewModel.PendingLoot(events(), "Me-Realm", {}, nil, nil))
+  end)
+
+  it("returns the sessions of the own roster only to roster, rl and officer", function()
+    local data = events()
+    data.a.rosterId, data.b.rosterId = "r1", "r2"
+    data.b.loot.s3.status = "open"
+    for _, role in ipairs({ "roster", "rl", "officer" }) do
+      assert.are.equal(2, #ViewModel.PendingLoot(data, "Me-Realm", {}, role, "r1"), role)
+      assert.are.equal(0, #ViewModel.PendingLoot(data, "Me-Realm", {}, role, "r3"), role)
+      assert.are.equal(0, #ViewModel.PendingLoot(data, "Me-Realm", {}, role, nil), role)
+    end
+  end)
+
+  it("returns the sessions of every roster to gm and cogm", function()
+    local data = events()
+    data.a.rosterId, data.b.rosterId = "r1", "r2"
+    data.b.loot.s3.status = "open"
+    for _, role in ipairs({ "gm", "cogm" }) do
+      assert.are.equal(3, #ViewModel.PendingLoot(data, "Me-Realm", {}, role, nil), role)
+    end
   end)
 
   it("picks the spec for a one-click candidacy: declared role, else class, else a placeholder", function()
@@ -1430,21 +1497,20 @@ end)
 describe("ViewModel readiness rules editor", function()
   local existing = { { id = "level", label = "Level 60", check = "level", min = 60 } }
 
-  it("offers the rules tab only to those who may edit the rules", function()
-    local function values(role)
-      local found = {}
-      for _, tab in ipairs(ViewModel.TabsFor(role)) do
-        found[#found + 1] = tab.value
-      end
-      return found
+  it("offers the rules tab to who may view the rules: gm and cogm, officer, and rl with a roster", function()
+    local function has(role, rosterId, value)
+      return ViewModel.TabVisible(value, role, rosterId)
     end
-    for _, role in ipairs({ "member", "rl", "council" }) do
-      assert.are.equal(#ViewModel.TABS, #values(role))
+    for _, role in ipairs({ "gm", "cogm", "officer" }) do
+      assert.is_true(has(role, nil, "rules"), role)
+      assert.is_true(has(role, "r1", "rules"), role)
     end
-    assert.are.equal(#ViewModel.TABS, #values(nil))
-    local admin = values("admin")
-    assert.are.equal("rules", admin[#admin])
-    assert.are.equal(#ViewModel.TABS + 1, #admin)
+    assert.is_true(has("rl", "r1", "rules"))
+    assert.is_false(has("rl", nil, "rules"))
+    for _, role in ipairs({ "roster", "member", "alter" }) do
+      assert.is_false(has(role, "r1", "rules"), role)
+    end
+    assert.is_false(has(nil, "r1", "rules"))
   end)
 
   it("reads a level or item level", function()
@@ -1546,7 +1612,9 @@ describe("ViewModel in Spanish", function()
       texts[tab.value] = tab.text
     end
     assert.are.equal("Inicio", texts.home)
-    assert.are.equal("Lista negra", texts.blacklist)
+    assert.are.equal("Raid check", texts.ready)
+    assert.are.equal("Reglas del roster", texts.rules)
+    assert.are.equal("Miembros", texts.roster)
     assert.are.equal("PvP", texts.pvp)
   end)
 
@@ -1640,30 +1708,87 @@ describe("ViewModel.LootMinutes", function()
 end)
 
 describe("ViewModel sidebar, user card and sync pill", function()
-  it("groups the tabs: no label, Guild, and Admin only for who may edit the rules", function()
-    local member = ViewModel.NavGroups("member")
-    assert.are.equal(2, #member)
-    assert.is_nil(member[1].label)
-    assert.are.same({ "home", "profile", "ready" }, {
-      member[1].items[1].value,
-      member[1].items[2].value,
-      member[1].items[3].value,
-    })
-    assert.are.equal("Guild", member[2].label)
-    assert.are.equal("professions", member[2].items[#member[2].items].value)
-    assert.are.equal("Professions", member[2].items[#member[2].items].text)
-    assert.are.equal("roster", member[2].items[#member[2].items - 1].value)
-    assert.are.equal("Members", member[2].items[#member[2].items - 1].text)
+  local function navValues(role, rosterId)
+    local labels, values = {}, {}
+    for _, group in ipairs(ViewModel.NavGroups(role, rosterId)) do
+      labels[#labels + 1] = group.label
+      local items = {}
+      for _, item in ipairs(group.items) do
+        items[#items + 1] = item.value
+      end
+      values[#values + 1] = items
+    end
+    return labels, values
+  end
 
-    local admin = ViewModel.NavGroups("admin")
-    assert.are.equal(3, #admin)
-    assert.are.equal("Admin", admin[3].label)
-    assert.are.equal("rules", admin[3].items[1].value)
-    assert.is_truthy(admin[3].items[1].icon)
+  local GUILD_ALL = { "home", "professions", "events", "ready", "loot", "pvp" }
+
+  it("groups the tabs in Guild and Admin, with no unlabeled group", function()
+    local labels, values = navValues("gm")
+    assert.are.same({ "Guild", "Admin" }, labels)
+    assert.are.same(GUILD_ALL, values[1])
+    assert.are.same({ "raid", "rules", "roster", "pvpadmin", "ranks" }, values[2])
+    assert.are.equal("Raid", ViewModel.NavGroups("gm")[2].items[1].text)
+    assert.is_truthy(ViewModel.NavGroups("gm")[2].items[1].icon)
+  end)
+
+  it("shows each rank the tabs of the matrix, with a roster", function()
+    local expected = {
+      gm = { GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks" } },
+      cogm = { GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks" } },
+      officer = { GUILD_ALL, { "raid", "rules", "roster", "ranks" } },
+      rl = { GUILD_ALL, { "raid", "rules", "roster", "ranks" } },
+      roster = { GUILD_ALL },
+      member = { { "home", "professions", "pvp" } },
+      alter = { { "home", "professions", "pvp" } },
+    }
+    for role, groups in pairs(expected) do
+      local _, values = navValues(role, "r1")
+      assert.are.same(groups, values, role)
+    end
+  end)
+
+  it("shows the ranks that depend on a roster nothing but the Guild basics without one", function()
+    local basics = { { "home", "professions", "pvp" } }
+    for _, role in ipairs({ "roster", "member", "alter" }) do
+      local labels, values = navValues(role, nil)
+      assert.are.same({ "Guild" }, labels, role)
+      assert.are.same(basics, values, role)
+    end
+    -- The Admin group opens with admin_view, but its tabs follow their own scope: rl without a roster only reads the
+    -- Ranks tab.
+    local _, rl = navValues("rl", nil)
+    assert.are.same({ { "home", "professions", "pvp" }, { "ranks" } }, { rl[1], rl[2] or {} })
+    -- gm, cogm and officer reach every roster, so a missing roster of their own changes nothing for them.
+    local _, gm = navValues("gm", nil)
+    assert.are.same({ GUILD_ALL, { "raid", "rules", "roster", "pvpadmin", "ranks" } }, gm)
+    local _, officer = navValues("officer", nil)
+    assert.are.same({ { "home", "professions", "pvp" }, { "rules", "roster", "ranks" } }, officer)
+  end)
+
+  it("keeps the Admin group away from roster, member and alter, and from a player without a rank", function()
+    for _, role in ipairs({ "roster", "member", "alter" }) do
+      for _, group in ipairs(ViewModel.NavGroups(role, "r1")) do
+        assert.are_not.equal("Admin", group.label, role)
+      end
+    end
+    for _, group in ipairs(ViewModel.NavGroups(nil, nil)) do
+      assert.are_not.equal("Admin", group.label)
+    end
+  end)
+
+  it("tells which tabs a player sees, hidden and unknown ones never", function()
+    assert.is_true(ViewModel.TabVisible("home", "member", nil))
+    assert.is_true(ViewModel.TabVisible("pvpadmin", "cogm", nil))
+    assert.is_false(ViewModel.TabVisible("pvpadmin", "officer", "r1"))
+    assert.is_false(ViewModel.TabVisible("raid", "roster", "r1"))
+    for _, value in ipairs({ "profile", "layers", "blacklist", "nowhere" }) do
+      assert.is_false(ViewModel.TabVisible(value, "gm", "r1"), value)
+    end
   end)
 
   it("gives every tab an icon", function()
-    for _, tab in ipairs(ViewModel.TabsFor("admin")) do
+    for _, tab in ipairs(ViewModel.TabsFor("gm")) do
       assert.is_truthy(tab.icon, tab.value)
     end
   end)
@@ -1702,7 +1827,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
     ns.Locale.UsePreference("es", "enUS")
     assert.are.equal("Inicio", vm.TABS[1].text)
     assert.are.equal("Inicio", vm.NavGroups("member")[1].items[1].text)
-    assert.are.equal("Reglas", vm.RULES_TAB.text)
+    assert.are.equal("Reglas del roster", vm.TABS[8].text)
     assert.are.equal("cumplido", vm.Word("met"))
     ns.Locale.UsePreference("auto", "enUS")
     assert.are.equal("Home", vm.TABS[1].text)
@@ -1713,9 +1838,9 @@ describe("ViewModel sidebar, user card and sync pill", function()
   end)
 
   it("describes the user card with the rank and the addon role", function()
-    assert.are.same({ name = "Ann", detail = "Raider \194\183 raid leader" }, ViewModel.UserCard("Ann", "Raider", "rl"))
+    assert.are.same({ name = "Ann", detail = "Raider \194\183 Raid leader" }, ViewModel.UserCard("Ann", "Raider", "rl"))
     assert.are.same({ name = "Ann", detail = "none" }, ViewModel.UserCard("Ann", nil, nil))
-    assert.are.same({ name = "?", detail = "member" }, ViewModel.UserCard(nil, "", "member"))
+    assert.are.same({ name = "?", detail = "Member" }, ViewModel.UserCard(nil, "", "member"))
   end)
 
   it("tells the sync state in the pill", function()
@@ -2034,10 +2159,10 @@ end)
 
 describe("ViewModel.MemberRows", function()
   local entries = {
-    ["Ann-Realm"] = { rankName = "Raider", rankIndex = 3, level = 60, class = "MAGE" },
-    ["Bob"] = { rankName = "Raider", rankIndex = 3, level = 59, class = "WARRIOR" },
-    ["Boss"] = { rankName = "Maestro", rankIndex = 0, level = 60, class = "PRIEST" },
-    ["Cid"] = { rankName = "Raider", rankIndex = 4, level = 40, class = "ROGUE" },
+    ["Ann-Realm"] = { rankName = "RL", rankIndex = 3, level = 60, class = "MAGE" },
+    ["Bob"] = { rankName = "Officer", rankIndex = 2, level = 59, class = "WARRIOR" },
+    ["Boss"] = { rankName = "Master", rankIndex = 0, level = 60, class = "PRIEST" },
+    ["Cid"] = { rankName = "Recruit", rankIndex = 6, level = 40, class = "ROGUE" },
   }
   local received = {
     ["Ann-Realm"] = {
@@ -2052,7 +2177,7 @@ describe("ViewModel.MemberRows", function()
     ["Gone"] = { class = "MAGE", level = 10, receivedAt = 1000 },
   }
   local rosters = { r1 = { id = "r1", name = "Main" }, r2 = { id = "r2", name = "Alts" } }
-  local members = { ["Ann-Realm"] = { role = "rl", rosterId = "r1" }, ["Bob"] = { role = "council", rosterId = "r2" } }
+  local members = { ["Ann-Realm"] = { rosterId = "r1" }, ["Bob"] = { rosterId = "r2" } }
 
   local function rows(extra)
     local args =
@@ -2091,7 +2216,9 @@ describe("ViewModel.MemberRows", function()
     assert.are.same({ "r1", "Main", "rl" }, { ann.rosterId, ann.rosterName, ann.role })
     local cid = rows()[4]
     assert.are.same({ "Rogue", 40, nil, nil }, { cid.class, cid.level, cid.ilvl, cid.spec })
-    assert.are.equal("member", cid.role)
+    assert.are.equal("alter", cid.role)
+    assert.are.equal("Alt", cid.roleText)
+    assert.are.equal("Officer", rows()[2].roleText)
   end)
 
   it("flags a profile older than a week as stale, and never shows anything as verified", function()
@@ -2102,18 +2229,17 @@ describe("ViewModel.MemberRows", function()
     assert.is_nil(list[3].updated)
   end)
 
-  it("flags the PvP officers it is told about", function()
+  it("has no PvP officer flag: the role is the guild rank", function()
     local list = rows({ pvpOfficers = { Bob = true } })
-    assert.are.same(
-      { false, true, false, false },
-      { list[1].pvpOfficer, list[2].pvpOfficer, list[3].pvpOfficer, list[4].pvpOfficer }
-    )
-    assert.is_false(rows()[2].pvpOfficer)
+    for _, row in ipairs(list) do
+      assert.is_nil(row.pvpOfficer)
+    end
   end)
 
-  it("makes the guild master the admin, whatever is assigned", function()
-    local list = rows({ members = { Boss = { role = "rl" } } })
-    assert.are.same({ "admin", true }, { list[3].role, list[3].isGuildMaster })
+  it("makes the guild master gm whatever the rank is called, and ignores a stored role", function()
+    local list = rows({ members = { Boss = { role = "rl" }, ["Cid"] = { role = "gm" } } })
+    assert.are.same({ "gm", true }, { list[3].role, list[3].isGuildMaster })
+    assert.are.equal("alter", list[4].role)
   end)
 
   it("filters by name, roster, spec and the addon", function()
@@ -2137,7 +2263,9 @@ describe("ViewModel.MemberRows", function()
       { "Boss", "Cid", "Bob", "Ann-Realm" },
       names(rows({ sort = { key = "updated", descending = false } }))
     )
-    assert.are.same({ "Ann-Realm", "Cid", "Bob", "Boss" }, names(rows({ sort = { key = "role", descending = true } })))
+    -- By authority: gm first when ascending.
+    assert.are.same({ "Boss", "Bob", "Ann-Realm", "Cid" }, names(rows({ sort = { key = "role", descending = false } })))
+    assert.are.same({ "Cid", "Ann-Realm", "Bob", "Boss" }, names(rows({ sort = { key = "role", descending = true } })))
     assert.are.same({ "Ann-Realm", "Bob", "Boss", "Cid" }, names(rows({ sort = { key = "nonsense" } })))
   end)
 
@@ -2158,9 +2286,9 @@ describe("ViewModel.MemberRows", function()
     assert.are.equal("||r", list[1].main)
   end)
 
-  it("builds the roster chips for the guild master, a raid leader and a member", function()
+  it("builds the roster chips for whoever sees every roster, a raid leader and a member", function()
     local counts = { r1 = 2, r2 = 1, none = 5 }
-    local admin = ViewModel.RosterChips(rosters, counts, "admin", nil)
+    local admin = ViewModel.RosterChips(rosters, counts, "gm", nil)
     assert.are.same({
       { value = "r2", text = "Alts (1)" },
       { value = "r1", text = "Main (2)" },
@@ -2168,7 +2296,42 @@ describe("ViewModel.MemberRows", function()
     }, admin)
     assert.are.same({ { value = "r1", text = "Main (2)" } }, ViewModel.RosterChips(rosters, counts, "rl", "r1"))
     assert.are.same({}, ViewModel.RosterChips(rosters, counts, "member", "r1"))
-    assert.are.same({}, ViewModel.RosterChips(rosters, counts, "council", "r1"))
+    assert.are.same(admin, ViewModel.RosterChips(rosters, counts, "officer", "r1"))
+    assert.are.same(admin, ViewModel.RosterChips(rosters, counts, "cogm", nil))
+  end)
+
+  it("lists the own roster and the players with no roster for a raid leader's view", function()
+    local list = ViewModel.MemberRows({
+      entries = { A = {}, B = {}, C = {} },
+      rosters = { r1 = { id = "r1", name = "Main" }, r2 = { id = "r2", name = "Alts" } },
+      members = { A = { rosterId = "r1" }, B = { rosterId = "r2" } },
+      now = 1,
+      onlyRoster = "r1",
+    })
+    assert.are.same({ "A", "C" }, { list[1].key, list[2].key })
+    assert.are.equal(2, #list)
+  end)
+
+  it("gives the roster dropdown of a row by rank and roster", function()
+    local two = { r1 = { id = "r1", name = "Main" }, r2 = { id = "r2", name = "Alts" } }
+    local function values(items)
+      local out = {}
+      for _, item in ipairs(items or {}) do
+        out[#out + 1] = tostring(item.value)
+      end
+      return out
+    end
+    local free, mine, other = { rosterId = nil }, { rosterId = "r1" }, { rosterId = "r2" }
+    assert.are.same({ "false", "r2", "r1" }, values(ViewModel.MemberRosterChoices("gm", nil, free, two)))
+    assert.are.same({ "false", "r2", "r1" }, values(ViewModel.MemberRosterChoices("cogm", nil, other, two)))
+    assert.is_nil(ViewModel.MemberRosterChoices("gm", nil, { isGuildMaster = true }, two))
+    assert.are.same({ "false", "r1" }, values(ViewModel.MemberRosterChoices("rl", "r1", free, two)))
+    assert.are.same({ "false", "r1" }, values(ViewModel.MemberRosterChoices("rl", "r1", mine, two)))
+    assert.is_nil(ViewModel.MemberRosterChoices("rl", "r1", other, two))
+    assert.is_nil(ViewModel.MemberRosterChoices("rl", nil, free, two))
+    for _, role in ipairs({ "officer", "roster", "member", "alter" }) do
+      assert.is_nil(ViewModel.MemberRosterChoices(role, "r1", free, two), role)
+    end
   end)
 
   it("describes the detail of a row", function()
@@ -2179,9 +2342,8 @@ describe("ViewModel.MemberRows", function()
     assert.are.same({ "not declared", "No profile received", false }, { none.main, none.updated, none.hasProfile })
   end)
 
-  it("offers member, raid leader and loot council, and the rosters with an optional none", function()
-    local roles = ViewModel.RoleChoices()
-    assert.are.same({ "member", "rl", "council" }, { roles[1].value, roles[2].value, roles[3].value })
+  it("offers the rosters with an optional none, and no role to pick", function()
+    assert.is_nil(ViewModel.RoleChoices)
     local choices = ViewModel.RosterChoices(rosters, true)
     assert.are.same({ false, "r2", "r1" }, { choices[1].value, choices[2].value, choices[3].value })
     assert.are.equal(2, #ViewModel.RosterChoices(rosters, false))
@@ -2633,7 +2795,7 @@ describe("ViewModel blacklist rows", function()
     local member = ViewModel.BlacklistTable(entries, { role = "member", actor = "Me" })
     assert.are.same({ true, false, false }, { member[1].canEdit, member[2].canEdit, member[3].canEdit })
     assert.is_false(member[1].canRemove)
-    local admin = ViewModel.BlacklistTable(entries, { role = "admin", actor = "Boss" })
+    local admin = ViewModel.BlacklistTable(entries, { role = "gm", actor = "Boss" })
     assert.are.same({ true, true }, { admin[1].canEdit, admin[1].canRemove })
   end)
 
@@ -2854,5 +3016,116 @@ describe("ViewModel recipes", function()
     assert.are.equal("Never scanned", rows[2].scanText)
     assert.is_true(rows[2].needsScan)
     assert.is_true(rows[2].secondary)
+  end)
+end)
+
+describe("ViewModel.RosterSelector", function()
+  local rosters = {
+    r1 = { id = "r1", name = "Main" },
+    r2 = { id = "r2", name = "Alts" },
+    r3 = { id = "r3", name = "Zeta" },
+  }
+
+  it("shows a selector to who has the action on every roster, with the rosters by name", function()
+    for _, role in ipairs({ "gm", "cogm" }) do
+      local data = ViewModel.RosterSelector(role, "raid_manage", nil, rosters, nil)
+      assert.is_true(data.visible, role)
+      assert.are.same({ "r2", "r1", "r3" }, {
+        data.options[1].value,
+        data.options[2].value,
+        data.options[3].value,
+      })
+      assert.are.same({ "Alts", "Main", "Zeta" }, { data.options[1].text, data.options[2].text, data.options[3].text })
+      assert.is_nil(data.label)
+    end
+    local officer = ViewModel.RosterSelector("officer", "rules_view", "r1", rosters, nil)
+    assert.is_true(officer.visible)
+  end)
+
+  it("starts on the own roster, else on the first by name, and keeps a valid pick", function()
+    assert.are.equal("r3", ViewModel.RosterSelector("gm", "raid_manage", "r3", rosters, nil).selected)
+    assert.are.equal("r2", ViewModel.RosterSelector("gm", "raid_manage", nil, rosters, nil).selected)
+    assert.are.equal("r1", ViewModel.RosterSelector("gm", "raid_manage", "r3", rosters, "r1").selected)
+    -- A pick that no longer exists, or an own roster that was deleted, falls back to the first by name.
+    assert.are.equal("r3", ViewModel.RosterSelector("gm", "raid_manage", "r3", rosters, "gone").selected)
+    assert.are.equal("r2", ViewModel.RosterSelector("gm", "raid_manage", "gone", rosters, nil).selected)
+  end)
+
+  it("fixes who has the action on the own roster only to it, shown as a label", function()
+    for _, role in ipairs({ "officer", "rl" }) do
+      local data = ViewModel.RosterSelector(role, "raid_manage", "r1", rosters, "r3")
+      assert.is_false(data.visible, role)
+      assert.are.equal("r1", data.selected, role)
+      assert.are.equal("Main", data.label, role)
+      assert.are.same({}, data.options, role)
+    end
+    -- The same rank can have the action on every roster in one tab and on its own in another.
+    assert.is_false(ViewModel.RosterSelector("rl", "members_view", "r2", rosters, nil).visible)
+    assert.is_true(ViewModel.RosterSelector("officer", "members_view", "r2", rosters, nil).visible)
+  end)
+
+  it("shows nothing to who has no roster or no access to the action", function()
+    local noRoster = ViewModel.RosterSelector("rl", "raid_manage", nil, rosters, nil)
+    assert.is_false(noRoster.visible)
+    assert.is_nil(noRoster.selected)
+    assert.is_nil(noRoster.label)
+    local denied = ViewModel.RosterSelector("member", "raid_manage", "r1", rosters, "r2")
+    assert.is_false(denied.visible)
+    assert.is_nil(denied.selected)
+    assert.is_nil(ViewModel.RosterSelector(nil, "raid_manage", "r1", rosters, nil).selected)
+  end)
+
+  it("has no selector for a guild without rosters", function()
+    local data = ViewModel.RosterSelector("gm", "raid_manage", nil, {}, nil)
+    assert.is_false(data.visible)
+    assert.is_nil(data.selected)
+  end)
+
+  it("escapes the roster names", function()
+    local data = ViewModel.RosterSelector("gm", "raid_manage", nil, { r1 = { id = "r1", name = "|cffff0000Red" } }, nil)
+    assert.are.equal("||cffff0000Red", data.options[1].text)
+  end)
+end)
+
+describe("ViewModel.UpcomingEventRows", function()
+  local rosters = { r1 = { id = "r1", name = "Main" } }
+  local function event(id, title, startAt, extra)
+    local e = { eventId = id, title = title, status = "planned", startAt = startAt, rosterId = "r1" }
+    for key, value in pairs(extra or {}) do
+      e[key] = value
+    end
+    return e
+  end
+
+  it("lists the upcoming events soonest first, with the roster name or Guild", function()
+    local events = {
+      late = event("late", "Late", 9000),
+      soon = event("soon", "Soon", 5000),
+      all = event("all", "Everybody", 7000, { rosterId = false }),
+    }
+    events.all.rosterId = nil
+    local rows = ViewModel.UpcomingEventRows(events, 1000, rosters)
+    assert.are.same({ "soon", "all", "late" }, { rows[1].eventId, rows[2].eventId, rows[3].eventId })
+    assert.are.same({ "Main", "Guild", "Main" }, { rows[1].rosterText, rows[2].rosterText, rows[3].rosterText })
+    assert.are.equal("Soon", rows[1].title)
+    assert.is_string(rows[1].dateText)
+  end)
+
+  it("leaves out past, closed and cancelled events", function()
+    local events = {
+      past = event("past", "Past", 500),
+      closed = event("closed", "Closed", 5000, { status = "closed" }),
+      cancelled = event("cancelled", "Cancelled", 5000, { status = "cancelled" }),
+      ok = event("ok", "Ok", 5000),
+    }
+    local rows = ViewModel.UpcomingEventRows(events, 1000, rosters)
+    assert.are.equal(1, #rows)
+    assert.are.equal("ok", rows[1].eventId)
+  end)
+
+  it("gives no rows when there is nothing to show, and escapes the titles", function()
+    assert.are.same({}, ViewModel.UpcomingEventRows({}, 1000, rosters))
+    local rows = ViewModel.UpcomingEventRows({ a = event("a", "|cffff0000Red", 5000) }, 1000, rosters)
+    assert.are.equal("||cffff0000Red", rows[1].title)
   end)
 end)
