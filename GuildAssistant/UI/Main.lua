@@ -332,6 +332,13 @@ function UI.RanksChanged()
   UI.RostersChanged()
 end
 
+-- A personal module switch changed: the sidebar lists the tabs that are on now (a tab that went away gives way to
+-- Home), and the page is drawn again.
+function UI.ModulesChanged()
+  UI.BuildSidebar()
+  UI.Redraw()
+end
+
 -- The guild's readiness rules changed: rare (one message per change), so no throttling.
 function UI.RulesChanged()
   if UI.IsOpen() and (currentTab == "ready" or currentTab == "rules" or currentTab == "home") then

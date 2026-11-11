@@ -812,20 +812,8 @@ local function StartPvPSeason()
   })
 end
 
-local function Activate(identity)
-  ns.guildIdentity = identity
-  ns.db = ns.Store.View(ns.root, ns.Store.ResolveGuildKey(ns.root, identity), identity)
-  ns.active = true
-  -- The saved data of this character keeps the key it always had; the shared name is resolved later.
-  ns.character = ns.Store.GetChar(ns.db, ns.Platform.GetLegacyIdentityKey())
-  ns.ProfileService.Refresh(ns.Platform, ns.character.profile)
-  ns.EventService.Purge({
-    events = ns.db.global.events,
-    tombstones = ns.db.global.sync.tombstones,
-    now = ns.Platform.ServerTime,
-  })
-  ns.Comm.Start()
-  ns.MinimapButton.Create()
+-- The roster of the guild, built at activation. Its requests are asked again by the guild events (OnUpdate above).
+local function StartGuildRoster()
   ns.guildRoster = ns.GuildRoster.New({
     platform = ns.Platform,
     schedule = C_Timer.After,
@@ -835,17 +823,109 @@ local function Activate(identity)
   })
   ns.guildRoster:Request()
   ns.guildRoster:Rebuild()
-  StartPvPSeason()
-  ns.LootPopup.Start()
-  ns.VotingFrame.Start()
-  StartPvP()
-  StartBlacklist()
-  StartLayer()
-  StartPosition()
-  StartBossLoot()
-  StartRecipes()
-  StartAutoPublish()
-  ScheduleSelfTest()
+end
+
+-- The personal module switches (Domain/ModuleRegistry, per character). Read them with ns.modules:IsEnabled(id); until
+-- the character is loaded every module counts as on.
+ns.modules = ns.ModuleService.New({
+  character = function()
+    return ns.character
+  end,
+  skipped = function()
+    return ns.skippedSteps
+  end,
+  onChange = function()
+    if ns.UI and ns.UI.ModulesChanged then
+      ns.UI.ModulesChanged()
+    end
+  end,
+})
+
+-- The steps of an activation, in order. A step owned by a module (Domain/ModuleRegistry, ForStep) is skipped while the
+-- module is off; every other step always runs, as before the modules existed.
+local ACTIVATION_STEPS = {
+  {
+    name = "character",
+    run = function()
+      -- The saved data of this character keeps the key it always had; the shared name is resolved later.
+      ns.character = ns.Store.GetChar(ns.db, ns.Platform.GetLegacyIdentityKey())
+    end,
+  },
+  {
+    name = "profile",
+    run = function()
+      ns.ProfileService.Refresh(ns.Platform, ns.character.profile)
+    end,
+  },
+  {
+    name = "purge",
+    run = function()
+      ns.EventService.Purge({
+        events = ns.db.global.events,
+        tombstones = ns.db.global.sync.tombstones,
+        now = ns.Platform.ServerTime,
+      })
+    end,
+  },
+  {
+    name = "comm",
+    run = function()
+      ns.Comm.Start()
+    end,
+  },
+  {
+    name = "minimap",
+    run = function()
+      ns.MinimapButton.Create()
+    end,
+  },
+  { name = "roster", run = StartGuildRoster },
+  { name = "pvpSeason", run = StartPvPSeason },
+  {
+    name = "lootPopup",
+    run = function()
+      ns.LootPopup.Start()
+    end,
+  },
+  {
+    name = "votingFrame",
+    run = function()
+      ns.VotingFrame.Start()
+    end,
+  },
+  { name = "pvp", run = StartPvP },
+  { name = "blacklist", run = StartBlacklist },
+  { name = "layer", run = StartLayer },
+  { name = "position", run = StartPosition },
+  { name = "bossLoot", run = StartBossLoot },
+  { name = "recipes", run = StartRecipes },
+  { name = "autoPublish", run = StartAutoPublish },
+  { name = "selfTest", run = ScheduleSelfTest },
+}
+
+-- The names of the activation steps, in order. Domain/ModuleRegistry checks that each is core or owned by a module.
+function ns.ActivationStepNames()
+  local names = {}
+  for _, step in ipairs(ACTIVATION_STEPS) do
+    names[#names + 1] = step.name
+  end
+  return names
+end
+
+local function Activate(identity)
+  ns.guildIdentity = identity
+  ns.db = ns.Store.View(ns.root, ns.Store.ResolveGuildKey(ns.root, identity), identity)
+  ns.active = true
+  -- The steps of a module that is off are not run; they are listed so Modules can ask for a reload when it is on.
+  ns.skippedSteps = {}
+  for _, step in ipairs(ACTIVATION_STEPS) do
+    local moduleId = ns.ModuleRegistry.ForStep(step.name)
+    if moduleId and not ns.modules:IsEnabled(moduleId) then
+      ns.skippedSteps[#ns.skippedSteps + 1] = step.name
+    else
+      step.run()
+    end
+  end
   local guildName = ns.GetGuildName()
   if guildName then
     print(
