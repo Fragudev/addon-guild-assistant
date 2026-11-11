@@ -1631,6 +1631,12 @@ describe("ViewModel in Spanish", function()
     assert.are.equal("something_new", Spanish.Word("something_new"))
   end)
 
+  it("names a profession rule in Spanish whatever language it was saved in", function()
+    local rule = { check = "profession", profession = "Cooking", min = 150 }
+    assert.are.equal("Cocina 150 o más", Spanish.RuleSummary(rule))
+    assert.are.equal("Cocina", Spanish.RuleFields(rule).profession)
+  end)
+
   it("keeps the placeholders working in a translated sentence", function()
     assert.are.equal("nivel 60 o más", Spanish.RuleSummary({ check = "level", min = 60 }))
     local ranks = { { name = "Knight", kills = 100 }, { name = "Knight-Lieutenant", kills = 800 } }
