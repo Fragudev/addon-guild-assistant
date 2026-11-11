@@ -84,7 +84,7 @@ local function receiver(roles)
 end
 
 local function snapshot(max)
-  return Transfer.BuildSnapshot({}, {}, 5, nil, nil, nil, nil, nil, nil, nil, nil, nil, board(), max, NOW)
+  return Transfer.BuildSnapshot({}, {}, 5, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, board(), max, NOW)
 end
 
 describe("Transfer announcements in a snapshot", function()

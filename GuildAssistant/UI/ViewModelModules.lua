@@ -5,7 +5,7 @@ local _, ns = ...
 local ViewModel = ns.ViewModel
 local L = ns.L
 
--- The name and the one-line description of each module, by id. Later phases add their modules here (intel, groups and
+-- The name and the one-line description of each module, by id. Later phases add their modules here (groups and
 -- announcements), next to their entries in Domain/ModuleRegistry.
 ViewModel.MODULE_TEXT = ns.Locale.Table(function()
   return {
@@ -44,6 +44,10 @@ ViewModel.MODULE_TEXT = ns.Locale.Table(function()
     announcements = {
       label = L("Announcements"),
       description = L("The guild announcements board and the popup when a new one arrives."),
+    },
+    intel = {
+      label = L("Intel"),
+      description = L("Enemy sightings, the Intel alerts and their map pins."),
     },
   }
 end)

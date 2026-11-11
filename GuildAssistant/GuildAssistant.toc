@@ -73,6 +73,17 @@ Domain\PositionModel.lua
 Domain\PositionPublisher.lua
 Domain\PositionDirectory.lua
 Domain\PositionPins.lua
+Domain\IntelModel.lua
+Domain\IntelService.lua
+Domain\IntelDetector.lua
+Domain\GuildKosService.lua
+Domain\IntelDirectory.lua
+Domain\IntelPublisher.lua
+Domain\IntelAlerts.lua
+Domain\IntelReport.lua
+Domain\IntelImport.lua
+Domain\IntelPins.lua
+Domain\IntelMinimapTooltip.lua
 Sync\Codec.lua
 Sync\Protocol.lua
 Sync\Inbox.lua
@@ -82,6 +93,7 @@ Sync\EventSync.lua
 Sync\LootSync.lua
 Sync\PvPSync.lua
 Sync\BlacklistSync.lua
+Sync\GuildKosSync.lua
 Sync\ReadinessRulesSync.lua
 Sync\RankMapSync.lua
 Sync\AnnouncementSync.lua
@@ -91,6 +103,7 @@ Sync\RecipeSync.lua
 Sync\LayerSync.lua
 Sync\LfgSync.lua
 Sync\PositionSync.lua
+Sync\IntelSync.lua
 Sync\Transfer.lua
 Sync\Comm.lua
 UI\Kit\Theme.lua
@@ -112,6 +125,7 @@ UI\ViewModelPvP.lua
 UI\ViewModelProfessions.lua
 UI\ViewModelLayers.lua
 UI\ViewModelGroups.lua
+UI\ViewModelIntel.lua
 UI\ViewModelRanks.lua
 UI\ViewModelInstalls.lua
 UI\ViewModelModules.lua
@@ -127,6 +141,7 @@ UI\Tabs\Events.lua
 UI\Tabs\Loot.lua
 UI\Tabs\PvP.lua
 UI\Tabs\PvPAdmin.lua
+UI\Tabs\PvPIntel.lua
 UI\Tabs\Blacklist.lua
 UI\Tabs\Rules.lua
 UI\Tabs\Professions.lua
@@ -145,11 +160,15 @@ UI\AnnouncementPopup.lua
 UI\VotingFrame.lua
 UI\MinimapButton.lua
 UI\MapPins.lua
+UI\IntelWindow.lua
+UI\IntelTargetButton.lua
+UI\WorldMapToggles.lua
 Commands\RaidCommands.lua
 Commands\LootCommands.lua
 Commands\TemplateCommands.lua
 Commands\BlacklistCommands.lua
 Commands\RosterCommands.lua
 Commands\PvPSeasonCommands.lua
+Commands\IntelCommands.lua
 Commands\Slash.lua
 Core\Init.lua

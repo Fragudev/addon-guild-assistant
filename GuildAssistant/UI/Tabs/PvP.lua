@@ -663,7 +663,7 @@ UI.Register("pvp", function(page)
     description = L("Season missions with a points ranking and prizes, and the guild's honourable kills."),
   })
   local tabs = ViewModel.PvPSubTabs()
-  -- A link from another place names the sub-tab to start on.
+  -- A link from another place (the Intel window, /ga intel config) names the sub-tab to start on.
   if UI.nav.pvpSub then
     state.sub, UI.nav.pvpSub = UI.nav.pvpSub, nil
   end
@@ -684,6 +684,8 @@ UI.Register("pvp", function(page)
     feed(page)
   elseif state.sub == "history" then
     historyView(page)
+  elseif state.sub == "intel" then
+    UI.PvPIntel(page)
   else
     seasonView(page)
   end

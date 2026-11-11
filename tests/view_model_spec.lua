@@ -717,21 +717,22 @@ describe("ViewModel minimap helpers", function()
   it("has the tabs of the role like the sidebar, then the settings, and no sync request", function()
     local entries = ViewModel.MinimapMenu("member")
     local tabs = ViewModel.TabsFor("member")
-    assert.are.equal(#tabs + 1, #entries)
+    assert.are.equal(#tabs + 2, #entries)
     for index, tab in ipairs(tabs) do
       assert.are.same({ text = tab.text, icon = tab.icon, action = "tab", value = tab.value }, entries[index])
     end
+    assert.are.same({ text = "Intel", icon = "search", action = "intel", value = "@intel" }, entries[#entries - 1])
     assert.are.equal("settings", entries[#entries].action)
     for _, entry in ipairs(entries) do
       assert.are_not.equal("sync", entry.action)
     end
     local admin = ViewModel.MinimapMenu("gm")
-    assert.are.equal("announceadmin", admin[#admin - 1].value)
-    assert.are.equal("installs", admin[#admin - 2].value)
-    assert.are.equal("ranks", admin[#admin - 3].value)
+    assert.are.equal("announceadmin", admin[#admin - 2].value)
+    assert.are.equal("installs", admin[#admin - 3].value)
+    assert.are.equal("ranks", admin[#admin - 4].value)
     local roster = ViewModel.MinimapMenu("roster", "r1")
     assert.are.equal("ready", roster[4].value)
-    assert.are.equal(#ViewModel.TabsFor("roster", "r1") + 1, #roster)
+    assert.are.equal(#ViewModel.TabsFor("roster", "r1") + 2, #roster)
   end)
 
   it("words the result of a sync request made from the troubleshooting command", function()

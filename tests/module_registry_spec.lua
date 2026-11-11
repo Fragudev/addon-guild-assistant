@@ -24,7 +24,7 @@ describe("ModuleRegistry", function()
 
   it("lists the toggleable modules in the order of the Modules tab", function()
     assert.are.same(
-      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist", "announcements" },
+      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist", "intel", "announcements" },
       ids(Registry.List())
     )
   end)
@@ -89,11 +89,13 @@ describe("ModuleRegistry", function()
   it("lists every module a module needs, transitively, for turning it on", function()
     assert.are.same({ "raid" }, Registry.Requirements("loot"))
     assert.are.same({}, Registry.Requirements("pvp"))
+    assert.are.same({ "pvp" }, Registry.Requirements("intel"))
   end)
 
   it("lists every module that needs a module, transitively, for turning it off", function()
     assert.are.same({ "loot" }, Registry.Dependents("raid"))
-    assert.are.same({}, Registry.Dependents("pvp"))
+    assert.are.same({ "intel" }, Registry.Dependents("pvp"))
+    assert.are.same({}, Registry.Dependents("intel"))
     assert.are.same({}, Registry.Dependents("map"))
   end)
 

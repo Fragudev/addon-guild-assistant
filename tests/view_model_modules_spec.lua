@@ -64,7 +64,7 @@ describe("ViewModel.ModuleRows", function()
       ids[index] = row.id
     end
     assert.are.same(
-      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist", "announcements" },
+      { "professions", "raid", "loot", "pvp", "layers", "groups", "map", "blacklist", "intel", "announcements" },
       ids
     )
     local pvp = rowOf(rows, "pvp")

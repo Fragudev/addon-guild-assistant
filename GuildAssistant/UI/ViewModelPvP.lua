@@ -26,7 +26,16 @@ function ViewModel.PvPSubTabs()
     { value = "stats", text = L("Stats") },
     { value = "feed", text = L("Recent kills") },
     { value = "history", text = L("History") },
+    { value = "intel", text = L("Intel") },
   }
+  -- The Intel sub-tab belongs to the intel module (Domain/ModuleRegistry); without the module it is not offered.
+  if ns.modules and not ns.modules:IsEnabled("intel") then
+    for index, tab in ipairs(tabs) do
+      if tab.value == "intel" then
+        table.remove(tabs, index)
+      end
+    end
+  end
   return tabs
 end
 
@@ -391,10 +400,6 @@ function ViewModel.PvPGoalChoices(availability)
   if availability and availability.bgWins == false then
     skip.bg_wins = true
     skip.bg_played = true
-  end
-  -- A bounty needs the Kill On Sight list (the intel feature): it is only offered when that exists.
-  if not ns.IntelModel then
-    skip.kos = true
   end
   return choices(GOAL_ORDER, ViewModel.PVP_GOAL_KINDS, skip)
 end
@@ -978,9 +983,7 @@ local PRESETS = {
 function ViewModel.PvPPresetChoices()
   local items = {}
   for _, preset in ipairs(PRESETS) do
-    if preset.id ~= "kos_bounty" or ns.IntelModel then
-      items[#items + 1] = { value = preset.id, text = preset.name() }
-    end
+    items[#items + 1] = { value = preset.id, text = preset.name() }
   end
   return items
 end
@@ -1127,9 +1130,6 @@ end
 -- `missions` is PvPSeasonService:Missions(seasonId) (paused ones are not in it).
 function ViewModel.PvPBountyKeys(missions)
   local keys = {}
-  if not ns.IntelModel then
-    return keys
-  end
   for _, mission in ipairs(missions or {}) do
     local goal = mission.goal
     if mission.active ~= false and goal and goal.kind == "kos" and goal.target then

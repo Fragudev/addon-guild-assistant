@@ -128,6 +128,9 @@ end
 -- cogm (see ReadinessRulesSync).
 -- `rosters` (optional) is a RosterSync context ({ rosters, members, tombstones, now }) and `maxMembers` how many member
 -- assignments and removals to add; like the rules they are only worth carrying from an admin.
+-- `guildKos` (optional) is the guild Kill On Sight table and `maxGuildKos` how many of its entries and of its removals
+-- ("K:" tombstones) to add, after the rules; its entries carry their author like the blacklist ones. The text export
+-- leaves them out too.
 -- `announcements` (optional) is the announcements store, `maxAnnouncements` how many of its live announcements and
 -- removals to add (after everything else) and `now` the server time that decides which have expired; like the rules
 -- they are only worth carrying from a gm or cogm (see AnnouncementSync).
@@ -143,6 +146,8 @@ function Transfer.BuildSnapshot(
   rosters,
   maxMembers,
   maxRules,
+  guildKos,
+  maxGuildKos,
   rankMap,
   announcements,
   maxAnnouncements,
@@ -186,6 +191,11 @@ function Transfer.BuildSnapshot(
       if maxRules and index > maxRules then
         break
       end
+      items[#items + 1] = item
+    end
+  end
+  if guildKos and maxGuildKos and maxGuildKos > 0 then
+    for _, item in ipairs(ns.GuildKosSync.SnapshotItems(guildKos, tombstones, maxGuildKos)) do
       items[#items + 1] = item
     end
   end
@@ -238,6 +248,20 @@ local function applyBlacklistItem(item, ctx, sender, role)
     origin = { addedBy = item.addedBy, addedAt = item.addedAt }
   end
   return ns.BlacklistSync.Apply(ctx, message, sender, role, origin)
+end
+
+-- A guild Kill On Sight item of a snapshot, applied like a blacklist one: the author and date it carries are only read
+-- here, from the snapshot of a leader.
+local function applyGuildKosItem(item, ctx, sender, role)
+  local message, invalid = ns.Protocol.Validate(ns.Protocol.Build(item.t, item.p, "import"))
+  if not message then
+    return false, invalid
+  end
+  local origin
+  if item.t == "KOS_UPSERT" and (item.addedBy ~= nil or item.addedAt ~= nil) then
+    origin = { addedBy = item.addedBy, addedAt = item.addedAt }
+  end
+  return ns.GuildKosSync.Apply(ctx, message, sender, role, origin)
 end
 
 -- A roster or member item of a snapshot, applied as if the sender had sent it (so only an admin's counts).
@@ -308,9 +332,11 @@ end
 -- Applies a list of { t, p } items as if `sender` had sent each one: every item goes through the
 -- protocol validation, the role check for `role` and the conflict rules. `ctx` = { events, tombstones,
 -- now } as for EventSync; PvP items are only applied when `ctx.pvpStats` is there (see PvPSync) and blacklist items
--- when `ctx.blacklist` is (see BlacklistSync), which a text import never provides; the readiness rules likewise
+-- when `ctx.blacklist` is (see BlacklistSync), which a text import never provides; guild Kill On Sight items when
+-- `ctx.guildKos` is (see GuildKosSync), also never in an import; the readiness rules likewise
 -- when `ctx.readinessRules` is there. Returns { total, applied, pvp (how many of those were PvP), blacklist (how
--- many were blacklist), rules (how many roster rule sets were applied), rankMap (1 when the rank map was applied),
+-- many were blacklist), guildKos (how many were guild Kill On Sight), rules (how many roster rule sets were
+-- applied), rankMap (1 when the rank map was applied),
 -- announcements (how many were announcements, applied when
 -- `ctx.announcements` is there; `ctx.onAnnouncement(announcement)` hears each stored one),
 -- skipped = { [reason] = count } }.
@@ -320,6 +346,7 @@ function Transfer.ApplyItems(items, ctx, sender, role)
     applied = 0,
     pvp = 0,
     blacklist = 0,
+    guildKos = 0,
     rules = 0,
     rosters = 0,
     rankMap = 0,
@@ -349,6 +376,19 @@ function Transfer.ApplyItems(items, ctx, sender, role)
       if ok then
         summary.applied = summary.applied + 1
         summary.blacklist = summary.blacklist + 1
+      else
+        skip(why)
+      end
+    elseif
+      type(item) == "table"
+      and type(item.t) == "string"
+      and ctx.guildKos
+      and ns.GuildKosSync.IsGuildKosMessage(item.t)
+    then
+      local ok, why = applyGuildKosItem(item, ctx, sender, role)
+      if ok then
+        summary.applied = summary.applied + 1
+        summary.guildKos = summary.guildKos + 1
       else
         skip(why)
       end

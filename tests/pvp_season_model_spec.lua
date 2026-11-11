@@ -1,10 +1,15 @@
 -- The pure rules of PvP seasons: period keys, claim ids, validation, officer intervals, the ranking and the digest.
 local function load_model()
   local ns = {}
-  for _, path in ipairs({ "Core/Constants", "Core/Validate", "Domain/PermissionService", "Domain/PvPSeasonModel" }) do
+  for _, path in ipairs({
+    "Core/Constants",
+    "Core/Validate",
+    "Domain/PermissionService",
+    "Domain/IntelModel",
+    "Domain/PvPSeasonModel",
+  }) do
     assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
   end
-  dofile("tests/support/intel_stub.lua")(ns)
   return ns.PvPSeasonModel, ns.Constants
 end
 
@@ -176,17 +181,6 @@ describe("PvPSeasonModel.ValidateMission", function()
       local _, why = Model.ValidateMission(copy(good, { goal = { kind = "kos", target = target } }))
       assert.are.equal("invalid:goal", why)
     end
-  end)
-
-  it("refuses a target when the name rules are not loaded", function()
-    local bare = {}
-    for _, path in ipairs({ "Core/Constants", "Core/Validate", "Domain/PvPSeasonModel" }) do
-      assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", bare)
-    end
-    local _, why =
-      bare.PvPSeasonModel.ValidateMission(copy(good, { goal = { kind = "kos", count = 1, target = "Zed" } }))
-    assert.are.equal("invalid:goal", why)
-    assert(bare.PvPSeasonModel.ValidateMission(copy(good, { goal = { kind = "kos", count = 1 } })))
   end)
 
   it("refuses each field out of bounds", function()
