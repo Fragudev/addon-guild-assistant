@@ -31,8 +31,8 @@ secret store.
 | Tombstones (records of deletions) | local deletions and received ones |
 | Assignment templates (each keeps the roster of the event it was saved from) | you; never shared |
 | Raid rosters and the role and roster the guild master assigned to each member | the guild master, received over the guild channel |
-| Your PvP mission log, for the active season only: each honour kill (time, victim name, zone id, open world or battleground, and the victim's class and race when you had seen them), each battleground win, and your claims | your own kills and what you see in the game; never shared except inside a claim |
-| PvP seasons: the season, its missions and prizes, the PvP officers, who earned how many points for which mission (the grants), and the final standings of past seasons | the guild master and PvP officers, received over the guild channel and from a catch-up whisper |
+| Your PvP log, kept for 45 days whatever the season: each honour kill (time, victim name, zone id, open world or battleground, and the victim's class and race when you had seen them), each battleground result (win or loss), and your claims | your own kills and what you see in the game; never shared except inside a claim, and as numbers in the progress summary |
+| PvP seasons: the season, its missions and prizes, who earned how many points for which mission (the grants), and the final standings of past seasons | the guild master and co-guild master, received over the guild channel and from a catch-up whisper |
 
 Every stored value keeps where it came from (`observed`, `declared` or `received`), when, and who authored it.
 
@@ -84,7 +84,7 @@ log out. Like every addon message it is **not encrypted**, and a message already
 guild member running the addon receives the player's name, the reason you typed (up to 100 characters) and your
 name as the author, and you receive the entries of the others; a member who logs in later gets the whole list from
 a leader. There is no consent switch: adding a player is the act of sharing, and anyone with a guild role can do
-it. Only the guild master and officers can remove an entry. The reason is about a third party who has not agreed
+it. Only the guild master and co-guild master can remove an entry. The reason is about a third party who has not agreed
 to it, so write only what you would say to them in the guild channel. Like every addon message these are **not
 encrypted**, a message already sent cannot be recalled, and removing an entry does not erase copies held by
 clients that never received the removal (the removal itself is remembered for 30 days). The blacklist is not part
@@ -97,19 +97,25 @@ visible to everyone** while a session is open.
 ## PvP seasons
 
 A season's ledger is shared with the whole guild like the rest of the shared data: the points each player was granted
-and by whom, and, for a PvP officer, the dates the flag was on. A claim (what a member asks points for, with a note)
-goes over the guild channel too, and only admins and PvP officers keep it. When a season is closed, every client
-keeps the final standing and the delivery list and drops the detail (each grant, the pending claims).
+and by whom. A claim (what a member asks points for, with a note) goes over the guild channel too, and only the guild
+master and co-guild master keep it (they also pass the claims still waiting to each other). When a season is closed,
+every client keeps the final standing and the delivery list and drops the detail (each grant, the pending claims).
 
-**The mission log.** While a season is active, the addon keeps a log in your `SavedVariables`, per character, of your
-own honour kills (time, the victim's name, the zone id, open world or battleground, and the victim's class and race)
-and battleground wins, at most 2000 rows. Class and race come from a cache of the enemy players you saw (target,
-mouseover, nameplates), which lives in memory only and is never saved or sent. Grey kills are not logged. The log is
-**not shared**: only when you press *Claim* does a claim go to the guild channel with up to 60 of the rows that back
-it (time, victim, zone, place, class and race), the counts and the note you typed, so an admin or PvP officer can
-check it. The claim is repeated about every 10 minutes while it is waiting, so an officer who logs in later gets
-it, and only admins and PvP officers keep it. When the season closes, the log, your claims and the pending claims of
-everyone are deleted.
+**The PvP log.** The addon keeps a log in your `SavedVariables`, per character, of your own honour kills (time, the
+victim's name, the zone id, open world or battleground, and the victim's class and race) and battleground results
+(win or loss), whatever the season: rows are kept for 45 days and at most 3000. It is not tied to a season, so closing
+a season does not delete it. Class and race come from a cache of the enemy players you saw (target, mouseover,
+nameplates), which lives in memory only and is never saved or sent. Grey kills are not logged. The log is **not
+shared**: only when you press *Claim* (or a mission with automatic claiming is complete) does a claim go to the guild
+channel with up to 60 of the rows that back it (time, victim, zone, place, class and race), the counts and the note you
+typed, so the guild master or co-guild master can check it. The claim is repeated about every 10 minutes while it is
+waiting, and when one of them comes online, so they get it; only they keep it. When the season closes, the claims
+(yours and everyone's pending ones) are deleted; the log stays until its rows are 45 days old.
+
+**Progress summaries.** While a season is active the addon tells the guild, at most every 2 minutes and only when
+something changed, how far you are in each mission (a mission id, your count and its goal: numbers only, no names or
+evidence). Only the guild master and co-guild master keep it, to see who is close to a goal; it is not checked and
+grants nothing, and it is dropped when the season closes.
 
 ## Your layer
 

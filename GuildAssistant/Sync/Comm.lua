@@ -84,6 +84,11 @@ function Comm.New(deps)
     lastAskAt = nil,
     -- Called with the sender of every HELLO from a gm or cogm (set by Init after the PvP missions exist).
     onApproverHello = deps.onApproverHello,
+    -- Until when a catch-up whisper is expected: set by the own ledger request, a page outside it is unsolicited.
+    ledgerExpectedUntil = nil,
+    -- The last failure worth looking at, and how many there were.
+    lastError = nil,
+    errorCount = 0,
   }, Comm)
 end
 
@@ -423,7 +428,10 @@ function Comm:HandleWhisper(text, sender)
   if not leader then
     return false, "forbidden"
   end
-  if not self.ledgerInbox:AllowRate(sender, self.now()) then
+  local now = self.now()
+  local expectingLedger = self.ledgerExpectedUntil ~= nil and now <= self.ledgerExpectedUntil
+  local limiter = expectingLedger and self.ledgerInbox or self.snapshotInbox
+  if not limiter:AllowRate(sender, now) then
     return false, "rate_limited"
   end
 
@@ -440,6 +448,9 @@ function Comm:HandleWhisper(text, sender)
     return false, reason
   end
   if message.t == "PVP_LEDGER_DATA" then
+    if not expectingLedger then
+      return false, "unsolicited"
+    end
     if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
       return false, "duplicate"
     end
@@ -452,7 +463,8 @@ function Comm:HandleWhisper(text, sender)
   if not leader then
     return false, "forbidden"
   end
-  if not self.snapshotInbox:AllowRate(sender, self.now()) then
+  -- Each snapshot costs a lot to decode: while the loose ledger limit applied above, the strict one still counts.
+  if expectingLedger and not self.snapshotInbox:AllowRate(sender, now) then
     return false, "rate_limited"
   end
   if not self.inbox:MarkSeen(sender .. "\n" .. message.id) then
@@ -663,6 +675,8 @@ function Comm:RequestLedger()
     return false, "cooldown"
   end
   self.lastLedgerRequestAt = now
+  -- The catch-up that answers this request is expected for a while, and only then.
+  self.ledgerExpectedUntil = now + ns.Constants.PVP_LEDGER_EXPECT_SECONDS
   local payload = ns.PvPSeasonSync.RequestPayload(self.pvpSeason, self.pvpSeason.activeId, self:IsPvPApprover())
   return self:Send("PVP_LEDGER_REQ", payload, "PLR")
 end
@@ -722,8 +736,55 @@ function Comm:Fits(messageType, payload)
   return self.codec:Encode(message) ~= nil
 end
 
--- Whispers `target` the ledger the request is about, in pages that each fit the snapshot limit. Returns true plus the
--- number of pages, or false plus the first failure ("empty" when there is nothing to send).
+function Comm:RecordError(kind, detail)
+  self.lastError = { kind = kind, detail = tostring(detail):sub(1, 200), at = self.now() }
+  self.errorCount = self.errorCount + 1
+end
+
+-- Queues pages `from`..`count` of a catch-up for `target`, leaving QUEUE_RESERVED_ITEMS places of the queue free for
+-- other traffic. What does not fit is tried again every QUEUE_PACE_SECONDS, at most QUEUE_PACE_RETRIES times; the pages
+-- that never went out are recorded as an error. Returns the number of the first page that was not queued (count + 1
+-- when all were), and the first failure reason.
+function Comm:SendLedgerPages(target, seasonId, pages, from, attempt)
+  local constants = ns.Constants
+  local count = #pages
+  local number, first = from, nil
+  while number <= count do
+    if self.queue.maxItems - self.queue:Pending() <= constants.QUEUE_RESERVED_ITEMS then
+      break
+    end
+    local ok, reason = self:Send(
+      "PVP_LEDGER_DATA",
+      { seasonId = seasonId, page = number, pages = count, items = pages[number] },
+      ("PL:%s:%d"):format(target, number),
+      { target = target, maxBytes = constants.SYNC_MAX_ENCODED_BYTES }
+    )
+    if not ok and not first then
+      first = reason
+    end
+    number = number + 1
+  end
+  if first then
+    self:RecordError("ledger_page", first)
+  end
+  if number <= count then
+    if attempt >= constants.QUEUE_PACE_RETRIES then
+      self:RecordError(
+        "ledger_pages",
+        ("%d of %d page(s) not sent to %s: the queue was full"):format(count - number + 1, count, target)
+      )
+    else
+      self.schedule(constants.QUEUE_PACE_SECONDS, function()
+        self:SendLedgerPages(target, seasonId, pages, number, attempt + 1)
+      end)
+    end
+  end
+  return number, first
+end
+
+-- Whispers `target` the ledger the request is about, in pages that each fit the snapshot limit. The pages are paced:
+-- when the queue has no room for all of them the rest follows later (see SendLedgerPages). Returns true plus the number
+-- of pages (and "paced" when some wait), or false plus the first failure ("empty" when there is nothing to send).
 function Comm:SendLedger(target, request)
   local constants = ns.Constants
   local sync = ns.PvPSeasonSync
@@ -738,22 +799,14 @@ function Comm:SendLedger(target, request)
   end
   local pages = sync.Paginate(items, fits, constants.PVP_LEDGER_PAGE_ITEMS)
   local count = math.min(#pages, constants.PVP_LEDGER_PAGES_MAX)
-  local first
-  for number = 1, count do
-    local ok, reason = self:Send(
-      "PVP_LEDGER_DATA",
-      { seasonId = request.seasonId, page = number, pages = count, items = pages[number] },
-      ("PL:%s:%d"):format(target, number),
-      { target = target, maxBytes = constants.SYNC_MAX_ENCODED_BYTES }
-    )
-    if not ok and not first then
-      first = reason
-    end
+  for number = #pages, count + 1, -1 do
+    pages[number] = nil
   end
+  local nextPage, first = self:SendLedgerPages(target, request.seasonId, pages, 1, 0)
   if first then
     return false, first
   end
-  return true, count
+  return true, count, nextPage <= count and "paced" or nil
 end
 
 -- One page of a catch-up, already checked to come from a leader: each item is applied as if its author had sent it,

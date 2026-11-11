@@ -399,7 +399,10 @@ client, so nothing but the grants has to be trusted.
   delay and at most once a minute per requester, by whispering `PVP_LEDGER_DATA` pages: officers first (they decide who
   may write what), then the seasons, the missions, prizes, grants, voids, rejections of the requested season and the
   relay's active one, every final and every delivery. A page holds at most 400 items and fits the snapshot limit (32 KB
-  encoded); there are at most 100 pages. The requester decodes a page only if the whisper comes from a leader
+  encoded); there are at most 100 pages. The pages are paced: they are queued while the outbound queue keeps 20 places
+  free for other traffic, the rest is tried again every 15 seconds, at most 8 times. A requester only accepts pages
+  for 300 seconds after its own request (a page outside that window is dropped as `unsolicited`, before it is
+  decoded); a snapshot keeps its strict rate limit meanwhile. The requester decodes a page only if the whisper comes from a leader
   according to its own data, and applies every item as if its `by` had sent it, through the same validation,
   authority and conflict rules. Because `by` is read from the item, the author a relay names is only believed when the
   relay is a gm or cogm; from anyone else only the items authored by the relay itself count (the rest are counted as
