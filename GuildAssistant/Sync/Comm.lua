@@ -81,6 +81,7 @@ function Comm.New(deps)
     lastHelloAt = nil,
     helloReplyPending = false,
     onPeerSeen = deps.onPeerSeen,
+    lastAskAt = nil,
   }, Comm)
 end
 
@@ -113,6 +114,24 @@ end
 function Comm:SendHello()
   self.lastHelloAt = self.now()
   return self:Send("HELLO", { version = self.version }, "HELLO")
+end
+
+-- Asks every member online for its version: a HELLO with `ask`, which each one answers like a new peer (delayed and
+-- rate limited on its side). At most once every INSTALL_ASK_COOLDOWN_SECONDS here. Returns true, or false plus
+-- "cooldown" (and the seconds left) or what Send reported.
+function Comm:AskVersions()
+  local now = self.now()
+  local cooldown = ns.Constants.INSTALL_ASK_COOLDOWN_SECONDS
+  if self.lastAskAt and now - self.lastAskAt < cooldown then
+    return false, "cooldown", math.ceil(cooldown - (now - self.lastAskAt))
+  end
+  local ok, reason = self:Send("HELLO", { version = self.version, ask = true }, "HELLO")
+  if not ok then
+    return false, reason
+  end
+  self.lastAskAt = now
+  self.lastHelloAt = now
+  return true
 end
 
 function Comm:RememberPeer(sender, info)
@@ -158,7 +177,7 @@ function Comm:HandleHello(sender, payload)
   if not self:RememberPeer(sender, { version = payload.version }) then
     return false, "peers_full"
   end
-  if not known then
+  if not known or payload.ask then
     self:MaybeReplyHello()
   end
   return true

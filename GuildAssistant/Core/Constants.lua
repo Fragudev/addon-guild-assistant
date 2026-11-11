@@ -317,6 +317,8 @@ ns.Constants = {
   -- The saved record of who runs the addon (InstallDirectory) is sized to the guild limit too; when it is full, the
   -- member heard from longest ago goes.
   INSTALLS_MAX_ENTRIES = 1000,
+  -- How often the Installed check tab may ask the members online for their version (a HELLO with `ask`).
+  INSTALL_ASK_COOLDOWN_SECONDS = 60,
 
   -- HELLO: sent shortly after login, and once more (jittered, rate limited) when a new peer shows up.
   HELLO_LOGIN_DELAY_MIN = 2,

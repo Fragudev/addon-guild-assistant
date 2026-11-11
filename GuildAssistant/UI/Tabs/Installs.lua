@@ -3,7 +3,7 @@ local _, ns = ...
 -- Installed check (Admin, gm and cogm): every guild member with whether it runs the addon and which version. A member
 -- with the addon announces itself when it logs in (HELLO), and any message it sends proves it too; what was heard is
 -- saved (InstallDirectory), so an offline member shows the last version seen. The search box, the status chips, the
--- version dropdown and "Online only" filter the table.
+-- version dropdown and "Online only" filter the table; "Ask online members" makes everyone online answer again.
 local UI = ns.UI
 local Kit = ns.Kit
 local L = ns.L
@@ -102,6 +102,21 @@ local function drawTable(region)
   })
 end
 
+local function ask()
+  if not ns.comm then
+    UI.Notify("warning", L("Sync is not running: nobody can be asked."))
+    return
+  end
+  local ok, reason, left = ns.comm:AskVersions()
+  if ok then
+    UI.Notify("success", L("Asked the members online for their version. The answers arrive over a few seconds."))
+  elseif reason == "cooldown" then
+    UI.Notify("warning", L("Asked a moment ago: try again in %d seconds."):format(left or 0))
+  else
+    UI.Notify("danger", L("Could not ask the members online. Try again later."))
+  end
+end
+
 local function toolbar(page, getRegion, data)
   local bar = Kit.Row(page, { gap = 10, align = "center" })
   Kit.EditBox(bar, {
@@ -128,6 +143,11 @@ local function toolbar(page, getRegion, data)
       state.limit = ROWS_STEP
       UI.Redraw()
     end,
+  })
+  Kit.Button(bar, {
+    text = L("Ask online members"),
+    layout = { width = "auto" },
+    onClick = ask,
   })
 
   local chips = Kit.Flow(page, { gap = 8, rowGap = 8 })

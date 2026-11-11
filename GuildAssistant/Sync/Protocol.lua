@@ -20,7 +20,9 @@ local function validateHello(payload)
   if not isText(payload.version, MAX_VERSION_LENGTH) then
     return nil
   end
-  return { version = payload.version }
+  -- `ask` (optional, true): the sender wants every member online to answer with its own HELLO, even one that knows it
+  -- already (the Installed check tab). Any other value is dropped, and older clients ignore the field.
+  return { version = payload.version, ask = payload.ask == true or nil }
 end
 
 local function validateProfessions(list)

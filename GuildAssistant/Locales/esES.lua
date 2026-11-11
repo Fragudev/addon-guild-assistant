@@ -1052,4 +1052,9 @@ ns.Locale.Register("es", {
   ["Who in the guild runs the addon, and which version."] = "Quién de la hermandad usa el addon y qué versión tiene.",
   ["With addon"] = "Con el addon",
   ["online"] = "conectado",
+  ["Sync is not running: nobody can be asked."] = "La sincronización no está activa: no se puede preguntar a nadie.",
+  ["Asked the members online for their version. The answers arrive over a few seconds."] = "Se ha pedido a los miembros conectados su versión. Las respuestas llegan en unos segundos.",
+  ["Asked a moment ago: try again in %d seconds."] = "Se preguntó hace un momento: inténtalo de nuevo en %d segundos.",
+  ["Could not ask the members online. Try again later."] = "No se pudo preguntar a los miembros conectados. Inténtalo más tarde.",
+  ["Ask online members"] = "Preguntar a los miembros conectados",
 })

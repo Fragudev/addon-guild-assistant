@@ -54,6 +54,21 @@ describe("Protocol.Validate envelope", function()
     assert.are.equal("0.1.0", clean.p.version)
   end)
 
+  it("keeps ask only when it is true, and a HELLO without it has no ask", function()
+    local asking = Protocol.Validate(Protocol.Build("HELLO", { version = "0.1.0", ask = true }, "id-1"))
+    assert.is_true(asking.p.ask)
+    assert.is_nil(Protocol.Validate(Protocol.Build("HELLO", { version = "0.1.0" }, "id-2")).p.ask)
+  end)
+
+  it("drops an ask that is not true, and still accepts the HELLO", function()
+    for _, value in ipairs({ false, "yes", 1, {} }) do
+      local clean = Protocol.Validate(Protocol.Build("HELLO", { version = "0.1.0", ask = value }, "id-1"))
+      assert.is_not_nil(clean, tostring(value))
+      assert.is_nil(clean.p.ask, tostring(value))
+      assert.are.equal("0.1.0", clean.p.version)
+    end
+  end)
+
   it("rejects non-tables", function()
     for _, value in ipairs({ "text", 5, true }) do
       local clean, reason = Protocol.Validate(value)
