@@ -1,0 +1,35 @@
+GuildAssistant/UI/Kit/Controls.lua
+  s_32978aaf7efee9::t_6d678fb87ea30a 101-103,172-174,201-303,318-321,333-336,340-356,450-452,580-582,617,622-624,626,636-639,670-672,677-699,739-740,758-759,761-769,772-773,778-787,794,796,799-801,828,856-859
+GuildAssistant/UI/Kit/Core.lua
+  s_32978aaf7efee9::t_7aa0507558c87c 106-115,120,125,202-203,242-255,334-342,369,388-423,429,431-432,437-447,459-461,465-487,513-515,518-519,526-531
+GuildAssistant/UI/Kit/Data.lua
+  s_32978aaf7efee9::t_cfa5139457c61b 268-271
+GuildAssistant/UI/Kit/Text.lua
+  s_32978aaf7efee9::t_9d4706866661ac 284-291,294-299,309,314-315
+GuildAssistant/UI/Kit/Util.lua
+  s_32978aaf7efee9::t_feac681cdc06c4 216-247
+tests/kit_fixes_spec.lua
+  s_32978aaf7efee9::t_d3b380ad6bfe1e 1-396
+tests/kit_helpers_spec.lua
+  s_32978aaf7efee9::t_b164cc61764d50 197-220
+tests/kit_structure_spec.lua
+  s_32978aaf7efee9::t_fbef4713535e4c 1-298
+tests/support/fake_frames.lua
+  s_32978aaf7efee9::t_82c9bbdd814872 92-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7b626746ffa55e596efe5888ceff34321dda7e96",
+  "prompts": {},
+  "sessions": {
+    "s_32978aaf7efee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e5c844-e38a-4f46-ba40-0ea2890d9363",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
