@@ -1,0 +1,51 @@
+GuildAssistant/GuildAssistant.toc
+  s_32978aaf7efee9::t_fd89a5063eb6bb 83,100,112
+GuildAssistant/UI/Cards.lua
+  s_32978aaf7efee9::t_efd91414fc6ae9 1-70
+GuildAssistant/UI/Kit/Icons.lua
+  s_32978aaf7efee9::t_86d0c3cd604950 25,31-32,36,38-40
+GuildAssistant/UI/Kit/Shape.lua
+  s_32978aaf7efee9::t_5e2600bb1eb15a 1-70
+GuildAssistant/UI/LayerPopup.lua
+  s_32978aaf7efee9::t_f0e9dc50e1699c 64-69,182-198,210
+GuildAssistant/UI/LootPopup.lua
+  s_32978aaf7efee9::t_92fd9dbf589404 49-60,147,169-170,174,213-233,241,255-259,280,282-293,304-305,323,341-347,363,366-372
+GuildAssistant/UI/Tabs/Profile.lua
+  s_32978aaf7efee9::t_e98abdf913e846 5-6,51,59,93-94
+tests/kit_shape_spec.lua
+  s_32978aaf7efee9::t_e59332f5ecf53f 1-102
+tests/kit_widgets_spec.lua
+  s_32978aaf7efee9::t_11cf4f2d928e0e 13
+tests/loot_popup_spec.lua
+  s_32978aaf7efee9::t_96d3c47959b278 211-279
+tests/secondary_frames_spec.lua
+  s_32978aaf7efee9::t_6999b00403bafa 25,117,119-121,153-264
+tests/support/fake_kit.lua
+  s_32978aaf7efee9::t_b60bd6470be392 227-232
+GuildAssistant/UI/PopupFrame.lua
+  s_d6aaf1c2cc1c08::t_53e327083960d4 1-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6f6430ba03ac604bf0d8e04b62ea25c9e59b354b",
+  "prompts": {},
+  "sessions": {
+    "s_32978aaf7efee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37e5c844-e38a-4f46-ba40-0ea2890d9363",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    },
+    "s_d6aaf1c2cc1c08": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a89c19476a1efccd7",
+        "model": "unknown"
+      },
+      "human_author": "Francis Gutiérrez <francisge@ext.inditex.com>"
+    }
+  }
+}
