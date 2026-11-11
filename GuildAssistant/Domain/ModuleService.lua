@@ -1,11 +1,10 @@
 local _, ns = ...
 
--- The personal switches of the modules (Domain/ModuleRegistry). The switches live on the character record
+-- The personal switches of the modules (Domain/ModuleRegistry). The switches live in the account settings
 -- (Settings.ModulesOff), are read by the rest of the addon through IsEnabled, and are never synced.
 --
 -- deps:
---   character()  returns the saved record of this character (ns.character); nil before it exists, when every module
---                counts as on
+--   db()         returns the saved database (ns.db); nil before it exists, when every module counts as on
 --   skipped()    returns the list of the activation steps skipped at login (ns.skippedSteps)
 --   onChange()   optional, called after a switch changed
 local ModuleService = {}
@@ -15,18 +14,18 @@ function ModuleService.New(deps)
   return setmetatable({ deps = deps }, ModuleService)
 end
 
--- The saved character record, or nil.
-function ModuleService:character()
-  return self.deps.character and self.deps.character() or nil
+-- The saved database, or nil.
+function ModuleService:database()
+  return self.deps.db and self.deps.db() or nil
 end
 
--- The view of the switches the registry reads: { off = { [id] = true } }, or nil before the character exists.
+-- The view of the switches the registry reads: { off = { [id] = true } }, or nil before the database exists.
 function ModuleService:settingsView()
-  local char = self:character()
-  if not char then
+  local db = self:database()
+  if not db then
     return nil
   end
-  return { off = ns.Settings.ModulesOff(char) }
+  return { off = ns.Settings.ModulesOff(db) }
 end
 
 -- Is the module `id` on for this player? Unknown ids count as on. This is the one check the rest of the addon makes.
@@ -41,8 +40,8 @@ function ModuleService:Cascade(id, enabled)
   if not Registry.Get(id) then
     return {}
   end
-  local char = self:character()
-  local off = char and ns.Settings.ModulesOff(char) or {}
+  local db = self:database()
+  local off = db and ns.Settings.ModulesOff(db) or {}
   local candidates = { id }
   for _, other in ipairs(enabled and Registry.Requirements(id) or Registry.Dependents(id)) do
     candidates[#candidates + 1] = other
@@ -58,18 +57,18 @@ function ModuleService:Cascade(id, enabled)
 end
 
 -- Switches the module `id` (and the modules it needs or that need it, see Cascade). Returns true, or false plus
--- "unknown" for an id this version does not know, or "unavailable" when the character is not loaded yet.
+-- "unknown" for an id this version does not know, or "unavailable" when the database does not exist yet.
 function ModuleService:SetEnabled(id, enabled)
   if not ns.ModuleRegistry.Get(id) then
     return false, "unknown"
   end
-  local char = self:character()
-  if not char then
+  local db = self:database()
+  if not db then
     return false, "unavailable"
   end
   local changed = self:Cascade(id, enabled == true)
   for _, other in ipairs(changed) do
-    ns.Settings.SetModuleOff(char, other, enabled ~= true)
+    ns.Settings.SetModuleOff(db, other, enabled ~= true)
   end
   if #changed > 0 and self.deps.onChange then
     self.deps.onChange()

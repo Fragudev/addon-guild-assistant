@@ -825,11 +825,11 @@ local function StartGuildRoster()
   ns.guildRoster:Rebuild()
 end
 
--- The personal module switches (Domain/ModuleRegistry, per character). Read them with ns.modules:IsEnabled(id); until
--- the character is loaded every module counts as on.
+-- The personal module switches (Domain/ModuleRegistry), saved in the account settings. Read them with
+-- ns.modules:IsEnabled(id); until the database exists every module counts as on.
 ns.modules = ns.ModuleService.New({
-  character = function()
-    return ns.character
+  db = function()
+    return ns.db
   end,
   skipped = function()
     return ns.skippedSteps

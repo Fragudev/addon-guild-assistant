@@ -27,8 +27,8 @@ local ViewModel, ns = load_view_model()
 local function opts(overrides)
   local off = overrides.off or {}
   local service = ns.ModuleService.New({
-    character = function()
-      return { modules = { off = off } }
+    db = function()
+      return { settings = { modules = { off = off } } }
     end,
     skipped = function()
       return overrides.skipped or {}

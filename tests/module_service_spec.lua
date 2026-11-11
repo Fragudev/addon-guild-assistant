@@ -1,5 +1,5 @@
--- Domain/ModuleService: the personal switches of the modules, stored on the character record (char.modules.off), with
--- the requirement cascade and the reload hint.
+-- Domain/ModuleService: the personal switches of the modules, stored in the account settings (settings.modules.off),
+-- with the requirement cascade and the reload hint.
 local function load_service()
   local ns = {}
   for _, path in ipairs({ "Domain/ModuleRegistry", "Domain/Settings", "Domain/ModuleService" }) do
@@ -9,16 +9,16 @@ local function load_service()
 end
 
 describe("ModuleService", function()
-  local ns, char, changes, skipped, service
+  local ns, db, changes, skipped, service
 
   before_each(function()
     ns = load_service()
-    char = {}
+    db = {}
     changes = 0
     skipped = {}
     service = ns.ModuleService.New({
-      character = function()
-        return char
+      db = function()
+        return db
       end,
       skipped = function()
         return skipped
@@ -34,9 +34,9 @@ describe("ModuleService", function()
     assert.is_true(service:IsEnabled("professions"))
   end)
 
-  it("has every module on before the character is loaded, and refuses to switch one", function()
+  it("has every module on before the database exists, and refuses to switch one", function()
     local early = ns.ModuleService.New({
-      character = function()
+      db = function()
         return nil
       end,
     })
@@ -46,13 +46,13 @@ describe("ModuleService", function()
     assert.are.equal("unavailable", reason)
   end)
 
-  it("turns a module off and on, and saves it on this character", function()
+  it("turns a module off and on, and saves it in the account settings", function()
     assert.is_true(service:SetEnabled("professions", false))
     assert.is_false(service:IsEnabled("professions"))
-    assert.is_true(char.modules.off.professions)
+    assert.is_true(db.settings.modules.off.professions)
     assert.is_true(service:SetEnabled("professions", true))
     assert.is_true(service:IsEnabled("professions"))
-    assert.is_nil(char.modules.off.professions)
+    assert.is_nil(db.settings.modules.off.professions)
   end)
 
   it("refuses an id it does not know and changes nothing", function()
@@ -66,7 +66,7 @@ describe("ModuleService", function()
     assert.are.same({ "raid", "loot" }, service:Cascade("raid", false))
     assert.is_true(service:SetEnabled("raid", false))
     assert.is_false(service:IsEnabled("loot"))
-    assert.is_true(char.modules.off.loot)
+    assert.is_true(db.settings.modules.off.loot)
   end)
 
   it("turns on the modules a module needs when it is switched on", function()
@@ -92,17 +92,17 @@ describe("ModuleService", function()
   end)
 
   it("keeps a module's data when it is turned off: only the switch is written", function()
-    char.pvp = { kills = 3 }
+    db.guilds = { k = { events = { e1 = 1 } } }
     service:SetEnabled("pvp", false)
-    assert.are.same({ kills = 3 }, char.pvp)
+    assert.are.same({ k = { events = { e1 = 1 } } }, db.guilds)
   end)
 
   it("drops the entries of the switches that are not true, and keeps the ids of a newer version", function()
-    char.modules = { off = { professions = false, raid = "yes", future = true } }
+    db.settings = { modules = { off = { professions = false, raid = "yes", future = true } } }
     assert.is_true(service:IsEnabled("professions"))
     assert.is_true(service:IsEnabled("raid"))
-    assert.is_true(char.modules.off.future)
-    assert.is_nil(char.modules.off.professions)
+    assert.is_true(db.settings.modules.off.future)
+    assert.is_nil(db.settings.modules.off.professions)
   end)
 
   describe("NeedsReload", function()

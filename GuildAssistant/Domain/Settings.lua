@@ -5,7 +5,7 @@ local _, ns = ...
 --   language        "auto" | "es" | "en"   the language of the window (auto follows the game client)
 --   blacklistSound  boolean                the sound of the blacklist alert (the chat line and the warning stay)
 -- The minimap button keeps its own settings (MinimapButton.Settings) and the window positions theirs. The module
--- switches are per character and live on the character record (ModulesOff).
+-- switches are here too (settings.modules.off, see ModulesOff).
 local Settings = {}
 
 Settings.LANGUAGES = { "auto", "es", "en" }
@@ -46,18 +46,18 @@ function Settings.SetBlacklistSound(db, enabled)
   settingsOf(db).blacklistSound = enabled ~= false
 end
 
--- The modules this character turned off (char.modules.off, a set of module ids). Per character, not account-wide:
--- the switches are read from the character record (db.chars), created on first use. An entry that is not `true` is
--- dropped; ids of modules this version does not know are kept, so a newer version's switches survive. Returns the
--- live set.
-function Settings.ModulesOff(char)
-  if type(char.modules) ~= "table" then
-    char.modules = {}
+-- The modules the player turned off (settings.modules.off, a set of module ids). Account-wide, like every other
+-- setting, and created on first use. An entry that is not `true` is dropped; ids of modules this version does not
+-- know are kept, so a newer version's switches survive. Returns the live set.
+function Settings.ModulesOff(db)
+  local settings = settingsOf(db)
+  if type(settings.modules) ~= "table" then
+    settings.modules = {}
   end
-  if type(char.modules.off) ~= "table" then
-    char.modules.off = {}
+  if type(settings.modules.off) ~= "table" then
+    settings.modules.off = {}
   end
-  local off = char.modules.off
+  local off = settings.modules.off
   for key, value in pairs(off) do
     if type(key) ~= "string" or value ~= true then
       off[key] = nil
@@ -67,8 +67,8 @@ function Settings.ModulesOff(char)
 end
 
 -- Turns a module switch off (`off` true) or back on (`off` false or nil); the other switches are left alone.
-function Settings.SetModuleOff(char, id, off)
-  Settings.ModulesOff(char)[id] = off == true or nil
+function Settings.SetModuleOff(db, id, off)
+  Settings.ModulesOff(db)[id] = off == true or nil
 end
 
 ns.Settings = Settings

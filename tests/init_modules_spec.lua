@@ -1,6 +1,6 @@
 -- Core/Init.lua wires the whole addon at load time, so these specs load every file in TOC order, replace the
--- client-facing pieces with spies and drive the real event handlers. The module switches are read from the character
--- record, so a switch is saved on it before the login that activates the addon.
+-- client-facing pieces with spies and drive the real event handlers. The module switches are read from the account
+-- settings, so a switch saved before the login applies at the activation.
 local function build()
   local frames, printed = {}, {}
   local saved = {
@@ -101,9 +101,10 @@ local function build()
     env.mainFrame().OnEvent(env.mainFrame(), event, ...)
   end
 
-  -- The character record the login will use: saved before the login, so a switch of it applies at the activation.
-  function env.character()
-    return ns.Store.GetChar(ns.root, "Me-Realm")
+  -- The saved database: the switches are in its account settings, so one saved before the login applies at the
+  -- activation.
+  function env.root()
+    return ns.root
   end
 
   function env.restore()
@@ -128,7 +129,7 @@ describe("Init modules", function()
 
   it("skips the activation steps of a module that is off, and lists them in ns.skippedSteps", function()
     env.fire("ADDON_LOADED", "GuildAssistant")
-    env.ns.Settings.SetModuleOff(env.character(), "loot", true)
+    env.ns.Settings.SetModuleOff(env.root(), "loot", true)
     env.fire("PLAYER_LOGIN")
     assert.is_true(env.ns.active)
     local ran = table.concat(env.calls, ",")
@@ -140,8 +141,8 @@ describe("Init modules", function()
 
   it("does not start the features of a module that is off", function()
     env.fire("ADDON_LOADED", "GuildAssistant")
-    env.ns.Settings.SetModuleOff(env.character(), "pvp", true)
-    env.ns.Settings.SetModuleOff(env.character(), "layers", true)
+    env.ns.Settings.SetModuleOff(env.root(), "pvp", true)
+    env.ns.Settings.SetModuleOff(env.root(), "layers", true)
     env.fire("PLAYER_LOGIN")
     assert.is_true(env.ns.active)
     assert.is_nil(env.ns.pvpTracker)
@@ -158,7 +159,7 @@ describe("Init modules", function()
 
   it("asks for a reload when a module that was skipped at login is switched on", function()
     env.fire("ADDON_LOADED", "GuildAssistant")
-    env.ns.Settings.SetModuleOff(env.character(), "loot", true)
+    env.ns.Settings.SetModuleOff(env.root(), "loot", true)
     env.fire("PLAYER_LOGIN")
     assert.is_false(env.ns.modules:NeedsReload("loot"))
     env.ns.modules:SetEnabled("loot", true)
