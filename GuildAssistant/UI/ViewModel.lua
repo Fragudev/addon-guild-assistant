@@ -1060,6 +1060,7 @@ ViewModel.TABS = ns.Locale.Table(function()
     { value = "loot", text = L("Loot"), icon = "gem", group = "guild" },
     { value = "pvp", text = "PvP", icon = "swords", group = "guild" },
     { value = "groups", text = L("Groups"), icon = "users", group = "guild" },
+    { value = "announcements", text = L("Announcements"), icon = "send", group = "guild" },
     { value = "modules", text = L("Modules"), icon = "gear", group = "guild" },
     { value = "raid", text = L("Raid"), icon = "calendar", group = "admin" },
     { value = "rules", text = L("Roster rules"), icon = "list", group = "admin" },
@@ -1067,6 +1068,7 @@ ViewModel.TABS = ns.Locale.Table(function()
     { value = "pvpadmin", text = "PvP", icon = "swords", group = "admin" },
     { value = "ranks", text = L("Ranks"), icon = "diamond", group = "admin" },
     { value = "installs", text = L("Installed check"), icon = "check", group = "admin" },
+    { value = "announceadmin", text = L("Announcements"), icon = "pencil", group = "admin" },
   }
 end)
 
@@ -1083,6 +1085,7 @@ local TAB_ACTIONS = {
   ranks = "admin_view",
   -- Who runs the addon and which version: gm and cogm only.
   installs = "install_check",
+  announceadmin = "announce_manage",
 }
 
 -- Is the module that owns the tab `value` on for this player? A tab no module owns is always on, and so is every tab
@@ -1318,10 +1321,19 @@ function ViewModel.GroupsBadge(count)
   return count > 99 and "99+" or tostring(math.floor(count))
 end
 
+-- The count on the Announcements item of the sidebar: a text, or nil when there is nothing unread.
+function ViewModel.AnnouncementsBadge(count)
+  if type(count) ~= "number" or count <= 0 then
+    return nil
+  end
+  return count > 99 and "99+" or tostring(math.floor(count))
+end
+
 -- The sidebar: the groups Guild and Admin, each with its { value, text, icon } items, for a player with `role` and the
 -- roster `rosterId`. A group without items is left out. `openGroups` (optional) is the number of open groups of the
--- board: the Groups item gets it as `badge`.
-function ViewModel.NavGroups(role, rosterId, openGroups)
+-- board: the Groups item gets it as `badge`. `unreadAnnouncements` (optional) is the number of announcements not read
+-- yet: the Announcements item gets it as `badge`; no other item has one.
+function ViewModel.NavGroups(role, rosterId, openGroups, unreadAnnouncements)
   local groups = {
     { label = L("Guild"), items = {} },
     { label = L("Admin"), items = {} },
@@ -1332,6 +1344,8 @@ function ViewModel.NavGroups(role, rosterId, openGroups)
     local item = { value = tab.value, text = tab.text, icon = tab.icon }
     if tab.value == "groups" then
       item.badge = ViewModel.GroupsBadge(openGroups)
+    elseif tab.value == "announcements" then
+      item.badge = ViewModel.AnnouncementsBadge(unreadAnnouncements)
     end
     group.items[#group.items + 1] = item
   end

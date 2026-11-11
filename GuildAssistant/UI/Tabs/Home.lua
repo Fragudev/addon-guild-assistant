@@ -137,6 +137,22 @@ UI.Register("home", function(page)
     title = L("Home"),
     description = L("Your readiness, the sync state and what is coming up."),
   })
+  -- The newest pinned announcement, in one line with a way to the board.
+  local banner = ns.announcements
+    and (not ns.modules or ns.modules:IsEnabled("announcements"))
+    and ViewModel.AnnouncementBanner(ns.announcements:List())
+  if banner then
+    local card = Kit.Card(page, { gap = 8, border = "accent" })
+    local row = Kit.Row(card, { gap = 12, align = "center" })
+    Kit.Label(row, { text = L("Announcement: %s"):format(banner.text), layout = { weight = 1 } })
+    Kit.Button(row, {
+      text = L("Open board"),
+      layout = { width = "auto" },
+      onClick = function()
+        UI.OpenTab("announcements")
+      end,
+    })
+  end
   local viewer = UI.Viewer()
   local events = ns.RosterService.FilterEvents(ns.db.global.events, viewer)
   local grid = Kit.Grid(page, { columns = 2, gap = 20 })

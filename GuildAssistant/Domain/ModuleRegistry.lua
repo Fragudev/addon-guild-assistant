@@ -16,12 +16,14 @@ local MODULES = {
   { id = "groups", tabs = { "groups" }, steps = { "lfg" }, requires = {} },
   { id = "map", tabs = {}, steps = { "position" }, requires = {} },
   { id = "blacklist", tabs = {}, steps = { "blacklist" }, requires = {} },
-  -- Later phases register their modules here, in the order of the Modules tab: intel (tab-less, needs pvp) and
-  -- announcements (tab "announcements").
+  -- The board and the popup. The editor (announceadmin) and the service stay core: a gm or cogm can still publish,
+  -- and the announcements keep arriving while the board is hidden.
+  { id = "announcements", tabs = { "announcements" }, steps = {}, requires = {} },
+  -- Later phases register their modules here, in the order of the Modules tab: intel (tab-less, needs pvp).
 }
 
 -- The tabs and the activation steps that no module owns: they are always on.
-local CORE_TABS = { home = true, modules = true, ranks = true, installs = true }
+local CORE_TABS = { home = true, modules = true, ranks = true, installs = true, announceadmin = true }
 local CORE_STEPS = {
   character = true,
   profile = true,
@@ -31,6 +33,7 @@ local CORE_STEPS = {
   roster = true,
   autoPublish = true,
   selfTest = true,
+  announcements = true,
 }
 
 local BY_ID, BY_TAB, BY_STEP = {}, {}, {}
