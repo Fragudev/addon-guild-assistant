@@ -28,6 +28,7 @@ secret store.
 | Your map position, if you chose to share it, and the positions other members share, in memory only | read from the game map, and the guild channel (prefix `GUILDASSTPOS`) |
 | The guild blacklist: names of players, a short free-text reason, who added each one and when | you, or received |
 | Raid events, attendance, assignments, loot sessions and awards | you, or received |
+| Guild announcements (title, text, author, dates) and which popups you have already seen, per guild | the Guild Master or Co-GM, received over the guild channel; you only store which popups you closed |
 | Tombstones (records of deletions) | local deletions and received ones |
 | Assignment templates (each keeps the roster of the event it was saved from) | you; never shared |
 | Raid rosters and the role and roster the guild master assigned to each member | the guild master, received over the guild channel |
