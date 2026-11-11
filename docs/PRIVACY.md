@@ -27,12 +27,17 @@ secret store.
 | Your layer, and the layers other members share, in memory only | read from the creatures you target, and the guild channel |
 | Your map position, if you chose to share it, and the positions other members share, in memory only | read from the game map, and the guild channel (prefix `GUILDASSTPOS`) |
 | The guild blacklist: names of players, a short free-text reason, who added each one and when | you, or received |
+| Enemy players you met: name, class, race, level, guild, faction, when first and last seen, how often, your wins and losses against them, and the map and position you stood at when you last met them | read from the game, and your own honourable kills and deaths; shared only as a sighting |
+| Your personal Kill on Sight list and Ignore list | you; never shared |
+| The guild Kill on Sight list: name, category, reason, who added each entry and when, and who changed it last | you, or received over the guild channel |
+| Enemy sightings you receive, in memory only, for two minutes | the guild channel, or your group in a battleground (prefix `GUILDASSTINT`) |
+| Tombstones of removed guild Kill on Sight entries | local removals and received ones |
 | Raid events, attendance, assignments, loot sessions and awards | you, or received |
 | Guild announcements (title, text, author, dates) and which popups you have already seen, per guild | the Guild Master or Co-GM, received over the guild channel; you only store which popups you closed |
 | Tombstones (records of deletions) | local deletions and received ones |
 | Assignment templates (each keeps the roster of the event it was saved from) | you; never shared |
 | Raid rosters and the role and roster the guild master assigned to each member | the guild master, received over the guild channel |
-| Your PvP log, kept for 45 days whatever the season: each honour kill (time, victim name, zone id, open world or battleground, and the victim's class and race when you had seen them), each battleground result (win or loss), and your claims | your own kills and what you see in the game; never shared except inside a claim, and as numbers in the progress summary |
+| Your PvP log, kept for 45 days whatever the season: each honour kill (time, victim name, zone id, open world or battleground, and the victim's class and race when you had seen them, and whether the victim was on the guild Kill on Sight list), each battleground result (win or loss), and your claims | your own kills and what you see in the game; never shared except inside a claim, and as numbers in the progress summary |
 | PvP seasons: the season, its missions and prizes, who earned how many points for which mission (the grants), and the final standings of past seasons | the guild master and co-guild master, received over the guild channel and from a catch-up whisper |
 
 Every stored value keeps where it came from (`observed`, `declared` or `received`), when, and who authored it.
@@ -136,6 +141,32 @@ minimap and the world map. Nothing is saved: positions are kept **in memory only
 seconds without a new message. Switching sharing off tells the guild once to forget you and sends nothing more.
 Nothing is sent from an instance or a battleground. Receiving and drawing do not need sharing: **Show guildmates on
 the minimap** and **Show guildmates on the world map** (both on by default) only control what you see.
+
+## Enemy players (Intel)
+
+Intel records the enemy players you meet and can tell the guild about them. Everything here is about people who have
+not agreed to it, so read the switches before you play with them.
+
+- **Sharing sightings is on by default.** The addon told you once in chat when it was turned on. A sighting carries
+  the enemy's name, class, race, level and whether they are stealthed, and **your position**: the map and the
+  coordinates where you were when you saw them. Every guild member running the addon receives it, so the guild learns
+  where you were, not where the enemy was. Sightings go to the guild in the open world and to your group in
+  battlegrounds. Nothing is sent from arenas, dungeons or raids, or during an encounter.
+- **To switch sharing off**, run `/ga intel config`, open *Sharing* and clear **Share sightings with the guild**.
+  Your own records and lists stay on your machine as they are.
+- **Received sightings stay in memory only.** They are kept for two minutes, for at most 200 enemies, and are gone
+  when you log out.
+- **Your records are saved.** Each enemy you meet is kept in your `SavedVariables` with the fields of the table above.
+  The guild Kill on Sight list is not part of this: it is shared, as described below.
+- **Your personal Kill on Sight and Ignore lists never leave your client.** An ignored player gives no alert and is
+  not shared.
+- **The guild Kill on Sight list is shared with the guild.** Every entry goes to every member running the addon, with
+  its name, category, reason, the member who added it and the member who last changed it. Removals are shared too.
+  Anyone can add an entry; the author, the GM or the CoGM can change it; the author, the GM or the CoGM can remove it.
+  The reason is about a third party, so write only what you would say in guild chat. Like every addon message these
+  are **not encrypted**, and a message already sent cannot be recalled.
+- **Bounties** count kills of players who are on the guild list at the moment of the kill, and that flag is saved in
+  your mission log of the season (see *PvP seasons*).
 
 ## Taking data back
 

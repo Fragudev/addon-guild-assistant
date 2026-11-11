@@ -161,6 +161,23 @@ The rank mapping (`RANK_MAP` in `docs/PROTOCOL.md`) keys addon roles by the guil
 /dump GetGuildInfo("player")   -- the third value is the own rank index; compare it with the position above minus 1
 ```
 
+## Intel (not measured yet)
+
+Intel (the enemy players around you, the Intel window, the guild Kill on Sight list) reads the enemy nameplates and the target. Every reader is guarded and gives nil for a missing API, an error or a secret value. The measurements are numbered I1 to I8 so they do not clash with the PvP ones.
+
+| # | Question | API (through `Platform`) | Assumption in the code |
+|---|---|---|---|
+| I1 | Are `UnitLevel` and `GetGuildInfo` readable on enemy players? | `UnitLevel`, `GetGuildInfo` (`Platform.GetEnemyDetails`) | not measured yet. An unreadable value is stored as unknown, and a skull enemy is shown as own level + 10, marked as estimated |
+| I2 | Does `/targetexact` from a secure button work, outside and inside combat? | `SecureActionButtonTemplate` with `macrotext1` (`UI/IntelWindow.lua`, `UI/IntelTargetButton.lua`) | not measured yet. The buttons are changed outside combat only; a newcomer in combat cannot be targeted until combat ends |
+| I3 | Do the death recap functions name the killer? | `C_DeathRecap.GetRecapEvents`, `DeathRecap_GetEvents` (`Platform.GetDeathKiller`) | not measured yet. Without a named killer, a loss uses the enemy who targeted the player in the last 10 seconds, and the debug output counts that source separately |
+| I4 | Does `UNIT_SPELLCAST_SUCCEEDED` fire for enemy nameplates with a readable spell id, and are the stealth spell ids right? | `UNIT_SPELLCAST_SUCCEEDED` (`Platform.ReadSpellEvent`), `INTEL_STEALTH_SPELLS` | not measured yet. The stealth ids are Classic values to confirm on Forever |
+| I5 | Does `GUILDASSTINT` work on `GUILD`, and on the group channel in a battleground? | `C_ChatInfo.RegisterAddonMessagePrefix`, `ChatThrottleLib:SendAddonMessage`, `CHAT_MSG_ADDON` | not measured yet. Sightings go to `GUILD` in the open world and to the group channel in a battleground |
+| I6 | Is the minimap tooltip text readable? | the tooltip of the minimap button and its dots (`Domain/IntelMinimapTooltip.lua`) | not measured yet. The tooltip details are optional (the `minimapTooltip` setting) |
+| I7 | Does `Menu.ModifyMenu` exist, and does it stay free of taint? | `Menu.ModifyMenu` on `MENU_UNIT_ENEMY_PLAYER` (`Platform.AddEnemyPlayerMenuEntry`) | not measured yet. The entry is added inside `pcall`; without the function it is not added and the rest of Intel works |
+| I8 | Does `FromSpy` find the saved data of Spy (Forever) when both addons are loaded? | Spy's saved variables, read through the globals (`Domain/IntelImport.lua`, `FromSpy`) | not measured yet. When nothing is found, `/ga intel import spy` says so and imports nothing |
+
+Until I1 to I3 pass in game, do not tell the guild that Spy can be removed.
+
 ## Group names for the blacklist alert (to be measured)
 
 The blacklist alert compares the members of the party or raid with the blacklist. Nothing about group names has
@@ -245,6 +262,7 @@ For the two events, log them for a minute while opening professions and a corpse
 | PvP probe | the above plus `GetPVPLifetimeStats`, `C_Map`, the unit functions and `GetBattlefieldWinner` (`/ga debug pvp`, to answer #99 and the PvP seasons questions M1 to M5) |
 | PvP missions (**not measured yet**) | `C_Map.GetBestMapForUnit`, `UnitIsPlayer`, `UnitIsEnemy`, `UnitClass`, `UnitRace`, `GetUnitName`, `GetBattlefieldWinner`, `UnitFactionGroup`, events `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `NAME_PLATE_UNIT_ADDED`, `UPDATE_BATTLEFIELD_STATUS`. Each reader is guarded and each event registered in `pcall`; not in the self test, for the same reason as the PvP counters |
 | Group and warning (**not measured yet**) | `IsInGroup`, `IsInRaid`, `GetNumGroupMembers`, `GetRaidRosterInfo`, `UnitName("party1".."party4")`, `RaidNotice_AddMessage`, `RaidWarningFrame`, `PlaySound`, events `GROUP_ROSTER_UPDATE`, `PLAYER_ENTERING_WORLD`. Each is guarded and registered in `pcall`; not in the self test on purpose |
+| Intel (**not measured yet**) | `C_CVar.GetCVar` and `SetCVar` (`nameplateShowEnemies`), `UnitIsPlayer`, `UnitIsEnemy`, `UnitClass`, `UnitRace`, `UnitLevel`, `GetGuildInfo`, `UnitFactionGroup`, `IsInInstance`, `GetPVPSessionStats`, `C_DeathRecap.GetRecapEvents`, `Menu.ModifyMenu`, `ChatThrottleLib`, events `NAME_PLATE_UNIT_ADDED`, `NAME_PLATE_UNIT_REMOVED`, `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `PLAYER_DEAD`, `UNIT_SPELLCAST_SUCCEEDED`, `CHAT_MSG_COMBAT_HONOR_GAIN`, `PLAYER_PVP_KILLS_CHANGED`, `CHAT_MSG_ADDON` (prefix `GUILDASSTINT`). Each is guarded and registered in `pcall`; not in the self test on purpose |
 | Time | `GetServerTime`, `GetTime`, `date`, `time` |
 | UI | `CreateFrame`, `C_Timer.After`, `C_Timer.NewTicker`, `C_AddOns.GetAddOnMetadata` |
 | Load | events `ADDON_LOADED`, `PLAYER_LOGIN`, `PLAYER_GUILD_UPDATE`, `## SavedVariables` |
