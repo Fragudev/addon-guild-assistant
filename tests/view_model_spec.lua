@@ -17,6 +17,7 @@ local function load_view_model(locale)
     "Domain/LootService",
     "Domain/BlacklistService",
     "Domain/ReadinessRules",
+    "Domain/Professions",
     "Domain/ReadinessService",
     "Domain/ProfileService",
     "Domain/ReportService",
@@ -591,7 +592,13 @@ describe("ViewModel readiness tab helpers", function()
 
   it("offers exactly the statuses SetManual accepts", function()
     local ns = {}
-    for _, path in ipairs({ "Core/Constants", "Core/Locale", "Core/Validate", "Domain/ReadinessService" }) do
+    for _, path in ipairs({
+      "Core/Constants",
+      "Core/Locale",
+      "Core/Validate",
+      "Domain/Professions",
+      "Domain/ReadinessService",
+    }) do
       assert(loadfile("GuildAssistant/" .. path .. ".lua"))("GuildAssistant", ns)
     end
     local platform = {
@@ -1808,6 +1815,7 @@ describe("ViewModel sidebar, user card and sync pill", function()
       "Domain/LootService",
       "Domain/BlacklistService",
       "Domain/ReadinessRules",
+      "Domain/Professions",
       "Domain/ReadinessService",
       "Domain/ProfileService",
       "Domain/ReportService",
@@ -2957,6 +2965,19 @@ describe("ViewModel recipes", function()
     assert.is_false(items[1].value)
     assert.are.equal("Alchemy", items[2].text)
     assert.are.equal(164, items[3].value)
+  end)
+
+  it("names each profession in the language of the addon, whatever language the index came in", function()
+    local spanishIndex = index()
+    spanishIndex.professions = { [171] = "Alquimia", [164] = "Blacksmithing" }
+    viewNs.Locale.Use("esES")
+    local items = ViewModel.ProfessionChoices(spanishIndex)
+    local rows = ViewModel.RecipeResults({ index = spanishIndex, online = online, nameOf = nameOf }).rows
+    viewNs.Locale.Use("enUS")
+    assert.are.equal("Alquimia", items[2].text)
+    assert.are.equal("Herrería", items[3].text)
+    assert.are.equal("Alquimia", rows[1].professionName)
+    assert.are.equal("Herrería", rows[2].professionName)
   end)
 
   it("lists recipes by id with the online crafters first and a more counter", function()
