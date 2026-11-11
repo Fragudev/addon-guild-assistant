@@ -4,7 +4,8 @@ local _, ns = ...
 -- place and a damaged value never raises:
 --   language        "auto" | "es" | "en"   the language of the window (auto follows the game client)
 --   blacklistSound  boolean                the sound of the blacklist alert (the chat line and the warning stay)
--- The minimap button keeps its own settings (MinimapButton.Settings) and the window positions theirs.
+-- The minimap button keeps its own settings (MinimapButton.Settings) and the window positions theirs. The module
+-- switches are here too (settings.modules.off, see ModulesOff).
 local Settings = {}
 
 Settings.LANGUAGES = { "auto", "es", "en" }
@@ -43,6 +44,31 @@ end
 
 function Settings.SetBlacklistSound(db, enabled)
   settingsOf(db).blacklistSound = enabled ~= false
+end
+
+-- The modules the player turned off (settings.modules.off, a set of module ids). Account-wide, like every other
+-- setting, and created on first use. An entry that is not `true` is dropped; ids of modules this version does not
+-- know are kept, so a newer version's switches survive. Returns the live set.
+function Settings.ModulesOff(db)
+  local settings = settingsOf(db)
+  if type(settings.modules) ~= "table" then
+    settings.modules = {}
+  end
+  if type(settings.modules.off) ~= "table" then
+    settings.modules.off = {}
+  end
+  local off = settings.modules.off
+  for key, value in pairs(off) do
+    if type(key) ~= "string" or value ~= true then
+      off[key] = nil
+    end
+  end
+  return off
+end
+
+-- Turns a module switch off (`off` true) or back on (`off` false or nil); the other switches are left alone.
+function Settings.SetModuleOff(db, id, off)
+  Settings.ModulesOff(db)[id] = off == true or nil
 end
 
 ns.Settings = Settings

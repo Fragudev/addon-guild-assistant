@@ -45,7 +45,7 @@ The **Admin** group appears from the Officer and Raid Leader ranks up:
 - **PvP** holds the season admin: approvals, missions, season, prizes and deliveries (GM and CoGM only).
 
 A tab you cannot see, or one that no longer exists in the sidebar (Profile, Layers and Blacklist are hidden for now),
-opens Home instead. A player without a roster only sees Home, Professions and PvP.
+opens Home instead. A player without a roster only sees Home, Professions, PvP and Modules.
 
 The **gear** in the header opens the settings, which are the same from every tab and are saved for your whole account:
 
@@ -462,6 +462,18 @@ member is on another layer than you. Members of your own party or raid are not d
   nothing else changes.
 - Whether the pins are placed correctly on the Forever client has not been checked in game yet (see
   `docs/API_NOTES.md`).
+
+## Modules
+
+The **Modules** tab (Guild group) switches the parts of the addon on or off for your own character: Professions,
+Raid, Loot, PvP, Layers, Map pins and Blacklist. Every member can use it. Nothing is shared, so the others never see
+your choice, and turning a module off never deletes its data.
+
+- Turning a module off hides its tabs at once. Its features keep running until the next `/reload`, and they do not
+  start at login while it is off.
+- Turning a module off also turns off the modules that need it (Loot needs Raid). The tab lists what else moves.
+- A module that was off at login starts after a `/reload` once you switch it on; the tab asks for it.
+- A guild master or Co-GM turning off Raid or PvP also loses the admin tabs of that module, and the tab warns about it.
 
 ## Sync
 
