@@ -1077,4 +1077,5 @@ ns.Locale.Register("es", {
   ["You will stop seeing its admin section too."] = "También dejarás de ver su sección de administración.",
   ["Type /reload to start %s."] = "Escribe /reload para activar %s.",
   ["Turn all on"] = "Activar todos",
+  ["Reload the interface"] = "Recargar la interfaz",
 })

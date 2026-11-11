@@ -1,8 +1,8 @@
 --- Tabs/Modules
 local _, ns = ...
 
--- Modules: every player turns the modules of the addon on and off for their own character. The switches are saved on
--- the character record only; nothing is shared. The rows and their sentences come from ViewModelModules; the switch
+-- Modules: every player turns the modules of the addon on and off for themselves. The switches are saved in the
+-- account settings only; nothing is shared. The rows and their sentences come from ViewModelModules; the switch
 -- itself is ModuleService:SetEnabled, which redraws the window through UI.ModulesChanged. Open to every role: it is
 -- the one tab with no gate.
 local UI = ns.UI
@@ -50,7 +50,8 @@ UI.Register("modules", function(page)
       .. L("and turning a module off never deletes its data."),
   })
   local card = Kit.Card(page, { title = L("Your modules"), gap = 12 })
-  for _, row in ipairs(rows()) do
+  local list = rows()
+  for _, row in ipairs(list) do
     Kit.Switch(card, {
       label = row.label,
       description = row.description,
@@ -61,11 +62,23 @@ UI.Register("modules", function(page)
     })
     drawNotes(card, row)
   end
+  for _, row in ipairs(list) do
+    if row.needsReload then
+      Kit.Button(page, {
+        text = L("Reload the interface"),
+        layout = { width = 180, gap = 10 },
+        onClick = function()
+          ns.Platform.ReloadUI()
+        end,
+      })
+      break
+    end
+  end
   Kit.Button(page, {
     text = L("Turn all on"),
     layout = { width = 180, gap = 10 },
     onClick = function()
-      for _, row in ipairs(rows()) do
+      for _, row in ipairs(list) do
         ns.modules:SetEnabled(row.id, true)
       end
     end,

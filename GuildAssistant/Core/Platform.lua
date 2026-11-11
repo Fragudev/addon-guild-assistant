@@ -1058,4 +1058,11 @@ function Platform.GetLootWindowItems()
   return items
 end
 
+-- Reloads the interface (a module switched on after login starts on the next load). Only from a click.
+function Platform.ReloadUI()
+  if _G.ReloadUI then
+    _G.ReloadUI()
+  end
+end
+
 ns.Platform = Platform
