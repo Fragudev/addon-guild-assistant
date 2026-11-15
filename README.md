@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://www.curseforge.com/wow/addons/guild-assistant"><img alt="CurseForge: Guild Assistant" src="https://img.shields.io/badge/CurseForge-Guild_Assistant-f16436?style=flat-square&logo=curseforge&logoColor=white&labelColor=1c1a17"></a>
-  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-e6ba66?style=flat-square&labelColor=1c1a17"></a>
+  <a href="LICENSE"><img alt="Licence: proprietary" src="https://img.shields.io/badge/licence-proprietary-e6ba66?style=flat-square&labelColor=1c1a17"></a>
   <img alt="World of Warcraft: Forever, client 1.60.1" src="https://img.shields.io/badge/WoW-Forever_1.60.1-94c9ff?style=flat-square&labelColor=1c1a17">
   <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-fabf4d?style=flat-square&labelColor=1c1a17">
 </p>
@@ -30,6 +30,7 @@
   <a href="#slash-commands">Slash commands</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="#building-from-source">Building from source</a> ·
+  <a href="#contributing">Contributing</a> ·
   <a href="#releasing">Releasing</a> ·
   <a href="#credits-and-licence">Credits and licence</a>
 </p>
@@ -79,8 +80,7 @@ the player) or `received` (from someone else), and what the game cannot tell is 
 
 > [!NOTE]
 > **Beta.** Every feature below is implemented and covered by automated tests, but most of it has not been verified
-> on the game client yet: see the issues labelled `verify-in-game` and the pending measurements in
-> [docs/API_NOTES.md](docs/API_NOTES.md).
+> on the game client yet: see the pending measurements in [docs/API_NOTES.md](docs/API_NOTES.md).
 
 ## Who can use it
 
@@ -194,7 +194,7 @@ Every pull request runs lint, the tests with a minimum of 80% line coverage, a S
 build that verifies every file referenced by the TOC, `embeds.xml` and the icon is in the zip. Pull request titles
 must follow [Conventional Commits](https://www.conventionalcommits.org/). Dependabot keeps the workflow actions up to
 date. Domain logic is tested outside the game against fakes of the client API, which all goes through
-`GuildAssistant/Core/Platform.lua`. Work happens on `feature/*` branches with one pull request each.
+`GuildAssistant/Core/Platform.lua`. Work happens on `develop`; see [Contributing](#contributing).
 
 <details>
 <summary><b>Translations</b></summary>
@@ -230,18 +230,30 @@ release-notes/           Hand-written notes published with each release
 .github/workflows/       CI and release automation
 ```
 
+## Contributing
+
+Bug reports and ideas are welcome as [issues](https://github.com/Fragudev/addon-guild-assistant/issues). Pull requests
+are open to maintainers only. Day-to-day work lands on `develop`, directly or through short-lived branches, and `main`
+only takes pull requests from `develop` approved by the owner.
+
 ## Releasing
 
-Write the notes in `release-notes/<tag>.md`, then push a tag starting with `v`. The **Release** workflow runs the full
-CI first and, only if it passes, stamps the version into the TOC, zips `GuildAssistant/` and publishes a GitHub
-release.
+Betas ship from `develop` and releases from `main`; only the owner can push version tags. Write the notes in
+`release-notes/<tag>.md`, then push the tag. The **Release** workflow checks that the tag is on the right branch, runs
+the full CI and, only if both pass, stamps the version into the TOC, zips `GuildAssistant/`, publishes a GitHub
+release and uploads the zip to CurseForge.
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+# Beta: tag develop
+git switch develop && git pull && git tag v1.2.0-beta.1 && git push origin v1.2.0-beta.1
+# Release: merge develop into main through a pull request, then tag main
+git switch main && git pull && git tag v1.2.0 && git push origin v1.2.0
 ```
 
-Tags containing a hyphen (for example `v0.2.0-alpha.1`) are published as pre-releases. Only `GuildAssistant/` is
-shipped: `tests/` and `docs/` stay out of the zip.
+Tags containing a hyphen are published as betas (a GitHub pre-release and a CurseForge beta), the rest as releases.
+After a release, merge `main` back into `develop`. Only `GuildAssistant/` is shipped: `tests/` and `docs/` stay out of
+the zip. If the CurseForge upload fails, run the **Release** workflow by hand with the existing tag to publish it
+again.
 
 ## Credits and licence
 
@@ -253,4 +265,4 @@ shipped: `tests/` and `docs/` stay out of the zip.
 
 Guild Assistant started as a fork of Nrage Assistant.
 
-MIT. See [LICENSE](LICENSE).
+Proprietary. All rights reserved. See [LICENSE](LICENSE).
